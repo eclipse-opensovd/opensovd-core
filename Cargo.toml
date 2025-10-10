@@ -1,0 +1,58 @@
+# SPDX-FileCopyrightText: 2025 The Contributors to Eclipse OpenSOVD (see CONTRIBUTORS)
+#
+# SPDX-License-Identifier: Apache-2.0
+[workspace.package]
+name = "sovd-core"
+description = "Implementation of SOVD Server/Gateway"
+license = "Apache-2.0"
+edition = "2024"
+version = "0.1.0"
+homepage = "https://github.com/eclipse-opensovd/opensovd-core"
+
+[workspace]
+resolver = "3"
+members = [
+  "sovd-handlers",
+  "sovd-server",
+]
+
+[workspace.dependencies]
+sovd-handlers     = { path = "sovd-handlers" }
+sovd-server       = { path = "sovd-server" }
+openapi_client    = { path = "target/generated/sovd-autogen-code"}
+
+async-trait       = "0.1.24"
+chrono            = { version = "0.4", features = ["serde"] }
+futures           = "0.3"
+swagger           = { version = "6.1", features = ["serdejson", "server", "client", "tls", "tcp"] }
+log               = "0.4.0"
+flexi_logger      = "0.31.2"
+mime              = "0.3"
+serde             = { version = "1.0", features = ["derive"] }
+serde_json        = "1.0"
+hyper             = "0.14"
+serde_ignored     = {version = "0.1.1"}
+url               = {version = "2.1"}
+lazy_static       = "1.4"
+percent-encoding  = {version = "2.1.0"}
+regex             = {version  = "1.3"}
+frunk = { version = "0.3.0" }
+frunk_derives     = { version = "0.3.0" }
+frunk_core        = { version = "0.3.0" }
+frunk-enum-derive = { version = "0.2.0" }
+frunk-enum-core   = { version = "0.2.0" }
+clap              = "2.25"
+env_logger        = "0.7"
+tokio             = { version = "1.14", features = ["full"] }
+tokio-openssl     = "0.6"
+#openssl           = { version = "0.10" } 
+libc              = "0.2"
+procfs            = "0.8"
+once_cell         = "1.8.0"
+sysinfo           = "0.30.8"
+openssl           = { version = "0.10", features = ["vendored"] } 
+mdns-sd           = "0.11.1"
+multer            = "3.1.0"
+bytes             = "1.3"
+anyhow            = "1"
+
