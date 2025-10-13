@@ -11,43 +11,14 @@ description = "SOVD handlers"
 homepage.workspace = true
 license.workspace = true
 
-[lib]
-path = "src/lib.rs"
-
 [dependencies]
-
-# internal dependencies
+hyper = { workspace = true }
+lazy_static = "1.5.0"
+log = { workspace = true }
 openapi_client = { workspace = true }
-
-async-trait       = { workspace = true }
-chrono            = { workspace = true }
-futures           = { workspace = true }
-swagger           = { workspace = true }
-log               = { workspace = true }
-flexi_logger      = { workspace = true }
-mime              = { workspace = true }
-serde             = { workspace = true }
-serde_json        = { workspace = true }
-hyper             = { workspace = true }
-serde_ignored     = { workspace = true }
-url               = { workspace = true }
-lazy_static       = { workspace = true }
-percent-encoding  = { workspace = true }
-regex             = { workspace = true }
-frunk_derives     = { workspace = true }
-frunk_core        = { workspace = true }
-frunk-enum-derive = { workspace = true }
-frunk-enum-core   = { workspace = true }
-clap              = { workspace = true }
-env_logger        = { workspace = true }
-tokio             = { workspace = true }
-tokio-openssl     = { workspace = true }
-libc              = { workspace = true }
-procfs            = { workspace = true }
-once_cell         = { workspace = true }
-sysinfo           = { workspace = true }
-openssl           = { workspace = true }
-mdns-sd           = { workspace = true }
-multer            = { workspace = true }
-bytes             = { workspace = true }
-anyhow            = { workspace = true }
+openssl = { workspace = true }
+procfs = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sysinfo = "0.30.8"
+tokio = { workspace = true }
