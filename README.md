@@ -16,7 +16,7 @@ Aggregate and standardize responses from other HPCs.
 
 
 # Getting Started
-The source code has parts generated with openapigenerator (https://github.com/OpenAPITools/openapi-generator )
+The source code has parts generated with OpenAPI generator (https://github.com/OpenAPITools/openapi-generator )
 
 # Notes 
 - The software is in beta development. Please be aware of unexpected changes.
@@ -38,6 +38,9 @@ Clean:
 ```
 # Starting sovd_server
 ```
+Change owner to your user for /var/log/
+Copy from config folder sovd_server_apps.conf to target/debug/
+
 sovd_server <ip_address> <port> <hostname> --sovd-mode <sovd_mode>
 <ip_address> : IP address to bind the server to, use localhost for local testing or a public IP for external access.
 <port>       : Any available port in the range 1024-49151, typically used by user applications and services.
