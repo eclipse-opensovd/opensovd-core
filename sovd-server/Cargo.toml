@@ -32,3 +32,6 @@ sovd-handlers = { workspace = true }
 swagger = "6.5.3"
 tokio = { workspace = true }
 tokio-openssl = "0.6.5"
+
+[dev-dependencies]
+reqwest = "0.12.24"

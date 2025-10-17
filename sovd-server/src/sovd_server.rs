@@ -42,6 +42,7 @@ use swagger::{Has, XSpanIdString};
 use swagger::auth::MakeAllowAllAuthenticator;
 use swagger::EmptyContext;
 use tokio::net::TcpListener;
+use tokio::task::JoinHandle;
 use openssl::ssl::{Ssl, SslAcceptor, SslAcceptorBuilder, SslFiletype, SslMethod};
 use regex::Regex;
 use chrono::Utc;
@@ -64,6 +65,7 @@ use std::str::FromStr;
 use serde_json::Value as JsonValue;
 use serde_json::to_value;
 use serde_json::Map;
+use hyper::server::conn::AddrIncoming;
 
 use openapi_client::models;
 use openapi_client::models::*;
@@ -240,6 +242,48 @@ pub async fn create(server_config: &ServerConfig, addr: &str) {
     mdns_wrapper.shutdown();
     
 }
+
+#[allow(dead_code)]
+pub async fn spawn_test_server(
+    server_config: &ServerConfig,
+) -> (SocketAddr, JoinHandle<()>) {
+
+    // Bind to port 0 to let OS assign a free port
+    let listener = TcpListener::bind("127.0.0.1:0").await.expect("Failed to bind");
+    let addr = listener.local_addr().expect("Failed to get local address");
+    let incoming = AddrIncoming::from_listener(listener).expect("Failed to create AddrIncoming");
+
+    let server = Server::new();
+    let service = MakeService::new(server);
+    let service = MakeAllowAllAuthenticator::new(service, "cosmo");
+
+    if SERVER_CONFIG.get().is_none() {
+        init_server_config(server_config.clone());
+    }
+    
+    let service_daemon = ServiceDaemon::new().unwrap();
+    let mdns_wrapper = Arc::new(ServiceDaemonWrapper::new(service_daemon));
+
+    create_m_dns(&server_config, &mdns_wrapper);
+    let arc_server_config = Arc::new(server_config.clone());
+    get_m_dns_messages(arc_server_config, Arc::clone(&mdns_wrapper)).await;
+
+    let service = openapi_client::server::context::MakeAddContext::<_, EmptyContext>::new(service);
+
+    let server_future = hyper::Server::builder(incoming).serve(service);
+
+
+    let handle = tokio::spawn(async move {
+        if let Err(e) = server_future.await {
+            error!("Server error {}", e);
+        }
+    });
+
+    (addr, handle)
+}
+
+
+
 
 #[derive(Copy, Clone)]
 pub struct Server<C> {

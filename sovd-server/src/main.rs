@@ -58,7 +58,7 @@ fn init_logger() -> Result<(), flexi_logger::FlexiLoggerError> {
 #[tokio::main]
 async fn main() {
     if let Err(e) = init_logger() {
-        eprintln!("Logger initialization failed: {}", e);
+        info!("Logger initialization failed: {}", e);
     }
     let matches = App::new("server")
         .arg(
