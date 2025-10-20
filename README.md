@@ -94,3 +94,8 @@ Then following specifications start to interogate sovd_server for CPU consumptio
    The same applies to components.
 
    Please note to replace <data_id> with the appropriate identifier or ID for the data or component you wish to access.
+
+
+   # Test integration
+
+   1. Run command: cargo test -p sovd-server
