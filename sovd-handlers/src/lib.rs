@@ -399,6 +399,27 @@ pub fn find_processes(search_terms: Vec<&str>, base_uri: &str) -> Vec<EntityColl
     response_body // Return the list of EntityReferences
 }
 
+// Function to search and return pid
+pub fn get_process_pid(search_term: &str) -> i32 {
+    let all_processes = all_processes().unwrap(); // Retrieve all running processes
+
+    // Iterate over each process
+    for process in all_processes {
+        if let Ok(cmd) = process.cmdline() { // Retrieve the command line arguments of the process
+            let cmd_string = cmd.join(" "); // Convert the command line arguments into a single string
+                if cmd_string.contains(search_term) {
+                    // Check if the process is not in an idle state
+                    if process.stat.state != 'I' {
+                        let pid = process.stat.pid;
+                        return pid;
+                    }
+                }
+        }
+    }
+
+    return 0 //NOK
+}
+
 // Find an entity by name and return its reference
 pub fn find_entity_by_name(search_term: &str, base_uri: &str) -> Option<EntityCollectionGet200ResponseItemsInner> {
     let all_processes = all_processes().unwrap(); // Retrieve all running processes
