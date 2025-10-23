@@ -400,7 +400,7 @@ pub fn find_processes(search_terms: Vec<&str>, base_uri: &str) -> Vec<EntityColl
 }
 
 // Function to search and return pid
-pub fn get_process_pid(search_term: &str) -> i32 {
+pub fn get_process_pid(search_term: &str) -> Option<i32> {
     let all_processes = all_processes().unwrap(); // Retrieve all running processes
 
     // Iterate over each process
@@ -411,13 +411,12 @@ pub fn get_process_pid(search_term: &str) -> i32 {
                     // Check if the process is not in an idle state
                     if process.stat.state != 'I' {
                         let pid = process.stat.pid;
-                        return pid;
+                        return Some(pid);
                     }
                 }
         }
     }
-
-    return 0 //NOK
+    None
 }
 
 // Find an entity by name and return its reference

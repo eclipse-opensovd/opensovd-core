@@ -38,14 +38,14 @@ Clean:
 ```
 # Starting sovd_server
 ```
-Change owner to your user for /var/log/
 Copy from config folder sovd_server_apps.conf to target/debug/
 
 sovd_server <ip_address> <port> <hostname> --sovd-mode <sovd_mode>
 <ip_address> : IP address to bind the server to, use localhost for local testing or a public IP for external access.
 <port>       : Any available port in the range 1024-49151, typically used by user applications and services.
-<hostname>   : A desriptive name e.g. chassis-hpc
-<sovd_mode>  : Operation mode either gateway or standalone
+<hostname>   : A desriptive name e.g. chassis-hpc.
+<sovd_mode>  : Operation mode either gateway or standalone.
+<logs>       : Optional configure saving location for log file.
 
 e.g. ./sovd_server <ip-address> <port> chassis-hpc --sovd_mode standalone
 e.g. ./sovd_server <ip-address> <port> telematics --sovd_mode gateway

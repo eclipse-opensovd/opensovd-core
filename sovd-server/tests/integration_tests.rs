@@ -8,7 +8,7 @@ use sovd_handlers::get_process_pid;
 
 static SERVER_CONFIG: Lazy<ServerConfig> = Lazy::new(|| {
     ServerConfig::create_server_settings(
-        "../target/debug/sovd_server_apps.conf",
+        "../config/sovd_server_apps.conf",
         "http".to_string(),
         "127.0.0.1".to_string(),
         "0".to_string(),
@@ -37,6 +37,13 @@ async fn start_server() {
 fn get_server_addr() -> String {
     SERVER_ADDR.lock().unwrap().clone().expect("Server address not set")
 }
+
+
+fn build_app_path_resources(resource: &str) -> String {
+    let pid = get_process_pid("sovd-server").expect("Fail to read pid");
+    format!("v1/apps/sovd-server-{}/data/sovd-server-{}-{}", pid, pid, resource)
+}
+
 
 async fn get_and_assert_endpoint(path: &str) {
     start_server().await;
@@ -91,40 +98,36 @@ async fn get_related_apps() {
 
 #[tokio::test]
 async fn get_specific_app() {
-    let path = format!("v1/apps/sovd-server-{}", get_process_pid("sovd-server"));
+    let path = format!("v1/apps/sovd-server-{}", get_process_pid("sovd-server").expect("Fail to read pid"));
     get_and_assert_endpoint(&path).await;
 }
 
 #[tokio::test]
 async fn get_specific_app_data() {
-    let path = format!("v1/apps/sovd-server-{}/data", get_process_pid("sovd-server"));
+    let path = format!("v1/apps/sovd-server-{}/data", get_process_pid("sovd-server").expect("Fail to read pid"));
     get_and_assert_endpoint(&path).await;
 }
 
 #[tokio::test]
 async fn get_specific_app_cpu() {
-    let pid = get_process_pid("sovd-server");
-    let path = format!("v1/apps/sovd-server-{}/data/sovd-server-{}-cpu", pid, pid );
+    let path = build_app_path_resources("cpu");
     get_and_assert_endpoint(&path).await;
 }
 
 #[tokio::test]
 async fn get_specific_app_memory() {
-    let pid = get_process_pid("sovd-server");
-    let path = format!("v1/apps/sovd-server-{}/data/sovd-server-{}-memory", pid, pid );
+    let path = build_app_path_resources("memory");
     get_and_assert_endpoint(&path).await;
 }
 
 #[tokio::test]
 async fn get_specific_app_disk() {
-    let pid = get_process_pid("sovd-server");
-    let path = format!("v1/apps/sovd-server-{}/data/sovd-server-{}-disk", pid, pid );
+    let path = build_app_path_resources("disk");
     get_and_assert_endpoint(&path).await;
 }
 
 #[tokio::test]
 async fn get_specific_app_all() {
-    let pid = get_process_pid("sovd-server");
-    let path = format!("v1/apps/sovd-server-{}/data/sovd-server-{}-all", pid, pid );
+    let path = build_app_path_resources("all");
     get_and_assert_endpoint(&path).await;
 }
