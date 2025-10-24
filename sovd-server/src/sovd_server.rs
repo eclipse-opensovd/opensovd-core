@@ -260,16 +260,8 @@ pub async fn spawn_test_server(
     if SERVER_CONFIG.get().is_none() {
         init_server_config(server_config.clone());
     }
-    
-    let service_daemon = ServiceDaemon::new().unwrap();
-    let mdns_wrapper = Arc::new(ServiceDaemonWrapper::new(service_daemon));
-
-    create_m_dns(&server_config, &mdns_wrapper);
-    let arc_server_config = Arc::new(server_config.clone());
-    get_m_dns_messages(arc_server_config, Arc::clone(&mdns_wrapper)).await;
 
     let service = openapi_client::server::context::MakeAddContext::<_, EmptyContext>::new(service);
-
     let server_future = hyper::Server::builder(incoming).serve(service);
 
 
