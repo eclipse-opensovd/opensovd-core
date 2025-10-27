@@ -60,19 +60,19 @@ exit /b 1
   echo ==^> Starting SOVD code generation
   echo Project root: %ROOT_DIR%
   echo|set /p="OpenAPI Generator Version "
-  java -jar %GENERATOR_JAR% version
-  if %errorlevel% == 1 (
+  java -jar "%GENERATOR_JAR%" version
+  if errorlevel 1 (
     mkdir %GENERATOR_DIR%
     echo Downloading OpenAPI generator version %GENERATOR_VERSION%...
-    curl %GENERATOR_URL% -o %GENERATOR_JAR%
-    if %errorlevel% == 1 (
+    curl "%GENERATOR_URL%" -o "%GENERATOR_JAR%"
+    if errorlevel 1 (
       echo Error: Failed to download OpenAPI Generator CLI.
       exit /b 1
     )
     echo Downloaded openapi-generator-cli_%GENERATOR_VERSION%.jar to %GENERATOR_JAR%
   )
   echo Using existing OpenAPI Generator CLI: %GENERATOR_JAR%
-  java -jar %GENERATOR_JAR% generate -i %SPEC_FILE% -g rust-server -o %OUT_DIR%
+  java -jar "%GENERATOR_JAR%" generate -i "%SPEC_FILE%" -g rust-server -o "%OUT_DIR%"
   echo Generated Rust code at %OUT_DIR%
   exit /b 0
 
@@ -90,10 +90,10 @@ exit /b 1
 :validate
   echo %SPEC_FILE%
   echo|set /p="OpenAPI Generator Version "
-  java -jar %GENERATOR_JAR% version
+  java -jar "%GENERATOR_JAR%" version
   if errorlevel 1 (
-    mkdir %GENERATOR_DIR%
-    curl %GENERATOR_URL% -o %GENERATOR_JAR%
+    mkdir "%GENERATOR_DIR%"
+    curl "%GENERATOR_URL%" -o "%GENERATOR_JAR%"
   )
-  java -jar %GENERATOR_JAR% validate -i %SPEC_FILE%
+  java -jar "%GENERATOR_JAR%" validate -i "%SPEC_FILE%"
   exit /b 0

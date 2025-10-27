@@ -72,10 +72,8 @@ use crate::server_config::ServiceDaemonWrapper;
 use sovd_handlers::IDENT_DATA_RESPONSE;
 use sovd_handlers::create_entity_collection_response;
 use sovd_handlers::filter_by_writable;
-use sovd_handlers::find_and_create_read_value;
 use sovd_handlers::find_processes;
 use sovd_handlers::find_single_process;
-use sovd_handlers::get_before_last_dash;
 use sovd_handlers::group_by_writability;
 use sovd_handlers::prepare_data_response;
 
