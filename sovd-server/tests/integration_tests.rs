@@ -37,7 +37,10 @@ async fn start_server() {
     if addr_lock.is_none() {
         let (addr, _handle) = spawn_test_server(&SERVER_CONFIG).await;
         *addr_lock = Some(addr.to_string());
+        drop(addr_lock); // Release lock before waiting
+        wait_for_server_ready(&addr.to_string()).await;
     }
+
 }
 
 // Retrieves the server address from the static variable
@@ -73,6 +76,22 @@ async fn get_and_assert_endpoint(path: &str) {
 
     let body = response.text().await.expect("Failed to read response body");
     assert!(!body.is_empty(), "Response body should not be empty");
+}
+
+async fn wait_for_server_ready(addr: &str) {
+    let url = format!("http://{}/v1/components", addr);
+    let max_attempts = 10;
+
+    for _ in 0..max_attempts {
+        if let Ok(resp) = CLIENT.get(&url).send().await {
+            if resp.status().is_success() {
+                return;
+            }
+        }
+        tokio::time::sleep(Duration::from_millis(200)).await;
+    }
+
+    panic!("Server did not become ready in time");
 }
 
 // Integration test: Get general component information

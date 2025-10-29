@@ -46,9 +46,10 @@ fn init_logger(path: Option<&str>) -> Result<(), flexi_logger::FlexiLoggerError>
                 .suffix("log"),
         )
         .format_for_files(flexi_logger::detailed_format)
+        .duplicate_to_stdout(flexi_logger::Duplicate::Info)
+        .duplicate_to_stderr(flexi_logger::Duplicate::Error)
         .print_message()
         .start()?;
-
     Ok(())
 }
 

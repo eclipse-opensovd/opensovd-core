@@ -4,12 +4,10 @@ set -euo pipefail
 CMD="${1:-}"
 
 # --- GLOBAL CONFIGURATION ---
-#ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT_DIR="$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd -P)"
-GENERATED_DIR="${ROOT_DIR}/target/generated"
-OUT_DIR="${GENERATED_DIR}/sovd-autogen-code"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+OUT_DIR="${ROOT_DIR}/target/generated/openapi_client"
 SPEC_FILE="${ROOT_DIR}/sovd-interfaces/sovd-api.yaml"
-GENERATOR_DIR="${ROOT_DIR}/target/generated-tools"
+GENERATOR_DIR="${ROOT_DIR}/target"
 GENERATOR_JAR="${GENERATOR_DIR}/openapi-generator-cli.jar"
 GENERATOR_VERSION="7.10.0"
 GENERATOR_URL="https://repo1.maven.org/maven2/org/openapitools/openapi-generator-cli/${GENERATOR_VERSION}/openapi-generator-cli-${GENERATOR_VERSION}.jar"

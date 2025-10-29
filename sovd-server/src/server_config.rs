@@ -11,12 +11,12 @@
 * SPDX-License-Identifier: Apache-2.0
 */
 
-use std::fs::File;
+use log::{error, info};
+use mdns_sd::{Error, Receiver, ServiceDaemon, ServiceEvent, ServiceInfo};
 use serde::{Deserialize, Serialize};
-use mdns_sd::{ServiceDaemon, ServiceInfo, Receiver, Error, ServiceEvent};
-use std::time::Duration;
+use std::fs::File;
 use std::io;
-use log::{info, error};
+use std::time::Duration;
 
 use std::sync::{Arc, Mutex};
 pub struct ServiceDaemonWrapper {
@@ -38,10 +38,10 @@ impl ServiceDaemonWrapper {
 
     pub fn shutdown(&self) {
         let mdns = self.mdns.lock().expect("Failed to lock mdns");
-        
+
         if let Err(e) = mdns.shutdown() {
-          error!("mDNS shutdown failed: {}", e);
-        } 
+            error!("mDNS shutdown failed: {}", e);
+        }
     }
 
     pub fn register(&self, service_info: ServiceInfo) -> Result<(), Box<dyn std::error::Error>> {
@@ -55,23 +55,27 @@ impl ServiceDaemonWrapper {
     }
 }
 
-
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ConfigEntry {
     pub component_id: String,
     pub apps: Vec<String>,
     pub instance_name: String,
-    pub mode: String
+    pub mode: String,
 }
 
 #[allow(dead_code)]
 impl ConfigEntry {
-    pub fn new(component_id: String, apps: Vec<String>, instance_name: String, mode: String) -> Self {
+    pub fn new(
+        component_id: String,
+        apps: Vec<String>,
+        instance_name: String,
+        mode: String,
+    ) -> Self {
         ConfigEntry {
             component_id,
             apps,
             instance_name,
-            mode
+            mode,
         }
     }
 }
@@ -82,22 +86,29 @@ pub struct ServerConfig {
     pub ip_address: String,
     pub port: String,
     pub base_uri: String,
-    pub sovd_mode: String, 
+    pub sovd_mode: String,
     pub host_name: String,
     pub sovd_server_list: Vec<String>,
-    pub config_entries: Vec<ConfigEntry>
+    pub config_entries: Vec<ConfigEntry>,
 }
 
 #[allow(dead_code)]
 impl ServerConfig {
-    pub fn new(protocol: String, ip_address: String, port: String, sovd_mode: String, host_name: String, config_entries: Vec<ConfigEntry>) -> Self {
+    pub fn new(
+        protocol: String,
+        ip_address: String,
+        port: String,
+        sovd_mode: String,
+        host_name: String,
+        config_entries: Vec<ConfigEntry>,
+    ) -> Self {
         let base_uri = format!("{}://{}:{}/v1", &protocol, &ip_address, &port);
         ServerConfig {
             protocol,
             ip_address,
             port,
             base_uri,
-            sovd_mode, 
+            sovd_mode,
             host_name,
             sovd_server_list: Vec::new(),
             config_entries,
@@ -179,9 +190,8 @@ impl ServerConfig {
         }
         None
     }
-    
 
-    // Get apps 
+    // Get apps
     pub fn get_apps_by_component_id(&self, component: &str) -> Option<&Vec<String>> {
         for entry in &self.config_entries {
             if entry.component_id == component {
@@ -196,35 +206,46 @@ impl ServerConfig {
         let file = File::open(file_path)?;
         let reader = io::BufReader::new(file);
         let json_data: serde_json::Value = serde_json::from_reader(reader)?;
-    
+
         if let Some(entries) = json_data.get("config_entries") {
             info!("Found config_entries: {:?}", entries);
             let config_entries: Vec<ConfigEntry> = serde_json::from_value(entries.clone())?;
             info!("Parsed config_entries: {:?}", config_entries);
             return Ok(config_entries);
         }
-    
-        Err(io::Error::new(io::ErrorKind::InvalidData, "Missing config_entries key"))
+
+        Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "Missing config_entries key",
+        ))
     }
 
-    pub fn get_ip_and_port(&self, mdns: &ServiceDaemonWrapper, instance_name: &String) -> Option<(String, u16)> {
+    pub fn get_ip_and_port(
+        &self,
+        mdns: &ServiceDaemonWrapper,
+        instance_name: &String,
+    ) -> Option<(String, u16)> {
         // Check for mDNS messages
         let service_type = "_sovd_server._udp.local.";
         let receiver = mdns.browse(service_type).expect("Failed to browse mDNS");
-    
+
         let timeout = Duration::from_secs(2); // Timeout 2 seconds
-    
+
         // Infinite loop with timeout
         let start_time = std::time::Instant::now();
         while start_time.elapsed() < timeout {
-            
             match receiver.recv_timeout(timeout) {
                 Ok(event) => match event {
                     ServiceEvent::ServiceResolved(info) => {
                         // Check if it is chassis-hpc
                         if info.get_fullname().starts_with(instance_name) {
                             // Extract IP-Address and Port
-                            let ip_address = info.get_addresses_v4().iter().next().map(|ip| ip.to_string()).unwrap_or_else(|| "127.0.0.1".to_string());
+                            let ip_address = info
+                                .get_addresses_v4()
+                                .iter()
+                                .next()
+                                .map(|ip| ip.to_string())
+                                .unwrap_or_else(|| "127.0.0.1".to_string());
                             let port = info.get_port();
                             return Some((ip_address, port));
                         }
@@ -237,14 +258,27 @@ impl ServerConfig {
                 }
             }
         }
-    
+
         error!("mDNS browse timed out or no matching service found.");
         None // No device found within timeout
     }
-    
 
-    pub fn create_server_settings(file_path: &str, protocol: String, ip_address: String, port: String, sovd_mode: String, host_name: String) -> io::Result<Self> {
+    pub fn create_server_settings(
+        file_path: &str,
+        protocol: String,
+        ip_address: String,
+        port: String,
+        sovd_mode: String,
+        host_name: String,
+    ) -> io::Result<Self> {
         let config_entries = Self::read_settings(file_path)?;
-        Ok(ServerConfig::new(protocol, ip_address, port, sovd_mode, host_name, config_entries))
+        Ok(ServerConfig::new(
+            protocol,
+            ip_address,
+            port,
+            sovd_mode,
+            host_name,
+            config_entries,
+        ))
     }
 }

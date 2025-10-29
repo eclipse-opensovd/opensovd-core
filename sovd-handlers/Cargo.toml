@@ -17,7 +17,6 @@ lazy_static = "1.5.0"
 log = { workspace = true }
 openapi_client = { workspace = true }
 openssl = { workspace = true }
-procfs = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sysinfo = "0.30.8"
