@@ -41,12 +41,12 @@ use swagger::auth::MakeAllowAllAuthenticator;
 use swagger::{Has, XSpanIdString};
 use tokio::net::TcpListener;
 
-use tokio::task::JoinHandle;
 use hyper::header::HeaderMap;
 use hyper::header::{
     ACCESS_CONTROL_ALLOW_HEADERS, ACCESS_CONTROL_ALLOW_METHODS, ACCESS_CONTROL_ALLOW_ORIGIN,
     HeaderValue,
 };
+use hyper::server::conn::AddrIncoming;
 use serde_json::Error as SerdeError;
 use serde_json::Map;
 use serde_json::Value as JsonValue;
@@ -61,8 +61,8 @@ use std::io::Write;
 use std::str::FromStr;
 use std::str::from_utf8;
 use tokio::task;
+use tokio::task::JoinHandle;
 use tokio_openssl::SslStream;
-use hyper::server::conn::AddrIncoming;
 
 use openapi_client::models;
 use openapi_client::models::*;
@@ -241,12 +241,11 @@ pub async fn create(server_config: &ServerConfig, addr: &str) {
 }
 
 #[allow(dead_code)]
-pub async fn spawn_test_server(
-    server_config: &ServerConfig,
-) -> (SocketAddr, JoinHandle<()>) {
-
+pub async fn spawn_test_server(server_config: &ServerConfig) -> (SocketAddr, JoinHandle<()>) {
     // Bind to port 0 to let OS assign a free port
-    let listener = TcpListener::bind("127.0.0.1:0").await.expect("Failed to bind");
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("Failed to bind");
     let addr = listener.local_addr().expect("Failed to get local address");
     let incoming = AddrIncoming::from_listener(listener).expect("Failed to create AddrIncoming");
 
@@ -261,7 +260,6 @@ pub async fn spawn_test_server(
     let service = openapi_client::server::context::MakeAddContext::<_, EmptyContext>::new(service);
     let server_future = hyper::Server::builder(incoming).serve(service);
 
-
     let handle = tokio::spawn(async move {
         if let Err(e) = server_future.await {
             error!("Server error {}", e);
@@ -270,9 +268,6 @@ pub async fn spawn_test_server(
 
     (addr, handle)
 }
-
-
-
 
 #[derive(Copy, Clone)]
 pub struct Server<C> {

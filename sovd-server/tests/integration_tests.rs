@@ -1,4 +1,3 @@
-
 use once_cell::sync::Lazy;
 use reqwest::Client;
 use sovd_handlers::get_process_pid;
@@ -14,8 +13,8 @@ static SERVER_CONFIG: Lazy<ServerConfig> = Lazy::new(|| {
         "http".to_string(),                // Protocol
         "127.0.0.1".to_string(),           // Host
         "0".to_string(),                   // Port (0 means auto-assign)
-        "standalone".to_string(),         // Mode
-        "chassis-hpc".to_string(),        // Component name
+        "standalone".to_string(),          // Mode
+        "chassis-hpc".to_string(),         // Component name
     )
     .expect("Failed to create server config")
 });
@@ -40,7 +39,6 @@ async fn start_server() {
         drop(addr_lock); // Release lock before waiting
         wait_for_server_ready(&addr.to_string()).await;
     }
-
 }
 
 // Retrieves the server address from the static variable

@@ -28,7 +28,7 @@ use std::net::TcpStream;
 use std::time::Duration;
 
 use hyper::{Method, header::HeaderMap};
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap};
 use std::error::Error;
 use std::path::Path;
 use std::str::FromStr;
@@ -390,53 +390,43 @@ fn create_group(
 ///
 /// # Examples
 ///
+
 pub fn find_single_process(
     process_name: &str,
-    _process_pid: &str, // kept for signature compatibility
+    process_pid: &str,
     base_uri: &str,
 ) -> Option<EntityCollectionGet200ResponseItemsInner> {
-    use sysinfo::{System, RefreshKind, ProcessRefreshKind, ProcessStatus};
-
-    info!(
-        "Starting find_single_process with process_name: '{}' and base_uri: '{}'",
-        process_name, base_uri
-    );
-
     let mut system = System::new_with_specifics(
         RefreshKind::new().with_processes(ProcessRefreshKind::everything()),
     );
     system.refresh_processes();
 
-    // Find the first non-idle process whose command line contains the process_name
-    let process = system.processes().iter().find_map(|(_, process)| {
+    let pid = match process_pid.parse::<u32>() {
+        Ok(pid) => pid,
+        Err(_) => return None,
+    };
+
+    for (_, process) in system.processes() {
         let cmd_string = process.cmd().join(" ");
-        if cmd_string.contains(process_name) && process.status() != ProcessStatus::Idle {
-            Some(process)
-        } else {
-            None
+        if cmd_string.contains(process_name) && process.pid().as_u32() == pid {
+            let name = process_name.replace(" ", "-");
+            let pid_name = format!("{}-{}", name, pid);
+            let href = format!("{}/apps/{}", base_uri, pid_name);
+            return Some(EntityCollectionGet200ResponseItemsInner::new(
+                pid_name, name, href,
+            ));
         }
-    })?;
+    }
 
-    let name = process_name.replace(" ", "-");
-    let pid = process.pid().as_u32();
-    let pid_name = format!("{}-{}", name, pid);
-    let href = format!("{}/apps/{}", base_uri, pid_name);
-
-    info!(
-        "Creating EntityReference for pid: {}, pid_name: '{}', href: '{}'",
-        pid, pid_name, href
-    );
-
-    Some(EntityCollectionGet200ResponseItemsInner::new(pid_name, name, href))
+    None
 }
-
 
 // Function to search and return processes
 pub fn find_processes(
     search_terms: Vec<&str>,
     base_uri: &str,
 ) -> Vec<EntityCollectionGet200ResponseItemsInner> {
-    use sysinfo::{System, RefreshKind, ProcessRefreshKind, ProcessStatus};
+    use sysinfo::{ProcessRefreshKind, ProcessStatus, RefreshKind, System};
 
     let system = System::new_with_specifics(
         RefreshKind::new().with_processes(ProcessRefreshKind::everything()),
@@ -465,7 +455,7 @@ pub fn find_processes(
 // Function to search and return pid
 pub fn get_process_pid(search_term: &str) -> Option<i32> {
     let system = System::new_with_specifics(
-        RefreshKind::new().with_processes(ProcessRefreshKind::everything())
+        RefreshKind::new().with_processes(ProcessRefreshKind::everything()),
     );
 
     system.processes().iter().find_map(|(_, process)| {
