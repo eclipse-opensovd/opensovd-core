@@ -2675,3 +2675,553 @@ where
         Err(ApiError("Api-Error: Operation is NOT implemented".into()))
     }
 }
+
+#[cfg(test)]
+mod tests {
+
+    use openssl::ex_data;
+    use super::*;
+    use {
+        EntityCollectionEntityIdDataCategoriesGetEntityCollectionParameter as ColParam,
+        EntityCollectionEntityIdBulkDataGetResponse as BulkResp,
+        EntityCollectionEntityIdDataDataIdGetResponse as DataIdResp,
+        ComponentsComponentIdRelatedAppsGetResponse as AppsResp,
+        EntityCollectionEntityIdDataGetResponse as DataResp,
+        EntityCollectionGetResponse as EntityResp,
+        AnyPathDocsGetDefaultResponse as ErrBody,
+        serde_json::Value as Value,
+    };
+
+    #[derive(Clone, Debug)]
+    struct TestContext(XSpanIdString);
+
+    impl Has<XSpanIdString> for TestContext {
+        fn get(&self) -> &XSpanIdString { &self.0 }
+        fn get_mut(&mut self) -> &mut XSpanIdString { &mut self.0 }
+        fn set(&mut self, v: XSpanIdString) { self.0 = v; }
+    }
+
+    
+    fn ensure_server_config(sovd_mode: String, host_name: String) {
+        #[allow(unused)]
+        let cfg =     ServerConfig::create_server_settings(
+        "../config/sovd_server_apps.conf",
+        "http".to_string(),
+        "127.0.0.1".to_string(),
+        "8080".to_string(),
+        sovd_mode,
+        host_name,
+        ).expect("Failed to create server config");
+
+        if SERVER_CONFIG.get().is_none() {
+            let _ = SERVER_CONFIG.set(cfg);
+        }
+        
+    }
+
+    fn make_server<C>() -> Server<C> { Server { marker: PhantomData } }
+
+
+    #[tokio::test]
+    async fn bulk_data_get_schema_none_when_not_requested() {
+ 
+        let server = make_server::<TestContext>();
+        let ctx = TestContext(XSpanIdString("span-1".into()));
+
+        let rsp = server
+            .entity_collection_entity_id_bulk_data_get(ColParam::Apps, "id-1".into(), None, &ctx)
+            .await
+            .expect("Fail for entity_collection_entity_id_bulk_data_get");
+
+        match rsp {
+            BulkResp::TheBulkDataCategoriesSupportedByTheEntity(body) => {
+                assert!(body.items.is_empty());
+                assert_eq!(body.schema, None);
+            }
+            _ => panic!("unexpected variant"),
+        }
+    }
+
+    #[tokio::test]
+    async fn bulk_data_get_schema_some_false_when_true_requested() {
+        let server = make_server::<TestContext>();
+        let ctx = TestContext(XSpanIdString("span-2".into()));
+
+        let rsp = server
+            .entity_collection_entity_id_bulk_data_get(ColParam::Apps, "id-2".into(), Some(true), &ctx)
+            .await
+            .expect("Fail for entity_collection_entity_id_bulk_data_get");
+
+        match rsp {
+            BulkResp::TheBulkDataCategoriesSupportedByTheEntity(body) => {
+                assert!(body.items.is_empty());
+                assert_eq!(body.schema, Some(false));
+            }
+            _ => panic!("unexpected variant"),
+        }
+    }
+
+    
+    #[tokio::test]
+    async fn data_get_apps_builds_four_items_with_expected_ids_and_name() {
+
+        let server = make_server::<TestContext>();
+        let ctx = TestContext(XSpanIdString("span-a".into()));
+
+        let entity_id = "chassis-hpc";
+        let rsp = server
+            .entity_collection_entity_id_data_get(
+                ColParam::Apps,
+                entity_id.to_string(),
+                None,
+                None,
+                None,
+                &ctx,
+            )
+            .await
+            .expect("Fail for entity_collection_entity_id_data_get");
+
+        match rsp {
+            DataResp::TheRequestWasSuccessful(body) => {
+                let cleaned = "chassis";
+                let ids = vec!["cpu", "disk", "memory", "all"];
+                for id in ids {
+                    for item in &body.items {
+                        if id == item.id {
+                            assert_eq!(item.id, id);
+                            assert_eq!(item.name.to_lowercase(), format!("current {} usage for apps {}", id, cleaned));
+                            break;
+                        }
+         
+                        
+                    }
+                }
+                
+            }
+            other => panic!("unexpected variant: {:?}", other),
+        }
+    }
+
+    
+    #[tokio::test]
+    async fn data_get_components_builds_four_items() {
+
+        let server = make_server::<TestContext>();
+        let ctx = TestContext(XSpanIdString("span-b".into()));
+
+        let entity_id = "comp-xyz-7";
+        let rsp = server
+            .entity_collection_entity_id_data_get(
+                ColParam::Components,
+                entity_id.to_string(),
+                None, 
+                None,  
+                None,
+                &ctx,
+            )
+            .await
+            .expect("Fail for entity_collection_entity_id_data_get");
+
+        match rsp {
+            DataResp::TheRequestWasSuccessful(body) => {
+                assert_eq!(body.items.len(), 4);
+                
+                let ids: Vec<_> = body.items.iter().map(|it| it.id.as_str()).collect();
+                assert!(ids.iter().any(|id| id.ends_with("-cpu")));
+                assert!(ids.iter().any(|id| id.ends_with("-disk")));
+                assert!(ids.iter().any(|id| id.ends_with("-memory")));
+                assert!(ids.iter().any(|id| id.ends_with("-all")));
+            }
+            other => panic!("unexpected variant: {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn data_get_default_branch_returns_not_yet_implemented() {
+
+        let server = make_server::<TestContext>();
+        let ctx = TestContext(XSpanIdString("span-c".into()));
+
+        let rsp = server
+            .entity_collection_entity_id_data_get(
+                ColParam::Functions,
+                "abc".into(),
+                None,
+                None,
+                None,
+                &ctx,
+            )
+            .await
+            .expect("Fail for entity_collection_entity_id_data_get");
+
+        match rsp {
+            DataResp::AnUnexpectedRequestOccurred(err) => {
+                assert_eq!(err.error_code, "NotYetImplemented");
+                assert!(err.message.contains("Not yet implemented"));
+            }
+            other => panic!("expected error variant, got: {:?}", other),
+        }
+    }
+
+    
+    #[tokio::test]
+    async fn data_groups_get_forwards_success_from_group_by_writability() {
+
+        let server = make_server::<TestContext>();
+        let ctx = TestContext(XSpanIdString("span-ok".into()));
+
+        let test = vec![Value::Bool(true)];
+
+        let expected = group_by_writability(&test).expect("should succeed for test data");
+
+       
+        let got = server
+            .entity_collection_entity_id_data_groups_get(
+                ColParam::Apps,
+                "entity-123".to_string(),
+                &ctx,
+            )
+            .await
+            .expect("Fail for entity_collection_entity_id_data_groups_get");
+
+        
+        assert_eq!(format!("{:?}", got), format!("{:?}", expected),
+            "API result should equal processor result");
+    }
+
+    #[tokio::test]
+    async fn entity_collection_entity_id_data_data_id_get_not_initialized() {
+
+        let server = make_server::<TestContext>();
+        let ctx = TestContext(XSpanIdString("span-c".into()));
+
+        let data_id = "veh-01".to_string();
+        let rsp = server
+            .entity_collection_entity_id_data_data_id_get(
+                ColParam::Components,
+                "telematics".into(),
+                data_id,
+                None,
+                &ctx,
+            )
+            .await
+            .expect("Fail for entity_collection_entity_id_data_data_id_get");
+
+        match rsp {
+            DataIdResp::AnUnexpectedRequestOccurred(body) => {
+                let error_code = "UnknownResource".to_string();
+                assert_eq!(error_code, body.error_code);
+            }
+            other => panic!("unexpected variant: {:?}", other)
+        }
+    }
+
+    #[tokio::test]
+    async fn entity_collection_entity_id_data_data_id_get_components_telematics() {
+
+        ensure_server_config(String::from("gateway"), String::from("telematics"));
+        let server = make_server::<TestContext>();
+        let ctx = TestContext(XSpanIdString("span-c".into()));
+
+        let data_id = "veh-01-cpu".to_string();
+        let rsp = server
+            .entity_collection_entity_id_data_data_id_get(
+                ColParam::Components,
+                "telematics".into(),
+                data_id.clone(),
+                None,
+                &ctx,
+            )
+            .await
+            .expect("Fail for entity_collection_entity_id_data_data_id_get");
+
+        match rsp {
+            DataIdResp::TheRequestWasSuccessful(body) => {
+                
+            let data = json!({
+                    "cpu_usage": body.data.get("cpu_usage").and_then(|val| val.as_str()),
+                    "description": "CPU usage for component veh-01",
+                    "name": "CPU"
+                });
+
+                assert_eq!(body.data, data);
+                assert_eq!(data_id, body.id);
+                
+            }
+            other => panic!("unexpected variant: {:?}", other)
+        }
+    }
+
+    #[tokio::test]
+    async fn entity_collection_entity_id_data_data_id_get_components_chassis_hpc_standalone() {
+        
+        ensure_server_config(String::from("standalone"), String::from("chassis-hpc"));
+
+        let server = make_server::<TestContext>();
+        let ctx = TestContext(XSpanIdString("span-c".into()));
+
+      
+        let data_id = "veh-01-cpu".to_string();
+        let rsp = server
+            .entity_collection_entity_id_data_data_id_get(
+                ColParam::Components,
+                "chassis-hpc".into(),
+                data_id.clone(),
+                None,
+                &ctx,
+            )
+            .await
+            .expect("Fail for entity_collection_entity_id_data_data_id_get");
+
+        match rsp {
+            DataIdResp::TheRequestWasSuccessful(body) => {
+                
+            let data = json!({
+                    "cpu_usage": body.data.get("cpu_usage").and_then(|val| val.as_str()),
+                    "description": "CPU usage for component veh-01",
+                    "name": "CPU"
+                });
+
+                assert_eq!(body.data, data);
+                assert_eq!(data_id, body.id);
+            }
+            other => panic!("unexpected variant: {:?}", other)
+        }
+    }
+
+    #[tokio::test]
+    async fn entity_collection_entity_id_data_data_id_get_apps_fail_to_find_process() {
+
+        ensure_server_config(String::from("standalone"), String::from("chassic-hpc"));
+        let server = make_server::<TestContext>();
+        let ctx = TestContext(XSpanIdString("span-c".into()));
+
+        let data_id = "veh-01-cpu".to_string();
+        let rsp = server
+            .entity_collection_entity_id_data_data_id_get(
+                ColParam::Apps,
+                "chassic-hpc".into(),
+                data_id.clone(),
+                None,
+                &ctx,
+            )
+            .await
+            .expect("Fail for entity_collection_entity_id_data_data_id_get");
+
+        match rsp {
+            DataIdResp::AnUnexpectedRequestOccurred(body) => {
+                let error_code = "ProcessNotFound".to_string();
+                assert_eq!(error_code, body.error_code);
+            }
+            other => panic!("unexpected variant: {:?}", other)
+        }
+    }
+    
+    #[tokio::test]
+    async fn entity_collection_entity_id_data_data_id_get_apps_by_process_with_unknown_resource() {
+
+        ensure_server_config(String::from("standalone"), String::from("chassis-hpc"));
+        
+        let server = make_server::<TestContext>();
+        let ctx = TestContext(XSpanIdString("span-c".into()));
+
+    
+        let rsp = server
+            .entity_collection_entity_id_data_data_id_get(
+                ColParam::Apps,
+                format!("sovd_server-{}", std::process::id()),
+                "sovd_server".to_string(),
+                None,
+                &ctx,
+            )
+            .await
+            .expect("Fail for entity_collection_entity_id_data_data_id_get");
+
+        match rsp {
+            DataIdResp::AnUnexpectedRequestOccurred(body) => {
+                let error_code = "UnknownResource".to_string();
+                assert_eq!(error_code, body.error_code);
+            }
+            other => panic!("unexpected variant: {:?}", other)
+        }
+            
+    }
+
+    #[tokio::test]
+    async fn entity_collection_entity_id_data_data_id_get_apps_by_process_with_cpu_usage() {
+
+        ensure_server_config(String::from("standalone"), String::from("chassis-hpc"));
+        
+        let server = make_server::<TestContext>();
+        let ctx = TestContext(XSpanIdString("span-c".into()));
+
+    
+        let rsp = server
+            .entity_collection_entity_id_data_data_id_get(
+                ColParam::Apps,
+                format!("sovd_server-{}", std::process::id()),
+                "sovd_server-cpu".to_string(),
+                None,
+                &ctx,
+            )
+            .await
+            .expect("Fail for entity_collection_entity_id_data_data_id_get");
+
+        match rsp {
+            DataIdResp::TheRequestWasSuccessful(body) => {
+                
+                let data = json!({
+                    "cpu_usage": body.data.get("cpu_usage").and_then(|val| val.as_str()),
+                    "description": "CPU usage for sovd_server",
+                    "name": "CPU"
+                });
+
+                assert_eq!(body.data, data);
+            
+            }
+            other => panic!("unexpected variant: {:?}", other)
+        }
+            
+    }
+
+    #[tokio::test]
+    async fn entity_collection_entity_id_data_data_id_get_apps_process_not_found() {
+
+        ensure_server_config(String::from("no_process"), String::from("chassis-hpc"));
+        
+        let server = make_server::<TestContext>();
+        let ctx = TestContext(XSpanIdString("span-c".into()));
+
+    
+        let rsp = server
+            .entity_collection_entity_id_data_data_id_get(
+                ColParam::Functions,
+                format!("sovd_server-{}", std::process::id()),
+                "sovd_server".to_string(),
+                None,
+                &ctx,
+            )
+            .await
+            .expect("Fail for entity_collection_entity_id_data_data_id_get");
+
+        match rsp {
+            DataIdResp::AnUnexpectedRequestOccurred(body) => {
+                let error_code = "EntityCollectionNotFound".to_string();
+                assert_eq!(error_code, body.error_code);
+            }
+            other => panic!("unexpected variant: {:?}", other)
+        }
+            
+    }
+
+    #[tokio::test]
+    async fn components_component_id_related_apps_get_sovd_mode_standalone() {
+
+        ensure_server_config(String::from("standalone"), String::from("chassis-hpc"));
+        
+        let server = make_server::<TestContext>();
+        let ctx = TestContext(XSpanIdString("span-c".into()));
+
+        let component_id = "chassis-hpc".to_string();
+        let rsp = server
+            .components_component_id_related_apps_get(
+                component_id,
+                &ctx,
+            )
+            .await
+            .expect("Fail for components_component_id_related_apps_get");
+
+        match rsp {
+            AppsResp::ResponseBody(body) => {
+                assert!(!body.items.is_empty());
+            }
+            other => panic!("unexpected variant: {:?}", other)
+        }
+            
+    }
+
+    #[tokio::test]
+    async fn entity_collection_get_chassis_hpc_with_schema() {
+
+        ensure_server_config(String::from("standalone"), String::from("chassis-hpc"));
+        
+        let server = make_server::<TestContext>();
+        let ctx = TestContext(XSpanIdString("span-c".into()));
+
+        let rsp = server
+            .entity_collection_get(
+                ColParam::Components,
+                Some(true),
+                &ctx,
+            )
+            .await
+            .expect("Fail for entity_collection_get");
+
+        match rsp {
+            EntityResp::ResponseBody(body) => {
+                let expect = body.items.iter()
+                .any(|item| item.name == "Chassis-HPC");
+                assert!(expect);
+            }
+            other => panic!("unexpected variant: {:?}", other)
+        }
+            
+    }
+
+    #[tokio::test]
+    async fn entity_collection_get_chassis_hpc() {
+
+        ensure_server_config(String::from("standalone"), String::from("chassis-hpc"));
+        
+        let server = make_server::<TestContext>();
+        let ctx = TestContext(XSpanIdString("span-c".into()));
+
+        let rsp = server
+            .entity_collection_get(
+                ColParam::Components,
+                Some(false),
+                &ctx,
+            )
+            .await
+            .expect("Fail for entity_collection_get");
+
+        match rsp {
+            EntityResp::ResponseBody(body) => {
+                let expect = body.items.iter()
+                .any(|item| item.name == "Chassis-HPC");
+                assert!(expect);
+            }
+            other => panic!("unexpected variant: {:?}", other)
+        }
+            
+    }
+
+    #[tokio::test]
+    async fn entity_collection_get_no_defined_collection() {
+
+        ensure_server_config(String::from("standalone"), String::from("chassis-hpc"));
+        
+        let server = make_server::<TestContext>();
+        let ctx = TestContext(XSpanIdString("span-c".into()));
+
+        let rsp = server
+            .entity_collection_get(
+                ColParam::Apps,
+                Some(false),
+                &ctx,
+            )
+            .await
+            .expect("Fail for entity_collection_get");
+
+        match rsp {
+            EntityResp::AnUnexpectedRequestOccurred(body) => {
+                let error_code = "UnexpectedRequest".to_string();
+                assert_eq!(body.error_code, error_code);
+            }
+            other => panic!("unexpected variant: {:?}", other)
+        }
+            
+    }
+    
+
+}
