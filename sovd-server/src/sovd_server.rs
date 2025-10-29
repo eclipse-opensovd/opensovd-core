@@ -2679,7 +2679,6 @@ where
 #[cfg(test)]
 mod tests {
 
-    use openssl::ex_data;
     use super::*;
     use {
         EntityCollectionEntityIdDataCategoriesGetEntityCollectionParameter as ColParam,
@@ -2692,16 +2691,18 @@ mod tests {
         serde_json::Value as Value,
     };
 
+    //Mock struct for tests
     #[derive(Clone, Debug)]
     struct TestContext(XSpanIdString);
 
+    //Mock TestContext for tests
     impl Has<XSpanIdString> for TestContext {
         fn get(&self) -> &XSpanIdString { &self.0 }
         fn get_mut(&mut self) -> &mut XSpanIdString { &mut self.0 }
         fn set(&mut self, v: XSpanIdString) { self.0 = v; }
     }
 
-    
+    // Function used as mock SERVER_CONFIG for some of the tests.
     fn ensure_server_config(sovd_mode: String, host_name: String) {
         #[allow(unused)]
         let cfg =     ServerConfig::create_server_settings(
@@ -2718,9 +2719,26 @@ mod tests {
         }
         
     }
-
+    
+    //Mock for tests
     fn make_server<C>() -> Server<C> { Server { marker: PhantomData } }
 
+
+
+
+    /**
+     * Test: `bulk_data_get_schema_none_when_not_requested`
+     *
+     * Purpose:
+     * Verifies the behavior of the `entity_collection_entity_id_bulk_data_get` endpoint
+     * when no schema is requested (`None`).
+     *
+     * Expected Result:
+     * - `body.items` should be empty.
+     * - `body.schema` should be `None`.
+     *
+     * This test uses the real endpoint function to simulate an actual API call.
+     */
 
     #[tokio::test]
     async fn bulk_data_get_schema_none_when_not_requested() {
@@ -2742,6 +2760,22 @@ mod tests {
         }
     }
 
+    
+    
+    /**
+     * Test: `bulk_data_get_schema_some_false_when_true_requested`
+     *
+     * Purpose:
+     * Verifies the behavior of the `entity_collection_entity_id_bulk_data_get` endpoint
+     * when schema is explicitly requested (`Some(true)`).
+     *
+     * Expected Result:
+     * - `body.items` should be empty.
+     * - `body.schema` should be `Some(false)` (schema not available).
+     *
+     * This test uses the real endpoint function to simulate an actual API call.
+     */
+
     #[tokio::test]
     async fn bulk_data_get_schema_some_false_when_true_requested() {
         let server = make_server::<TestContext>();
@@ -2762,6 +2796,21 @@ mod tests {
     }
 
     
+    
+    /**
+     * Test: `data_get_apps_builds_four_items_with_expected_ids_and_name`
+     *
+     * Purpose:
+     * Validates the `entity_collection_entity_id_data_get` endpoint for the `Apps` collection.
+     *
+     * Expected Result:
+     * - Four items should be returned.
+     * - Each item should have an expected ID (`cpu`, `disk`, `memory`, `all`).
+     * - Each item's name should match the format: "current <id> usage for apps <cleaned_id>".
+     *
+     * This test uses the real endpoint function to simulate an actual API call.
+     */
+
     #[tokio::test]
     async fn data_get_apps_builds_four_items_with_expected_ids_and_name() {
 
@@ -2803,6 +2852,20 @@ mod tests {
     }
 
     
+    
+    /**
+     * Test: `data_get_components_builds_four_items`
+     *
+     * Purpose:
+     * Verifies the `entity_collection_entity_id_data_get` endpoint for the `Components` collection.
+     *
+     * Expected Result:
+     * - Exactly four items should be returned.
+     * - Each item ID should end with one of the expected suffixes: `-cpu`, `-disk`, `-memory`, `-all`.
+     *
+     * This test uses the real endpoint function to simulate an actual API call.
+     */
+
     #[tokio::test]
     async fn data_get_components_builds_four_items() {
 
@@ -2836,6 +2899,23 @@ mod tests {
         }
     }
 
+    
+
+    /**
+     * Test: `data_get_default_branch_returns_not_yet_implemented`
+     *
+     * Purpose:
+     * Ensures that the `entity_collection_entity_id_data_get` endpoint returns an error
+     * when called for the `Functions` collection, which is not yet implemented.
+     *
+     * Expected Result:
+     * - Response should be an error variant.
+     * - `error_code` should be `"NotYetImplemented"`.
+     * - Error message should contain `"Not yet implemented"`.
+     *
+     * This test uses the real endpoint function to simulate an actual API call.
+     */
+
     #[tokio::test]
     async fn data_get_default_branch_returns_not_yet_implemented() {
 
@@ -2864,6 +2944,20 @@ mod tests {
     }
 
     
+    
+    /**
+     * Test: `data_groups_get_forwards_success_from_group_by_writability`
+     *
+     * Purpose:
+     * Verifies that the `entity_collection_entity_id_data_groups_get` endpoint
+     * correctly forwards the result from the `group_by_writability` processor.
+     *
+     * Expected Result:
+     * - API response should match the result of `group_by_writability(test_data)`.
+     *
+     * This test uses the real endpoint function to simulate an actual API call.
+     */
+
     #[tokio::test]
     async fn data_groups_get_forwards_success_from_group_by_writability() {
 
@@ -2888,6 +2982,22 @@ mod tests {
         assert_eq!(format!("{:?}", got), format!("{:?}", expected),
             "API result should equal processor result");
     }
+
+    
+
+    /**
+     * Test: `entity_collection_entity_id_data_data_id_get_not_initialized`
+     *
+     * Purpose:
+     * Checks the behavior of the `entity_collection_entity_id_data_data_id_get` endpoint
+     * when requesting a specific data ID that has not been initialized.
+     *
+     * Expected Result:
+     * - Response should be an error variant.
+     * - `error_code` should be `"UnknownResource"`.
+     *
+     * This test uses the real endpoint function to simulate an actual API call.
+     */
 
     #[tokio::test]
     async fn entity_collection_entity_id_data_data_id_get_not_initialized() {
@@ -2915,6 +3025,25 @@ mod tests {
             other => panic!("unexpected variant: {:?}", other)
         }
     }
+
+
+
+    /**
+     * Test: `entity_collection_entity_id_data_data_id_get_components_telematics`
+     *
+     * Purpose:
+     * Verifies the behavior of the `entity_collection_entity_id_data_data_id_get` endpoint
+     * for the `Components` collection when the component is `telematics`.
+     *
+     * Expected Result:
+     * - The response should contain a data object with:
+     *   - `"cpu_usage"` field present.
+     *   - `"description"` matching "CPU usage for component veh-01".
+     *   - `"name"` equal to "CPU".
+     * - The `id` in the response should match the requested `data_id`.
+     *
+     * This test uses the real endpoint function to simulate an actual API call.
+     */
 
     #[tokio::test]
     async fn entity_collection_entity_id_data_data_id_get_components_telematics() {
@@ -2951,6 +3080,25 @@ mod tests {
             other => panic!("unexpected variant: {:?}", other)
         }
     }
+
+
+    
+    /**
+     * Test: `entity_collection_entity_id_data_data_id_get_components_chassis_hpc_standalone`
+     *
+     * Purpose:
+     * Verifies the behavior of the `entity_collection_entity_id_data_data_id_get` endpoint
+     * for the `Components` collection when the component is `chassis-hpc` in standalone mode.
+     *
+     * Expected Result:
+     * - The response should contain a data object with:
+     *   - `"cpu_usage"` field present.
+     *   - `"description"` matching "CPU usage for component veh-01".
+     *   - `"name"` equal to "CPU".
+     * - The `id` in the response should match the requested `data_id`.
+     *
+     * This test uses the real endpoint function to simulate an actual API call.
+     */
 
     #[tokio::test]
     async fn entity_collection_entity_id_data_data_id_get_components_chassis_hpc_standalone() {
@@ -2989,6 +3137,22 @@ mod tests {
         }
     }
 
+
+    
+    /**
+     * Test: `entity_collection_entity_id_data_data_id_get_apps_fail_to_find_process`
+     *
+     * Purpose:
+     * Tests the `entity_collection_entity_id_data_data_id_get` endpoint for the `Apps` collection
+     * when the process cannot be found for the given entity.
+     *
+     * Expected Result:
+     * - The response should be an error variant.
+     * - `error_code` should be `"ProcessNotFound"`.
+     *
+     * This test uses the real endpoint function to simulate an actual API call.
+     */
+
     #[tokio::test]
     async fn entity_collection_entity_id_data_data_id_get_apps_fail_to_find_process() {
 
@@ -3017,6 +3181,22 @@ mod tests {
         }
     }
     
+
+    
+    /**
+     * Test: `entity_collection_entity_id_data_data_id_get_apps_by_process_with_unknown_resource`
+     *
+     * Purpose:
+     * Verifies the behavior of the `entity_collection_entity_id_data_data_id_get` endpoint
+     * when the process exists but the resource is unknown.
+     *
+     * Expected Result:
+     * - The response should be an error variant.
+     * - `error_code` should be `"UnknownResource"`.
+     *
+     * This test uses the real endpoint function to simulate an actual API call.
+     */
+
     #[tokio::test]
     async fn entity_collection_entity_id_data_data_id_get_apps_by_process_with_unknown_resource() {
 
@@ -3046,6 +3226,24 @@ mod tests {
         }
             
     }
+
+    
+    /**
+     * Test: `entity_collection_entity_id_data_data_id_get_apps_by_process_with_cpu_usage`
+     *
+     * Purpose:
+     * Verifies that the `entity_collection_entity_id_data_data_id_get` endpoint
+     * correctly returns CPU usage data for a known process in the `Apps` collection.
+     *
+     * Expected Result:
+     * - The response should contain a data object with:
+     *   - `"cpu_usage"` field present.
+     *   - `"description"` matching "CPU usage for sovd_server".
+     *   - `"name"` equal to "CPU".
+     *
+     * This test uses the real endpoint function to simulate an actual API call.
+     */
+
 
     #[tokio::test]
     async fn entity_collection_entity_id_data_data_id_get_apps_by_process_with_cpu_usage() {
@@ -3084,6 +3282,22 @@ mod tests {
             
     }
 
+
+    
+    /**
+     * Test: `entity_collection_entity_id_data_data_id_get_apps_process_not_found`
+     *
+     * Purpose:
+     * Tests the behavior of the `entity_collection_entity_id_data_data_id_get` endpoint
+     * when the process is not found in the `Functions` collection.
+     *
+     * Expected Result:
+     * - The response should be an error variant.
+     * - `error_code` should be `"EntityCollectionNotFound"`.
+     *
+     * This test uses the real endpoint function to simulate an actual API call.
+     */
+
     #[tokio::test]
     async fn entity_collection_entity_id_data_data_id_get_apps_process_not_found() {
 
@@ -3114,6 +3328,21 @@ mod tests {
             
     }
 
+    
+
+    /**
+     * Test: `components_component_id_related_apps_get_sovd_mode_standalone`
+     *
+     * Purpose:
+     * Verifies that the `components_component_id_related_apps_get` endpoint
+     * returns related apps for a given component in standalone mode.
+     *
+     * Expected Result:
+     * - The response should contain a non-empty list of related apps in `body.items`.
+     *
+     * This test uses the real endpoint function to simulate an actual API call.
+     */
+
     #[tokio::test]
     async fn components_component_id_related_apps_get_sovd_mode_standalone() {
 
@@ -3139,6 +3368,21 @@ mod tests {
         }
             
     }
+
+
+    
+    /**
+     * Test: `entity_collection_get_chassis_hpc_with_schema`
+     *
+     * Purpose:
+     * Verifies the behavior of the `entity_collection_get` endpoint for the `Components` collection
+     * when schema is explicitly requested (`Some(true)`).
+     *
+     * Expected Result:
+     * - The response should contain an item with the name `"Chassis-HPC"` in `body.items`.
+     *
+     * This test uses the real endpoint function to simulate an actual API call.
+     */
 
     #[tokio::test]
     async fn entity_collection_get_chassis_hpc_with_schema() {
@@ -3168,6 +3412,21 @@ mod tests {
             
     }
 
+
+    
+    /**
+     * Test: `entity_collection_get_chassis_hpc`
+     *
+     * Purpose:
+     * Verifies the behavior of the `entity_collection_get` endpoint for the `Components` collection
+     * when schema is not requested (`Some(false)`).
+     *
+     * Expected Result:
+     * - The response should still contain an item with the name `"Chassis-HPC"` in `body.items`.
+     *
+     * This test uses the real endpoint function to simulate an actual API call.
+     */
+
     #[tokio::test]
     async fn entity_collection_get_chassis_hpc() {
 
@@ -3195,6 +3454,22 @@ mod tests {
         }
             
     }
+
+
+    
+    /**
+     * Test: `entity_collection_get_no_defined_collection`
+     *
+     * Purpose:
+     * Tests the behavior of the `entity_collection_get` endpoint when called for the `Apps` collection,
+     * which is not defined in the current configuration.
+     *
+     * Expected Result:
+     * - The response should be an error variant.
+     * - `error_code` should be `"UnexpectedRequest"`.
+     *
+     * This test uses the real endpoint function to simulate an actual API call.
+     */
 
     #[tokio::test]
     async fn entity_collection_get_no_defined_collection() {
