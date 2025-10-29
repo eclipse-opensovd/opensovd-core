@@ -235,8 +235,8 @@ impl ServerConfig {
         let start_time = std::time::Instant::now();
         while start_time.elapsed() < timeout {
             match receiver.recv_timeout(timeout) {
-                Ok(event) => match event {
-                    ServiceEvent::ServiceResolved(info) => {
+                Ok(event) => {
+                    if let ServiceEvent::ServiceResolved(info) = event {
                         // Check if it is chassis-hpc
                         if info.get_fullname().starts_with(instance_name) {
                             // Extract IP-Address and Port
@@ -250,8 +250,8 @@ impl ServerConfig {
                             return Some((ip_address, port));
                         }
                     }
-                    _ => {} // Ignore other events
-                },
+                }
+
                 Err(err) => {
                     error!("Error receiving mDNS event: {:?}", err);
                     break; // Break the loop on error or timeout

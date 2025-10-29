@@ -138,8 +138,8 @@ fn create_m_dns(server_config: &ServerConfig, mdns: &ServiceDaemonWrapper) {
 
     let my_service = ServiceInfo::new(
         service_type,
-        &instance_name.as_str(),
-        &host_name.as_str(),
+        instance_name.as_str(),
+        host_name.as_str(),
         ip,
         port,
         &properties[..],
@@ -210,7 +210,7 @@ pub async fn create(server_config: &ServerConfig, addr: &str) {
     let mdns_wrapper = Arc::new(ServiceDaemonWrapper::new(service_daemon));
 
     info!("Starting mDNS server: {}", server_config.get_ip_address());
-    create_m_dns(&server_config, &mdns_wrapper);
+    create_m_dns(server_config, &mdns_wrapper);
 
     let arc_server_config = Arc::new(server_config.clone());
     get_m_dns_messages(arc_server_config, Arc::clone(&mdns_wrapper)).await;
@@ -279,6 +279,12 @@ impl<C> Server<C> {
         Server {
             marker: PhantomData,
         }
+    }
+}
+
+impl<C> Default for Server<C> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -701,7 +707,7 @@ where
         match entity_collection {
             EntityCollectionEntityIdDataCategoriesGetEntityCollectionParameter::Apps => {
                 for resource_name in &resource_names {
-                    let id = format!("{}", resource_name.to_lowercase());
+                    let id = resource_name.to_lowercase().to_string();
                     let name = format!(
                         "Current {} usage for {} {}",
                         resource_name, entity_collection, entity_id_cleaned
@@ -735,7 +741,7 @@ where
                 info!("Default case");
                 let error = AnyPathDocsGetDefaultResponse {
                     error_code: "NotYetImplemented".to_string(),
-                    message: format!("Not yet implemented."),
+                    message: "Not yet implemented.".to_string(),
                     vendor_code: None,
                     translation_id: None,
                     parameters: None,
@@ -929,29 +935,29 @@ where
 
                                                     if let serde_json::Value::Object(map) =
                                                         json_value
+                                                        && let Some(data_value) = map.get("data")
                                                     {
-                                                        if let Some(data_value) = map.get("data") {
-                                                            let mut data_map: Map<String, Value> =
-                                                                Map::new();
-                                                            data_map.insert(
-                                                                "data".to_string(),
-                                                                data_value.clone(),
-                                                            );
+                                                        let mut data_map: Map<String, Value> =
+                                                            Map::new();
+                                                        data_map.insert(
+                                                            "data".to_string(),
+                                                            data_value.clone(),
+                                                        );
 
-                                                            let read_value = EntityCollectionEntityIdDataDataIdGet200Response {
+                                                        let read_value = EntityCollectionEntityIdDataDataIdGet200Response {
                                                             id: map["id"].as_str().unwrap_or_default().to_string(),
                                                             data: to_value(data_map).expect("Failed to filter writables"),
                                                             errors: None,
                                                             schema: None,
                                                         };
-                                                            return Ok(EntityCollectionEntityIdDataDataIdGetResponse::TheRequestWasSuccessful(read_value));
-                                                        }
+                                                        return Ok(EntityCollectionEntityIdDataDataIdGetResponse::TheRequestWasSuccessful(read_value));
                                                     }
 
                                                     let error = AnyPathDocsGetDefaultResponse {
                                                         error_code: "ResourceNotAvailable"
                                                             .to_string(),
-                                                        message: format!("Resource not available."),
+                                                        message: "Resource not available."
+                                                            .to_string(),
                                                         vendor_code: None,
                                                         translation_id: None,
                                                         parameters: None,
@@ -962,9 +968,9 @@ where
                                                     let error = AnyPathDocsGetDefaultResponse {
                                                         error_code: "GatewayRequestFailed"
                                                             .to_string(),
-                                                        message: format!(
+                                                        message:
                                                             "Failed to fetch data from gateway."
-                                                        ),
+                                                                .to_string(),
                                                         vendor_code: None,
                                                         translation_id: None,
                                                         parameters: None,
@@ -975,7 +981,7 @@ where
                                         } else {
                                             let error = AnyPathDocsGetDefaultResponse {
                                                 error_code: "InstanceNotFound".to_string(),
-                                                message: format!("Instance not found."),
+                                                message: "Instance not found.".to_string(),
                                                 vendor_code: None,
                                                 translation_id: None,
                                                 parameters: None,
@@ -985,7 +991,7 @@ where
                                     } else {
                                         let error = AnyPathDocsGetDefaultResponse {
                                             error_code: "StandaloneInstanceNotFound".to_string(),
-                                            message: format!("Standalone instance not found."),
+                                            message: "Standalone instance not found.".to_string(),
                                             vendor_code: None,
                                             translation_id: None,
                                             parameters: None,
@@ -1005,7 +1011,7 @@ where
                                 _ => {
                                     let error = AnyPathDocsGetDefaultResponse {
                                         error_code: "GateWayModeNotFound".to_string(),
-                                        message: format!("This gateway mode is not allowed."),
+                                        message: "This gateway mode is not allowed.".to_string(),
                                         vendor_code: None,
                                         translation_id: None,
                                         parameters: None,
@@ -1017,7 +1023,7 @@ where
                         _ => {
                             let error = AnyPathDocsGetDefaultResponse {
                                 error_code: "ComponentNotFound".to_string(),
-                                message: format!("The component was not found."),
+                                message: "The component was not found.".to_string(),
                                 vendor_code: None,
                                 translation_id: None,
                                 parameters: None,
@@ -1037,7 +1043,7 @@ where
                     let tokens = entity_id.split('-');
 
                     // Check, if last token is a number (is the PID in that case)
-                    let last_token = tokens.clone().last().unwrap();
+                    let last_token = tokens.clone().next_back().unwrap();
                     let pid = match last_token.parse::<u32>() {
                         Ok(pid) => pid.to_string(),
                         Err(_) => "".to_string(),
@@ -1059,12 +1065,12 @@ where
                     {
                         let resource = get_last_part_after_dash(&data_id);
                         let tokens = app.id.split('-');
-                        let pid_to_monitor = tokens.clone().last().unwrap();
+                        let pid_to_monitor = tokens.clone().next_back().unwrap();
                         // let pid_to_monitor = get_last_part_after_dash(&entity_id);
                         let app_name = get_first_part_after_dash(&entity_id);
                         let response = handle_app_resource(
                             resource.as_str(),
-                            &pid_to_monitor,
+                            pid_to_monitor,
                             app_name.as_str(),
                             data_id.as_str(),
                         );
@@ -1156,23 +1162,28 @@ where
                                             }
                                         };
 
-                                        if let serde_json::Value::Object(map) = json_value {
-                                            if let Some(data_value) = map.get("data") {
-                                                let mut data: Map<String, Value> = Map::new();
-                                                data.insert("data".to_string(), data_value.clone());
-                                                let read_value = EntityCollectionEntityIdDataDataIdGet200Response {
-                                                    id: map["id"].as_str().unwrap_or_default().to_string(),
-                                                    data: to_value(data).expect("Failed to filter writables"),
+                                        if let serde_json::Value::Object(map) = json_value
+                                            && let Some(data_value) = map.get("data")
+                                        {
+                                            let mut data: Map<String, Value> = Map::new();
+                                            data.insert("data".to_string(), data_value.clone());
+                                            let read_value =
+                                                EntityCollectionEntityIdDataDataIdGet200Response {
+                                                    id: map["id"]
+                                                        .as_str()
+                                                        .unwrap_or_default()
+                                                        .to_string(),
+                                                    data: to_value(data)
+                                                        .expect("Failed to filter writables"),
                                                     errors: None,
                                                     schema: None,
                                                 };
-                                                return Ok(EntityCollectionEntityIdDataDataIdGetResponse::TheRequestWasSuccessful(read_value));
-                                            }
+                                            return Ok(EntityCollectionEntityIdDataDataIdGetResponse::TheRequestWasSuccessful(read_value));
                                         }
 
                                         let error = AnyPathDocsGetDefaultResponse {
                                             error_code: "ResourceNotAvailable".to_string(),
-                                            message: format!("Resource not available."),
+                                            message: "Resource not available.".to_string(),
                                             vendor_code: None,
                                             translation_id: None,
                                             parameters: None,
@@ -1182,7 +1193,8 @@ where
                                     Err(_) => {
                                         let error = AnyPathDocsGetDefaultResponse {
                                             error_code: "GatewayRequestFailed".to_string(),
-                                            message: format!("Failed to fetch data from gateway."),
+                                            message: "Failed to fetch data from gateway."
+                                                .to_string(),
                                             vendor_code: None,
                                             translation_id: None,
                                             parameters: None,
@@ -1193,9 +1205,9 @@ where
                             } else {
                                 let error = AnyPathDocsGetDefaultResponse {
                                     error_code: "IPAndPortResolutionFailed".to_string(),
-                                    message: format!(
+                                    message:
                                         "Failed to resolve IP and port for the given instance."
-                                    ),
+                                            .to_string(),
                                     vendor_code: None,
                                     translation_id: None,
                                     parameters: None,
@@ -1205,7 +1217,7 @@ where
                         } else {
                             let error = AnyPathDocsGetDefaultResponse {
                                 error_code: "InstanceNameNotFound".to_string(),
-                                message: format!("No standalone instance name found."),
+                                message: "No standalone instance name found.".to_string(),
                                 vendor_code: None,
                                 translation_id: None,
                                 parameters: None,
@@ -1215,7 +1227,7 @@ where
                     } else {
                         let error = AnyPathDocsGetDefaultResponse {
                             error_code: "ProcessNotFound".to_string(),
-                            message: format!("The process was not found."),
+                            message: "The process was not found.".to_string(),
                             vendor_code: None,
                             translation_id: None,
                             parameters: None,
@@ -1226,7 +1238,7 @@ where
                 _ => {
                     let error = AnyPathDocsGetDefaultResponse {
                         error_code: "EntityCollectionNotFound".to_string(),
-                        message: format!("The entity collection was not found."),
+                        message: "The entity collection was not found.".to_string(),
                         vendor_code: None,
                         translation_id: None,
                         parameters: None,
@@ -1242,7 +1254,7 @@ where
             info!("Server configuration not initialized!");
             let error = AnyPathDocsGetDefaultResponse {
                 error_code: "ServerConfigurationNotInitialized".to_string(),
-                message: format!("Server configuration not initialized."),
+                message: "Server configuration not initialized.".to_string(),
                 vendor_code: None,
                 translation_id: None,
                 parameters: None,
@@ -1512,9 +1524,9 @@ where
                                                 let error = AnyPathDocsGetDefaultResponse {
                                                     error_code: "GatewayResponseBodyParsingError"
                                                         .to_string(),
-                                                    message: format!(
+                                                    message:
                                                         "Response body does not contain 'items' arra"
-                                                    ),
+                                                    .to_string(),
                                                     vendor_code: None,
                                                     translation_id: None,
                                                     parameters: None,
@@ -1547,7 +1559,8 @@ where
                                     Err(_) => {
                                         let error = AnyPathDocsGetDefaultResponse {
                                             error_code: "GatewayRequestFailed".to_string(),
-                                            message: format!("Failed to fetch data from gateway."),
+                                            message: "Failed to fetch data from gateway."
+                                                .to_string(),
                                             vendor_code: None,
                                             translation_id: None,
                                             parameters: None,
@@ -1559,7 +1572,7 @@ where
                         } else if component_id == "chassis-hpc" {
                             let error = AnyPathDocsGetDefaultResponse {
                                 error_code: "GatewayRequestGatewayDown".to_string(),
-                                message: format!("Failed to connect"),
+                                message: "Failed to connect".to_string(),
                                 vendor_code: None,
                                 translation_id: None,
                                 parameters: None,
@@ -1605,62 +1618,59 @@ where
 
                             Ok(response_body)
                         }
-                    } else {
-                        if component_id == "telematics" {
-                            let mut response_items = Vec::new();
-                            let empty_vec = Vec::new();
+                    } else if component_id == "telematics" {
+                        let mut response_items = Vec::new();
+                        let empty_vec = Vec::new();
 
-                            // Only for the current component
-                            if server_config.host_name == component_id {
-                                let sovd_apps_list = server_config
-                                    .get_apps_by_component_id(component_id.as_str())
-                                    .unwrap_or(&empty_vec);
+                        // Only for the current component
+                        if server_config.host_name == component_id {
+                            let sovd_apps_list = server_config
+                                .get_apps_by_component_id(component_id.as_str())
+                                .unwrap_or(&empty_vec);
 
-                                // Extract search terms from the sovd_apps_list
-                                let search_terms: Vec<&str> =
-                                    sovd_apps_list.iter().map(AsRef::as_ref).collect();
+                            // Extract search terms from the sovd_apps_list
+                            let search_terms: Vec<&str> =
+                                sovd_apps_list.iter().map(AsRef::as_ref).collect();
 
-                                // Use the new function to search for processes
-                                let found_entities =
-                                    find_processes(search_terms, &server_config.base_uri);
+                            // Use the new function to search for processes
+                            let found_entities =
+                                find_processes(search_terms, &server_config.base_uri);
 
-                                // Add the found entities to the response list
-                                response_items.extend(found_entities);
+                            // Add the found entities to the response list
+                            response_items.extend(found_entities);
 
-                                // Debug output
-                                for entity in &response_items {
-                                    info!("Found app: {:?}", entity);
-                                }
-
-                                if response_items.is_empty() {
-                                    info!("No apps found.");
-                                }
+                            // Debug output
+                            for entity in &response_items {
+                                info!("Found app: {:?}", entity);
                             }
 
-                            // Create the response
-                            let response_body =
-                                ComponentsComponentIdRelatedAppsGetResponse::ResponseBody(
-                                    AreasAreaIdRelatedComponentsGet200Response::new(response_items),
-                                );
-
-                            Ok(response_body)
-                        } else {
-                            let error = AnyPathDocsGetDefaultResponse {
-                                error_code: "InstanceResolutionFailed".to_string(),
-                                message: format!(
-                                    "Failed to resolve IP and port for the given instance."
-                                ),
-                                vendor_code: None,
-                                translation_id: None,
-                                parameters: None,
-                            };
-                            Ok(ComponentsComponentIdRelatedAppsGetResponse::AnUnexpectedRequestOccurred(error))
+                            if response_items.is_empty() {
+                                info!("No apps found.");
+                            }
                         }
+
+                        // Create the response
+                        let response_body =
+                            ComponentsComponentIdRelatedAppsGetResponse::ResponseBody(
+                                AreasAreaIdRelatedComponentsGet200Response::new(response_items),
+                            );
+
+                        Ok(response_body)
+                    } else {
+                        let error = AnyPathDocsGetDefaultResponse {
+                            error_code: "InstanceResolutionFailed".to_string(),
+                            message: "Failed to resolve IP and port for the given instance."
+                                .to_string(),
+                            vendor_code: None,
+                            translation_id: None,
+                            parameters: None,
+                        };
+                        Ok(ComponentsComponentIdRelatedAppsGetResponse::AnUnexpectedRequestOccurred(error))
                     }
                 } else {
                     let error = AnyPathDocsGetDefaultResponse {
                         error_code: "InstanceNameNotFound".to_string(),
-                        message: format!("No standalone instance name found."),
+                        message: "No standalone instance name found.".to_string(),
                         vendor_code: None,
                         translation_id: None,
                         parameters: None,
@@ -1718,7 +1728,7 @@ where
             info!("Server configuration not initialized!");
             let error = AnyPathDocsGetDefaultResponse {
                 error_code: "ServerConfigurationNotInitialized".to_string(),
-                message: format!("Server configuration not initialized."),
+                message: "Server configuration not initialized.".to_string(),
                 vendor_code: None,
                 translation_id: None,
                 parameters: None,
@@ -1810,11 +1820,11 @@ where
                 // Create InlineResponse200 with the EntityReferences and optionally the schema
                 let mut response_body =
                     models::EntityCollectionGet200Response::new(entity_references);
-                if let Some(include_schema) = include_schema {
-                    if include_schema {
-                        // Set the schema if required
-                        response_body.schema = Some(false);
-                    }
+                if let Some(include_schema) = include_schema
+                    && include_schema
+                {
+                    // Set the schema if required
+                    response_body.schema = Some(false);
                 }
 
                 // Create EntityCollectionGetResponse with ResponseBody
@@ -1860,7 +1870,7 @@ where
                 let tokens = entity_id.split('-');
 
                 // Check, if last token is a number (is the PID in that case)
-                let last_token = tokens.clone().last().unwrap();
+                let last_token = tokens.clone().next_back().unwrap();
                 let pid = match last_token.parse::<u32>() {
                     Ok(pid) => pid.to_string(),
                     Err(_) => "".to_string(),
@@ -1878,7 +1888,7 @@ where
                     }
                 }
 
-                let app_id = String::from(entity_id.clone());
+                let app_id = entity_id.clone();
                 let mut _comp_id = "telematics";
 
                 match server_config.get_component_by_app(&app_id) {
@@ -2000,7 +2010,7 @@ where
                                                 let extracted_data =
                                                     extract_response_data_from_json_to_response(
                                                         &mut json_value,
-                                                        &server_config.get_base_uri(),
+                                                        server_config.get_base_uri(),
                                                     );
 
                                                 return Ok(extracted_data);
@@ -2008,9 +2018,8 @@ where
                                             Err(_) => {
                                                 let error = AnyPathDocsGetDefaultResponse {
                                                     error_code: "GatewayRequestFailed".to_string(),
-                                                    message: format!(
-                                                        "Failed to fetch data from gateway."
-                                                    ),
+                                                    message: "Failed to fetch data from gateway."
+                                                        .to_string(),
                                                     vendor_code: None,
                                                     translation_id: None,
                                                     parameters: None,
@@ -2022,7 +2031,7 @@ where
                                         // Gateway down
                                         let error = AnyPathDocsGetDefaultResponse {
                                             error_code: "GatewayDown".to_string(),
-                                            message: format!("Failed to connect to gateway."),
+                                            message: "Failed to connect to gateway.".to_string(),
                                             vendor_code: None,
                                             translation_id: None,
                                             parameters: None,
@@ -2032,9 +2041,9 @@ where
                                 } else {
                                     let error = AnyPathDocsGetDefaultResponse {
                                         error_code: "IPAndPortResolutionFailed".to_string(),
-                                        message: format!(
+                                        message:
                                             "Failed to resolve IP and port for the given instance."
-                                        ),
+                                                .to_string(),
                                         vendor_code: None,
                                         translation_id: None,
                                         parameters: None,
@@ -2044,7 +2053,7 @@ where
                             } else {
                                 let error = AnyPathDocsGetDefaultResponse {
                                     error_code: "InstanceNameNotFound".to_string(),
-                                    message: format!("No standalone instance name found."),
+                                    message: "No standalone instance name found.".to_string(),
                                     vendor_code: None,
                                     translation_id: None,
                                     parameters: None,
@@ -2059,7 +2068,7 @@ where
                         info!("Server configuration not initialized!");
                         let error = AnyPathDocsGetDefaultResponse {
                             error_code: "ServerConfigurationNotInitialized".to_string(),
-                            message: format!("Server configuration not initialized."),
+                            message: "Server configuration not initialized.".to_string(),
                             vendor_code: None,
                             translation_id: None,
                             parameters: None,
@@ -2089,7 +2098,7 @@ where
 
                 // Call entity_collection_get and process the response
                 match self
-                    .entity_collection_get(entity_collection.clone(), None, context)
+                    .entity_collection_get(entity_collection, None, context)
                     .await
                 {
                     Ok(EntityCollectionGetResponse::ResponseBody(response_body)) => {
@@ -2136,13 +2145,13 @@ where
                     }
                     Err(err) => {
                         // Error while querying entity_collection_get
-                        return Err(err.into());
+                        return Err(err);
                     }
                     _ => {
                         // Unexpected response from entity_collection_get
                         let error = AnyPathDocsGetDefaultResponse {
                             error_code: "UnexpectedResponse".to_string(),
-                            message: format!("Unexpected response from entity_collection_get."),
+                            message: "Unexpected response from entity_collection_get.".to_string(),
                             vendor_code: None,
                             translation_id: None,
                             parameters: None,
@@ -2155,7 +2164,7 @@ where
             } else {
                 let error = AnyPathDocsGetDefaultResponse {
                     error_code: "UnexpectedRequest".to_string(),
-                    message: format!("An unexpected request occurred."),
+                    message: "An unexpected request occurred.".to_string(),
                     vendor_code: None,
                     translation_id: None,
                     parameters: None,
@@ -2168,7 +2177,7 @@ where
 
         let error = AnyPathDocsGetDefaultResponse {
             error_code: "UnexpectedRequest".to_string(),
-            message: format!("An unexpected request occurred."),
+            message: "An unexpected request occurred.".to_string(),
             vendor_code: None,
             translation_id: None,
             parameters: None,
