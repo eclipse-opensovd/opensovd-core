@@ -2832,17 +2832,14 @@ mod tests {
 
         match rsp {
             DataResp::TheRequestWasSuccessful(body) => {
-                let cleaned = "chassis";
                 let ids = vec!["cpu", "disk", "memory", "all"];
                 for id in ids {
                     for item in &body.items {
                         if id == item.id {
                             assert_eq!(item.id, id);
-                            assert_eq!(item.name.to_lowercase(), format!("current {} usage for apps {}", id, cleaned));
+                            assert_eq!(item.name.to_lowercase(), format!("current {} usage for apps {}", id, entity_id.split('-').next().unwrap()));
                             break;
                         }
-         
-                        
                     }
                 }
                 
@@ -3156,7 +3153,7 @@ mod tests {
     #[tokio::test]
     async fn entity_collection_entity_id_data_data_id_get_apps_fail_to_find_process() {
 
-        ensure_server_config(String::from("standalone"), String::from("chassic-hpc"));
+        ensure_server_config(String::from("standalone"), String::from("noprocess"));
         let server = make_server::<TestContext>();
         let ctx = TestContext(XSpanIdString("span-c".into()));
 
@@ -3164,7 +3161,7 @@ mod tests {
         let rsp = server
             .entity_collection_entity_id_data_data_id_get(
                 ColParam::Apps,
-                "chassic-hpc".into(),
+                "noprocess".into(),
                 data_id.clone(),
                 None,
                 &ctx,
@@ -3406,6 +3403,7 @@ mod tests {
                 let expect = body.items.iter()
                 .any(|item| item.name == "Chassis-HPC");
                 assert!(expect);
+                assert_eq!(body.schema, Some(false)); //Currently in the actual implementation there is just Some(false)
             }
             other => panic!("unexpected variant: {:?}", other)
         }
