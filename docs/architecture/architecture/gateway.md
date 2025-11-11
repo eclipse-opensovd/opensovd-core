@@ -1,6 +1,6 @@
 # Gateway Mode
 
-The **gateway mode** in `opensovd-core` enables the server to act as a central diagnostic hub within a vehicle. It receives SOVD-REST requests from external clients (e.g., OEM tools, cloud services) and routes them to the appropriate ECUs or HPCs via adapters.
+The **gateway mode** in `opensovd-core` enables the server to act as a central diagnostic hub within a vehicle. It receives SOVD-REST requests from external off-board clients (e.g., OEM tools, cloud services) and routes them to the appropriate ECUs or HPCs via adapters.
 
 ## Purpose
 
@@ -14,7 +14,7 @@ Gateway mode is designed to:
 
 In gateway mode, the server:
 1. Loads configuration from `sovd_server_apps.conf` to identify available endpoints and adapters.
-2. Initializes communication channels with ECUs via protocol-specific adapters (e.g., UDS, DoIP, IPC).
+2. Initializes communication channels with ECUs via protocol-specific adapters (e.g., REST API's, IPC).
 3. Listens for incoming SOVD-REST requests on a specified IP and port.
 4. Routes requests to the correct ECU based on endpoint mapping.
 

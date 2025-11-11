@@ -1,11 +1,11 @@
 # Standalone Mode Architecture
 
-In **Standalone mode**, the `opensovd-core` server operates as a self-contained diagnostic endpoint. This mode is designed for scenarios where a single ECU or HPC (High-Performance Computer) needs to expose SOVD-compliant diagnostic services without relying on a gateway to route requests.
+In **Standalone mode**, the `opensovd-core` server operates as a self-contained diagnostic endpoint. This mode is designed for scenarios where a single HPC (High-Performance Computer) needs to expose SOVD-compliant diagnostic services without relying on a gateway to route requests.
 
 ## Purpose
 
 Standalone mode is ideal for:
-- Isolated testing of individual ECUs
+- Isolated testing of individual HPCs
 - Development environments where gateway infrastructure is not available
 - Simulating SOVD behavior for a single component
 
@@ -20,7 +20,7 @@ When launched in standalone mode, the server:
 ## Key Characteristics
 
 - **No routing logic**: Requests are handled locally.
-- **Single endpoint**: Represents one ECU or HPC.
+- **Single endpoint**: Represents one HPC.
 - **Simplified architecture**: No need for adapter orchestration or multi-ECU coordination.
 
 ## Example CLI Usage

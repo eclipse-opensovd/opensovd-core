@@ -6,7 +6,7 @@ This documentation provides a comprehensive guide to understanding, setting up, 
 - **TBD**
 
 ### architecture/
-- **gateway.md** - Describes the gateway mode of operation, including routing logic and communication with ECUs.
+- **gateway.md** - Describes the gateway mode of operation and communication with ECUs.
 - **standalone.md** - Explains the standalone mode and its use cases within the SOVD ecosystem.
 
 ### setup/
