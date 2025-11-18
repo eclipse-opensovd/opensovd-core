@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use axum::http::Method;
 use axum_extra::extract::{CookieJar, Host};
+use log::info;
 use openapi::{
     apis::updates::{
         UpdatesGetResponse, UpdatesPostResponse, UpdatesUpdatePackageIdAutomatedPutResponse,
@@ -25,7 +26,8 @@ impl openapi::apis::updates::Updates<()> for ServerImpl {
         cookies: &CookieJar,
         query_params: &models::UpdatesGetQueryParams,
     ) -> Result<UpdatesGetResponse, ()> {
-        todo!();
+        info!("updates_get({} {:?} {:?} {:?})", method, host, cookies, query_params,);
+        Err(())
     }
 
     /// UpdatesPost - POST /v1/updates
@@ -37,8 +39,9 @@ impl openapi::apis::updates::Updates<()> for ServerImpl {
         cookies: &CookieJar,
         header_params: &models::UpdatesPostHeaderParams,
         body: &Option<types::Object>,
-    ) -> Result<UpdatesPostResponse, ()> {
-        todo!();
+    ) -> Result<UpdatesPostResponse, ()> {    
+        info!("updates_post({} {:?} {:?} {:?} {:?})", method, host, cookies, header_params, body);
+        Err(())
     }
 
     /// UpdatesUpdatePackageIdAutomatedPut - PUT /v1/updates/{update_package_id}/automated
@@ -50,7 +53,8 @@ impl openapi::apis::updates::Updates<()> for ServerImpl {
         cookies: &CookieJar,
         path_params: &models::UpdatesUpdatePackageIdAutomatedPutPathParams,
     ) -> Result<UpdatesUpdatePackageIdAutomatedPutResponse, ()> {
-        todo!();
+        info!("updates_update_package_id_automated_put({} {:?} {:?} {:?})", method, host, cookies, path_params);
+        Err(())
     }
 
     /// UpdatesUpdatePackageIdDelete - DELETE /v1/updates/{update_package_id}
@@ -62,7 +66,8 @@ impl openapi::apis::updates::Updates<()> for ServerImpl {
         cookies: &CookieJar,
         path_params: &models::UpdatesUpdatePackageIdDeletePathParams,
     ) -> Result<UpdatesUpdatePackageIdDeleteResponse, ()> {
-        todo!();
+        info!("updates_update_package_id_delete({} {:?} {:?} {:?})", method, host, cookies, path_params);
+        Err(())
     }
 
     /// UpdatesUpdatePackageIdExecutePut - PUT /v1/updates/{update_package_id}/execute
@@ -74,7 +79,8 @@ impl openapi::apis::updates::Updates<()> for ServerImpl {
         cookies: &CookieJar,
         path_params: &models::UpdatesUpdatePackageIdExecutePutPathParams,
     ) -> Result<UpdatesUpdatePackageIdExecutePutResponse, ()> {
-        todo!();
+        info!("updates_update_package_id_execute_put({} {:?} {:?} {:?})", method, host, cookies, path_params);
+        Err(())
     }
 
     /// UpdatesUpdatePackageIdGet - GET /v1/updates/{update_package_id}
@@ -87,7 +93,8 @@ impl openapi::apis::updates::Updates<()> for ServerImpl {
         path_params: &models::UpdatesUpdatePackageIdGetPathParams,
         query_params: &models::UpdatesUpdatePackageIdGetQueryParams,
     ) -> Result<UpdatesUpdatePackageIdGetResponse, ()> {
-        todo!();
+        info!("updates_update_package_id_get({} {:?} {:?} {:?} {:?})", method, host, cookies, path_params, query_params);
+        Err(())
     }
 
     /// UpdatesUpdatePackageIdPreparePut - PUT /v1/updates/{update_package_id}/prepare
@@ -99,7 +106,8 @@ impl openapi::apis::updates::Updates<()> for ServerImpl {
         cookies: &CookieJar,
         path_params: &models::UpdatesUpdatePackageIdPreparePutPathParams,
     ) -> Result<UpdatesUpdatePackageIdPreparePutResponse, ()> {
-        todo!();
+        info!("updates_update_package_id_prepare_put({} {:?} {:?} {:?})", method, host, cookies, path_params);
+        Err(())
     }
 
     /// UpdatesUpdatePackageIdStatusGet - GET /v1/updates/{update_package_id}/status
@@ -111,6 +119,7 @@ impl openapi::apis::updates::Updates<()> for ServerImpl {
         cookies: &CookieJar,
         path_params: &models::UpdatesUpdatePackageIdStatusGetPathParams,
     ) -> Result<UpdatesUpdatePackageIdStatusGetResponse, ()> {
-        todo!();
+        info!("updates_update_package_id_status_get({} {:?} {:?} {:?})", method, host, cookies, path_params);
+        Err(())
     }
 }

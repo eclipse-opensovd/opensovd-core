@@ -24,57 +24,56 @@ impl openapi::apis::bulk_data::BulkData<()> for ServerImpl {
     /// EntityCollectionEntityIdBulkDataCategoryBulkDataIdDelete - DELETE /v1/{entity_collection}/{entity_id}/bulk-data/{category}/{bulk_data_id}
     async fn entity_collection_entity_id_bulk_data_category_bulk_data_id_delete(
         &self,
-
         method: &Method,
         host: &Host,
         cookies: &CookieJar,
         path_params: &models::EntityCollectionEntityIdBulkDataCategoryBulkDataIdDeletePathParams,
     ) -> Result<EntityCollectionEntityIdBulkDataCategoryBulkDataIdDeleteResponse, ()> {
-        todo!();
+        info!("entity_collection_entity_id_bulk_data_category_bulk_data_id_delete({} {:?} {:?} {:?})", method, host, cookies, path_params);
+        Err(())
     }
 
     /// EntityCollectionEntityIdBulkDataCategoryBulkDataIdGet - GET /v1/{entity_collection}/{entity_id}/bulk-data/{category}/{bulk_data_id}
     async fn entity_collection_entity_id_bulk_data_category_bulk_data_id_get(
         &self,
-
         method: &Method,
         host: &Host,
         cookies: &CookieJar,
         header_params: &models::EntityCollectionEntityIdBulkDataCategoryBulkDataIdGetHeaderParams,
         path_params: &models::EntityCollectionEntityIdBulkDataCategoryBulkDataIdGetPathParams,
     ) -> Result<EntityCollectionEntityIdBulkDataCategoryBulkDataIdGetResponse, ()> {
-        todo!();
+        info!("entity_collection_entity_id_bulk_data_category_bulk_data_id_get({} {:?} {:?} {:?} {:?})", method, host, cookies, header_params, path_params);
+        Err(())
     }
 
     /// EntityCollectionEntityIdBulkDataCategoryDelete - DELETE /v1/{entity_collection}/{entity_id}/bulk-data/{category}
     async fn entity_collection_entity_id_bulk_data_category_delete(
         &self,
-
         method: &Method,
         host: &Host,
         cookies: &CookieJar,
         path_params: &models::EntityCollectionEntityIdBulkDataCategoryDeletePathParams,
     ) -> Result<EntityCollectionEntityIdBulkDataCategoryDeleteResponse, ()> {
-        todo!();
+        info!("entity_collection_entity_id_bulk_data_category_delete({} {:?} {:?} {:?})", method, host, cookies, path_params);
+        Err(())
     }
 
     /// EntityCollectionEntityIdBulkDataCategoryGet - GET /v1/{entity_collection}/{entity_id}/bulk-data/{category}
     async fn entity_collection_entity_id_bulk_data_category_get(
         &self,
-
         method: &Method,
         host: &Host,
         cookies: &CookieJar,
         path_params: &models::EntityCollectionEntityIdBulkDataCategoryGetPathParams,
         query_params: &models::EntityCollectionEntityIdBulkDataCategoryGetQueryParams,
     ) -> Result<EntityCollectionEntityIdBulkDataCategoryGetResponse, ()> {
-        todo!();
+        info!("entity_collection_entity_id_bulk_data_get({}, {:?}, {:?}, {:?}, {:?})", method, host, cookies, path_params, query_params);
+        Err(())
     }
 
     /// EntityCollectionEntityIdBulkDataCategoryPost - POST /v1/{entity_collection}/{entity_id}/bulk-data/{category}
     async fn entity_collection_entity_id_bulk_data_category_post(
         &self,
-
         method: &Method,
         host: &Host,
         cookies: &CookieJar,
@@ -82,7 +81,21 @@ impl openapi::apis::bulk_data::BulkData<()> for ServerImpl {
         path_params: &models::EntityCollectionEntityIdBulkDataCategoryPostPathParams,
         body: &ByteArray,
     ) -> Result<EntityCollectionEntityIdBulkDataCategoryPostResponse, ()> {
-        todo!();
+        info!("entity_collection_entity_id_bulk_data_category_post({} {:?} {:?} {:?} {:?} {:?})",method, host, cookies, header_params, path_params, body);
+
+        let error = AnyPathDocsGetDefaultResponse {
+            error_code: "ServerConfigurationNotInitialized".to_string(),
+            message: "Server configuration not initialized.".to_string(),
+            vendor_code: None,
+            translation_id: None,
+            parameters: None,
+        };
+
+        return Ok(
+            EntityCollectionEntityIdBulkDataCategoryPostResponse::Status0_AnUnexpectedRequestOccurred(
+                error,
+            ),
+        );
     }
 
     /// EntityCollectionEntityIdBulkDataGet - GET /v1/{entity_collection}/{entity_id}/bulk-data

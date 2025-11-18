@@ -11,10 +11,13 @@
 * SPDX-License-Identifier: Apache-2.0
 */
 
-use log::info;
+use log::{info,error};
+use mdns_sd::{ServiceDaemon, ServiceEvent};
 use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io;
+use std::sync::{Arc, Mutex};
+use tokio::time::Duration;
 
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -161,6 +164,50 @@ impl ServerConfig {
             }
         }
         None
+    }
+
+        pub fn get_ip_and_port(
+        &self,
+        mdns: &Arc<Mutex<ServiceDaemon>>,
+        instance_name: &String,
+    ) -> Option<(String, u16)> {
+        // Check for mDNS messages
+        let service_type = "_sovd_server._udp.local.";
+        let mutex = mdns.lock().expect("Failed to lock mdns");
+        let receiver = mutex.browse(service_type).expect("Failed to browse mDNS");
+
+        let timeout = Duration::from_secs(2); // Timeout 2 seconds
+
+        // Infinite loop with timeout
+        let start_time = std::time::Instant::now();
+        while start_time.elapsed() < timeout {
+            match receiver.recv_timeout(timeout) {
+                Ok(event) => {
+                    if let ServiceEvent::ServiceResolved(info) = event {
+                        // Check if it is chassis-hpc
+                        if info.get_fullname().starts_with(instance_name) {
+                            // Extract IP-Address and Port
+                            let ip_address = info
+                                .get_addresses_v4()
+                                .iter()
+                                .next()
+                                .map(|ip| ip.to_string())
+                                .unwrap_or_else(|| "127.0.0.1".to_string());
+                            let port = info.get_port();
+                            return Some((ip_address, port));
+                        }
+                    }
+                }
+
+                Err(err) => {
+                    error!("Error receiving mDNS event: {:?}", err);
+                    break; // Break the loop on error or timeout
+                }
+            }
+        }
+
+        error!("mDNS browse timed out or no matching service found.");
+        None // No device found within timeout
     }
 
     // Function to read settings from file

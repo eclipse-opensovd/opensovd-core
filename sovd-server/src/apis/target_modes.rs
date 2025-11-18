@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use axum::http::Method;
 use axum_extra::extract::{CookieJar, Host};
+use log::info;
 use openapi::{
     apis::target_modes::{
         EntityCollectionEntityIdModesGetResponse, EntityCollectionEntityIdModesModeIdGetResponse,
@@ -24,7 +25,8 @@ impl openapi::apis::target_modes::TargetModes<()> for ServerImpl {
         path_params: &models::EntityCollectionEntityIdModesGetPathParams,
         query_params: &models::EntityCollectionEntityIdModesGetQueryParams,
     ) -> Result<EntityCollectionEntityIdModesGetResponse, ()> {
-        todo!();
+        info!("entity_collection_entity_id_modes_get({} {:?} {:?} {:?} {:?})", method, host, cookies, path_params, query_params);
+        Err(())
     }
 
     /// EntityCollectionEntityIdModesModeIdGet - GET /v1/{entity_collection}/{entity_id}/modes/{mode_id}
@@ -37,7 +39,8 @@ impl openapi::apis::target_modes::TargetModes<()> for ServerImpl {
         path_params: &models::EntityCollectionEntityIdModesModeIdGetPathParams,
         query_params: &models::EntityCollectionEntityIdModesModeIdGetQueryParams,
     ) -> Result<EntityCollectionEntityIdModesModeIdGetResponse, ()> {
-        todo!();
+        info!("entity_collection_entity_id_modes_mode_id_get({} {:?} {:?} {:?} {:?})", method, host, cookies, path_params, query_params);
+        Err(())
     }
 
     /// EntityCollectionEntityIdModesModeIdPut - PUT /v1/{entity_collection}/{entity_id}/modes/{mode_id}
@@ -50,6 +53,7 @@ impl openapi::apis::target_modes::TargetModes<()> for ServerImpl {
         path_params: &models::EntityCollectionEntityIdModesModeIdPutPathParams,
         body: &models::EntityCollectionEntityIdModesModeIdPutRequest,
     ) -> Result<EntityCollectionEntityIdModesModeIdPutResponse, ()> {
-        todo!();
+        info!("entity_collection_entity_id_modes_mode_id_put({} {:?} {:?} {:?} {:?})", method, host, cookies, path_params, body);
+        Err(())
     }
 }

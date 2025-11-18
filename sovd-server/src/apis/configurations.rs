@@ -11,6 +11,7 @@ use openapi::{
 };
 
 use crate::ServerImpl;
+use log::info;
 
 #[allow(unused_variables)]
 #[async_trait]
@@ -25,7 +26,8 @@ impl openapi::apis::configurations::Configurations<()> for ServerImpl {
         path_params: &models::EntityCollectionEntityIdConfigurationsConfigurationIdGetPathParams,
         query_params: &models::EntityCollectionEntityIdConfigurationsConfigurationIdGetQueryParams,
     ) -> Result<EntityCollectionEntityIdConfigurationsConfigurationIdGetResponse, ()> {
-        todo!();
+        info!("entity_collection_entity_id_configurations_configuration_id_get({} {:?} {:?} {:?} {:?})", method, host, cookies, path_params, query_params);
+        Err(())
     }
 
     /// EntityCollectionEntityIdConfigurationsConfigurationIdPut - PUT /v1/{entity_collection}/{entity_id}/configurations/{configuration_id}
@@ -38,7 +40,8 @@ impl openapi::apis::configurations::Configurations<()> for ServerImpl {
         path_params: &models::EntityCollectionEntityIdConfigurationsConfigurationIdPutPathParams,
         body: &models::EntityCollectionEntityIdConfigurationsConfigurationIdPutRequest,
     ) -> Result<EntityCollectionEntityIdConfigurationsConfigurationIdPutResponse, ()> {
-        todo!();
+        info!("entity_collection_entity_id_configurations_configuration_id_put({} {:?} {:?} {:?} {:?})", method, host, cookies, path_params, body);
+        Err(())
     }
 
     /// EntityCollectionEntityIdConfigurationsGet - GET /v1/{entity_collection}/{entity_id}/configurations
@@ -51,6 +54,7 @@ impl openapi::apis::configurations::Configurations<()> for ServerImpl {
         path_params: &models::EntityCollectionEntityIdConfigurationsGetPathParams,
         query_params: &models::EntityCollectionEntityIdConfigurationsGetQueryParams,
     ) -> Result<EntityCollectionEntityIdConfigurationsGetResponse, ()> {
-        todo!();
+        info!("entity_collection_entity_id_configurations_get({} {:?} {:?} {:?} {:?})", method, host, cookies, path_params, query_params);
+        Err(())
     }
 }

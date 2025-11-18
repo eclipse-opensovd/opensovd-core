@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use axum::http::Method;
 use axum_extra::extract::{CookieJar, Host};
+use log::info;
 use openapi::{
     apis::operations_control::{
         EntityCollectionEntityIdOperationsGetResponse,
@@ -29,7 +30,8 @@ impl openapi::apis::operations_control::OperationsControl<()> for ServerImpl {
         path_params: &models::EntityCollectionEntityIdOperationsGetPathParams,
         query_params: &models::EntityCollectionEntityIdOperationsGetQueryParams,
     ) -> Result<EntityCollectionEntityIdOperationsGetResponse, ()> {
-        todo!();
+        info!("entity_collection_entity_id_operations_get({} {:?} {:?} {:?} {:?})", method, host, cookies, path_params, query_params);
+        Err(())
     }
 
     /// EntityCollectionEntityIdOperationsOperationIdExecutionsExecutionIdDelete - DELETE /v1/{entity_collection}/{entity_id}/operations/{operation_id}/executions/{execution_id}
@@ -43,7 +45,8 @@ impl openapi::apis::operations_control::OperationsControl<()> for ServerImpl {
         body: &models::EntityCollectionEntityIdOperationsOperationIdExecutionsExecutionIdDeleteRequest,
     ) -> Result<EntityCollectionEntityIdOperationsOperationIdExecutionsExecutionIdDeleteResponse, ()>
     {
-        todo!();
+        info!("entity_collection_entity_id_operations_operation_id_executions_execution_id_delete({} {:?} {:?} {:?} {:?})", method, host, cookies, path_params, body);
+        Err(())
     }
 
     /// EntityCollectionEntityIdOperationsOperationIdExecutionsExecutionIdGet - GET /v1/{entity_collection}/{entity_id}/operations/{operation_id}/executions/{execution_id}
@@ -57,7 +60,8 @@ impl openapi::apis::operations_control::OperationsControl<()> for ServerImpl {
         query_params: &models::EntityCollectionEntityIdOperationsOperationIdExecutionsExecutionIdGetQueryParams,
     ) -> Result<EntityCollectionEntityIdOperationsOperationIdExecutionsExecutionIdGetResponse, ()>
     {
-        todo!();
+        info!("entity_collection_entity_id_operations_operation_id_executions_execution_id_get({} {:?} {:?} {:?} {:?})", method, host, cookies, path_params, query_params);
+        Err(())
     }
 
     /// EntityCollectionEntityIdOperationsOperationIdExecutionsExecutionIdPut - PUT /v1/{entity_collection}/{entity_id}/operations/{operation_id}/executions/{execution_id}
@@ -71,7 +75,8 @@ impl openapi::apis::operations_control::OperationsControl<()> for ServerImpl {
         body: &models::EntityCollectionEntityIdOperationsOperationIdExecutionsExecutionIdPutRequest,
     ) -> Result<EntityCollectionEntityIdOperationsOperationIdExecutionsExecutionIdPutResponse, ()>
     {
-        todo!();
+        info!("entity_collection_entity_id_operations_operation_id_executions_execution_id_put({} {:?} {:?} {:?} {:?})", method, host, cookies, path_params, body);
+        Err(())
     }
 
     /// EntityCollectionEntityIdOperationsOperationIdExecutionsGet - GET /v1/{entity_collection}/{entity_id}/operations/{operation_id}/executions
@@ -83,7 +88,8 @@ impl openapi::apis::operations_control::OperationsControl<()> for ServerImpl {
         cookies: &CookieJar,
         path_params: &models::EntityCollectionEntityIdOperationsOperationIdExecutionsGetPathParams,
     ) -> Result<EntityCollectionEntityIdOperationsOperationIdExecutionsGetResponse, ()> {
-        todo!();
+        info!("entity_collection_entity_id_operations_operation_id_executions_get({} {:?} {:?} {:?})", method, host, cookies, path_params);
+        Err(())
     }
 
     /// EntityCollectionEntityIdOperationsOperationIdExecutionsPost - POST /v1/{entity_collection}/{entity_id}/operations/{operation_id}/executions
@@ -96,7 +102,8 @@ impl openapi::apis::operations_control::OperationsControl<()> for ServerImpl {
         path_params: &models::EntityCollectionEntityIdOperationsOperationIdExecutionsPostPathParams,
         body: &models::EntityCollectionEntityIdOperationsOperationIdExecutionsPostRequest,
     ) -> Result<EntityCollectionEntityIdOperationsOperationIdExecutionsPostResponse, ()> {
-        todo!();
+        info!("entity_collection_entity_id_operations_operation_id_executions_post({} {:?} {:?} {:?} {:?})", method, host, cookies, path_params, body);
+        Err(())
     }
 
     /// EntityCollectionEntityIdOperationsOperationIdGet - GET /v1/{entity_collection}/{entity_id}/operations/{operation_id}
@@ -109,6 +116,7 @@ impl openapi::apis::operations_control::OperationsControl<()> for ServerImpl {
         path_params: &models::EntityCollectionEntityIdOperationsOperationIdGetPathParams,
         query_params: &models::EntityCollectionEntityIdOperationsOperationIdGetQueryParams,
     ) -> Result<EntityCollectionEntityIdOperationsOperationIdGetResponse, ()> {
-        todo!();
+        info!("entity_collection_entity_id_operations_operation_id_get({} {:?} {:?} {:?} {:?})", method, host, cookies, path_params, query_params);
+        Err(())
     }
 }

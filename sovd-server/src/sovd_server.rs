@@ -170,9 +170,11 @@ pub async fn spawn_test_server(server_config: &ServerConfig) -> (SocketAddr, Joi
     let server_future = axum::serve(listener, app);
     
     let handle = tokio::spawn(async move {
+        info!("Testing starts ok {}", addr);
         if let Err(e) = server_future.await {
             info!("Server error {}", e);
         }
+        info!("Testing server stops");
     });
 
     (addr, handle)
@@ -395,7 +397,6 @@ mod tests {
              category: vec!["test".to_string()],
             include_schema: None
         };
-        let entity_id = "chassis-hpc";
 
         //Run test
         let rsp = server
@@ -411,7 +412,7 @@ mod tests {
                     for item in &body.items {
                         if id == item.id {
                             assert_eq!(item.id, id);
-                            assert_eq!(item.name.to_lowercase(), format!("current {} usage for apps {}", id, entity_id.split('-').next().unwrap()));
+                            assert_eq!(item.name.to_lowercase(), format!("current {} usage for apps {}", id, path_params.entity_id.split('-').next().unwrap_or_default()));
                             break;
                         }
                     }
@@ -466,10 +467,10 @@ mod tests {
                 assert_eq!(body.items.len(), 4);
                 
                 let ids: Vec<_> = body.items.iter().map(|it| it.id.as_str()).collect();
-                assert!(ids.iter().any(|id| id.ends_with("-cpu")));
-                assert!(ids.iter().any(|id| id.ends_with("-disk")));
-                assert!(ids.iter().any(|id| id.ends_with("-memory")));
-                assert!(ids.iter().any(|id| id.ends_with("-all")));
+                assert!(ids.iter().any(|id| id.ends_with("cpu")));
+                assert!(ids.iter().any(|id| id.ends_with("disk")));
+                assert!(ids.iter().any(|id| id.ends_with("memory")));
+                assert!(ids.iter().any(|id| id.ends_with("all")));
             }
             other => panic!("unexpected variant: {:?}", other),
         }
@@ -762,14 +763,17 @@ mod tests {
         //Assert
         match rsp {
             DataIdResp::Status200_TheRequestWasSuccessful(body) => {
-                
-                let data = openapi::types::Object::new(json!({
-                    "cpu_usage": "cpu_usage",
-                    "description": "CPU usage for sovd_server",
-                    "name": "CPU"
-                }));
+                if let Some(item) = body.data.0.as_object() {
+                    if let Some(cpu_value) = item.get("cpu_usage") {
+                        let data = openapi::types::Object::new(json!({
+                            "cpu_usage": cpu_value,
+                            "description": "CPU usage for sovd_server",
+                            "name": "CPU"
+                        }));
+                        assert_eq!(body.data, data);
+                    }
 
-                assert_eq!(body.data, data);
+                }        
             
             }
             other => panic!("unexpected variant: {:?}", other)

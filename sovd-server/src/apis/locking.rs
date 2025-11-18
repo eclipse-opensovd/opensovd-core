@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use axum::http::Method;
 use axum_extra::extract::{CookieJar, Host};
+use log::info;
 use openapi::{
     apis::locking::{
         EntityCollectionEntityIdLocksGetResponse,
@@ -25,7 +26,8 @@ impl openapi::apis::locking::Locking<()> for ServerImpl {
         cookies: &CookieJar,
         path_params: &models::EntityCollectionEntityIdLocksGetPathParams,
     ) -> Result<EntityCollectionEntityIdLocksGetResponse, ()> {
-        todo!();
+        info!("entity_collection_entity_id_locks_get({} {:?} {:?} {:?})", method, host, cookies, path_params);
+        Err(())
     }
 
     /// EntityCollectionEntityIdLocksLockIdDelete - DELETE /v1/{entity_collection}/{entity_id}/locks/{lock_id}
@@ -37,7 +39,8 @@ impl openapi::apis::locking::Locking<()> for ServerImpl {
         cookies: &CookieJar,
         path_params: &models::EntityCollectionEntityIdLocksLockIdDeletePathParams,
     ) -> Result<EntityCollectionEntityIdLocksLockIdDeleteResponse, ()> {
-        todo!();
+        info!("entity_collection_entity_id_locks_lock_id_delete({} {:?} {:?} {:?})", method, host, cookies, path_params);
+        Err(())
     }
 
     /// EntityCollectionEntityIdLocksLockIdGet - GET /v1/{entity_collection}/{entity_id}/locks/{lock_id}
@@ -49,7 +52,8 @@ impl openapi::apis::locking::Locking<()> for ServerImpl {
         cookies: &CookieJar,
         path_params: &models::EntityCollectionEntityIdLocksLockIdGetPathParams,
     ) -> Result<EntityCollectionEntityIdLocksLockIdGetResponse, ()> {
-        todo!();
+        info!("entity_collection_entity_id_locks_lock_id_get({} {:?} {:?} {:?})", method, host, cookies, path_params);
+        Err(())
     }
 
     /// EntityCollectionEntityIdLocksLockIdPut - PUT /v1/{entity_collection}/{entity_id}/locks/{lock_id}
@@ -62,7 +66,8 @@ impl openapi::apis::locking::Locking<()> for ServerImpl {
         path_params: &models::EntityCollectionEntityIdLocksLockIdPutPathParams,
         body: &models::EntityCollectionEntityIdLocksPostRequest,
     ) -> Result<EntityCollectionEntityIdLocksLockIdPutResponse, ()> {
-        todo!();
+        info!("entity_collection_entity_id_locks_lock_id_put({} {:?} {:?} {:?} {:?})", method, host, cookies, path_params, body);
+        Err(())
     }
 
     /// EntityCollectionEntityIdLocksPost - POST /v1/{entity_collection}/{entity_id}/locks
@@ -75,6 +80,7 @@ impl openapi::apis::locking::Locking<()> for ServerImpl {
         path_params: &models::EntityCollectionEntityIdLocksPostPathParams,
         body: &models::EntityCollectionEntityIdLocksPostRequest,
     ) -> Result<EntityCollectionEntityIdLocksPostResponse, ()> {
-        todo!();
+        info!("entity_collection_entity_id_locks_post({} {:?} {:?} {:?} {:?})", method, host, cookies, path_params, body);
+        Err(())
     }
 }

@@ -12,7 +12,7 @@ use openapi::{
     models,
     types::ByteArray,
 };
-
+use log::info;
 use crate::ServerImpl;
 
 #[allow(unused_variables)]
@@ -28,7 +28,8 @@ impl openapi::apis::communication_logs::CommunicationLogs<()> for ServerImpl {
         path_params: &models::EntityCollectionEntityIdCommunicationLogsCommunicationLogIdDeletePathParams,
         query_params: &models::EntityCollectionEntityIdCommunicationLogsCommunicationLogIdDeleteQueryParams,
     ) -> Result<EntityCollectionEntityIdCommunicationLogsCommunicationLogIdDeleteResponse, ()> {
-        todo!();
+        info!("entity_collection_entity_id_communication_logs_communication_log_id_delete({} {:?} {:?} {:?} {:?})", method, host, cookies, path_params, query_params);
+        Err(())
     }
 
     /// EntityCollectionEntityIdCommunicationLogsCommunicationLogIdGet - GET /v1/{entity_collection}/{entity_id}/communication-logs/{communication_log_id}
@@ -40,7 +41,8 @@ impl openapi::apis::communication_logs::CommunicationLogs<()> for ServerImpl {
         cookies: &CookieJar,
         path_params: &models::EntityCollectionEntityIdCommunicationLogsCommunicationLogIdGetPathParams,
     ) -> Result<EntityCollectionEntityIdCommunicationLogsCommunicationLogIdGetResponse, ()> {
-        todo!();
+        info!("entity_collection_entity_id_communication_logs_communication_log_id_get({} {:?} {:?} {:?})", method, host, cookies, path_params);
+        Err(())
     }
 
     /// EntityCollectionEntityIdCommunicationLogsCommunicationLogIdPut - PUT /v1/{entity_collection}/{entity_id}/communication-logs/{communication_log_id}
@@ -53,7 +55,8 @@ impl openapi::apis::communication_logs::CommunicationLogs<()> for ServerImpl {
         path_params: &models::EntityCollectionEntityIdCommunicationLogsCommunicationLogIdPutPathParams,
         body: &models::EntityCollectionEntityIdCommunicationLogsCommunicationLogIdPutRequest,
     ) -> Result<EntityCollectionEntityIdCommunicationLogsCommunicationLogIdPutResponse, ()> {
-        todo!();
+        info!("entity_collection_entity_id_communication_logs_communication_log_id_put({} {:?} {:?} {:?} {:?})", method, host, cookies, path_params, body);
+        Err(())
     }
 
     /// EntityCollectionEntityIdCommunicationLogsGet - GET /v1/{entity_collection}/{entity_id}/communication-logs
@@ -65,7 +68,8 @@ impl openapi::apis::communication_logs::CommunicationLogs<()> for ServerImpl {
         cookies: &CookieJar,
         path_params: &models::EntityCollectionEntityIdCommunicationLogsGetPathParams,
     ) -> Result<EntityCollectionEntityIdCommunicationLogsGetResponse, ()> {
-        todo!();
+        info!("entity_collection_entity_id_communication_logs_get({} {:?} {:?} {:?}", method, host, cookies, path_params);
+        Err(())
     }
 
     /// EntityCollectionEntityIdCommunicationLogsPost - POST /v1/{entity_collection}/{entity_id}/communication-logs
@@ -79,6 +83,7 @@ impl openapi::apis::communication_logs::CommunicationLogs<()> for ServerImpl {
         query_params: &models::EntityCollectionEntityIdCommunicationLogsPostQueryParams,
         body: &ByteArray,
     ) -> Result<EntityCollectionEntityIdCommunicationLogsPostResponse, ()> {
-        todo!();
+        info!("entity_collection_entity_id_communication_logs_post({} {:?} {:?} {:?} {:?} {:?})", method, host, cookies, path_params, query_params, body);
+        Err(())
     }
 }
