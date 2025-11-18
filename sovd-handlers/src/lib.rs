@@ -11,6 +11,8 @@
 * SPDX-License-Identifier: Apache-2.0
 */
 
+use openapi::apis::data_retrieval::{EntityCollectionEntityIdDataDataIdGetResponse, EntityCollectionEntityIdDataGetResponse, EntityCollectionEntityIdDataGroupsGetResponse};
+use openapi::apis::discovery::EntityCollectionEntityIdGetResponse;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value as JsonValue, to_value};
 
@@ -38,11 +40,8 @@ use serde_json::json;
 
 use sysinfo::Disks;
 
-use openapi_client::EntityCollectionEntityIdDataDataIdGetResponse;
-use openapi_client::EntityCollectionEntityIdDataGetResponse;
-use openapi_client::EntityCollectionEntityIdDataGroupsGetResponse;
-use openapi_client::EntityCollectionEntityIdGetResponse;
-use openapi_client::models::*;
+
+use openapi::models::*;
 
 use lazy_static::lazy_static;
 use tokio::time::timeout;
@@ -126,8 +125,8 @@ pub fn find_and_create_read_value(
 
             return Some(EntityCollectionEntityIdDataDataIdGet200Response {
                 id: element.identifier.to_string(),
-                data: to_value(any_value).expect("Failed to create read value"),
-                errors: None,
+                data: openapi::types::Object::new(to_value(any_value).expect("Failed to create read value")),
+                r_errors: None,
                 schema: None,
             });
         }
@@ -161,8 +160,8 @@ pub fn filter_by_writable(
 
             let read_value = EntityCollectionEntityIdDataDataIdGet200Response {
                 id: element.identifier.to_string(),
-                data: to_value(any_value).expect("Failed to filter writables"),
-                errors: None,
+                data: openapi::types::Object::new(to_value(any_value).expect("Failed to filter writables")),
+                r_errors: None,
                 schema: None,
             };
 
@@ -197,8 +196,8 @@ pub fn find_by_identifier(
             .collect();
         let read_value = EntityCollectionEntityIdDataDataIdGet200Response {
             id: element.identifier.to_string(),
-            data: to_value(any_value).expect("Failed to find by identifier"),
-            errors: None,
+            data: openapi::types::Object::new(to_value(any_value).expect("Failed to find by identifier")),
+            r_errors: None,
             schema: None,
         };
 
@@ -229,8 +228,8 @@ pub fn find_by_name(
             .collect();
         let read_value = EntityCollectionEntityIdDataDataIdGet200Response {
             id: element.identifier.to_string(),
-            data: to_value(any_value).expect("Failed to find by name"),
-            errors: None,
+            data: openapi::types::Object::new(to_value(any_value).expect("Failed to find by name")),
+            r_errors: None,
             schema: None,
         };
 
@@ -275,7 +274,7 @@ pub fn create_entity_collection_response(
     let inline_response = EntityCollectionEntityIdDataGroupsGet200Response::new(items);
 
     // Create and return the EntityCollectionEntityIdDataGroupsGetResponse
-    Ok(EntityCollectionEntityIdDataGroupsGetResponse::TheRequestWasSuccessful(inline_response))
+    Ok(EntityCollectionEntityIdDataGroupsGetResponse::Status200_TheRequestWasSuccessful(inline_response))
 }
 
 pub fn group_by_writability(
@@ -314,7 +313,7 @@ pub fn group_by_writability(
 
     // Create and return the EntityCollectionEntityIdDataGroupsGetResponse
     Ok(
-        EntityCollectionEntityIdDataGroupsGetResponse::TheRequestWasSuccessful(
+        EntityCollectionEntityIdDataGroupsGetResponse::Status200_TheRequestWasSuccessful(
             EntityCollectionEntityIdDataGroupsGet200Response::new(items),
         ),
     )
@@ -351,7 +350,7 @@ pub fn prepare_data_response(
 
     let inline_response = EntityCollectionEntityIdDataGet200Response::new(items);
 
-    Ok(EntityCollectionEntityIdDataGetResponse::TheRequestWasSuccessful(inline_response))
+    Ok(EntityCollectionEntityIdDataGetResponse::Status200_TheRequestWasSuccessful(inline_response))
 }
 
 // Helper function to create a group based on isWritable
@@ -737,12 +736,12 @@ pub fn handle_app_resource(
 
                 let read_value = EntityCollectionEntityIdDataDataIdGet200Response {
                     id: id.to_string(),
-                    data: to_value(response_data).expect("Failed to serialize CPU usage"),
-                    errors: None,
+                    data: openapi::types::Object::new(to_value(response_data).expect("Failed to serialize CPU usage")),
+                    r_errors: None,
                     schema: None,
                 };
 
-                EntityCollectionEntityIdDataDataIdGetResponse::TheRequestWasSuccessful(read_value)
+                EntityCollectionEntityIdDataDataIdGetResponse::Status200_TheRequestWasSuccessful(read_value)
             } else {
                 let error = AnyPathDocsGetDefaultResponse {
                     error_code: "UnknownResource".to_string(),
@@ -751,7 +750,7 @@ pub fn handle_app_resource(
                     translation_id: None,
                     parameters: None,
                 };
-                EntityCollectionEntityIdDataDataIdGetResponse::AnUnexpectedRequestOccurred(error)
+                EntityCollectionEntityIdDataDataIdGetResponse::Status0_AnUnexpectedRequestOccurred(error)
             }
         }
         "memory" => {
@@ -775,12 +774,12 @@ pub fn handle_app_resource(
 
                 let read_value = EntityCollectionEntityIdDataDataIdGet200Response {
                     id: id.to_string(),
-                    data: to_value(response_data).expect("Failed to serialize memory usage"),
-                    errors: None,
+                    data: openapi::types::Object::new(to_value(response_data).expect("Failed to serialize memory usage")),
+                    r_errors: None,
                     schema: None,
                 };
 
-                EntityCollectionEntityIdDataDataIdGetResponse::TheRequestWasSuccessful(read_value)
+                EntityCollectionEntityIdDataDataIdGetResponse::Status200_TheRequestWasSuccessful(read_value)
             } else {
                 let error = AnyPathDocsGetDefaultResponse {
                     error_code: "UnknownResource".to_string(),
@@ -789,7 +788,7 @@ pub fn handle_app_resource(
                     translation_id: None,
                     parameters: None,
                 };
-                EntityCollectionEntityIdDataDataIdGetResponse::AnUnexpectedRequestOccurred(error)
+                EntityCollectionEntityIdDataDataIdGetResponse::Status0_AnUnexpectedRequestOccurred(error)
             }
         }
         "disk" => {
@@ -812,11 +811,11 @@ pub fn handle_app_resource(
 
                 let read_value = EntityCollectionEntityIdDataDataIdGet200Response {
                     id: id.to_string(),
-                    data: to_value(response_data).expect("Failed to serialize disk usage"),
-                    errors: None,
+                    data: openapi::types::Object::new(to_value(response_data).expect("Failed to serialize disk usage")),
+                    r_errors: None,
                     schema: None,
                 };
-                EntityCollectionEntityIdDataDataIdGetResponse::TheRequestWasSuccessful(read_value)
+                EntityCollectionEntityIdDataDataIdGetResponse::Status200_TheRequestWasSuccessful(read_value)
             } else {
                 let error = AnyPathDocsGetDefaultResponse {
                     error_code: "UnknownResource".to_string(),
@@ -825,7 +824,7 @@ pub fn handle_app_resource(
                     translation_id: None,
                     parameters: None,
                 };
-                EntityCollectionEntityIdDataDataIdGetResponse::AnUnexpectedRequestOccurred(error)
+                EntityCollectionEntityIdDataDataIdGetResponse::Status0_AnUnexpectedRequestOccurred(error)
             }
         }
         "all" => {
@@ -896,11 +895,11 @@ pub fn handle_app_resource(
 
             let read_value = EntityCollectionEntityIdDataDataIdGet200Response {
                 id: id.to_string(),
-                data: to_value(response_data).expect("Failed to serialize disk usage"),
-                errors: None,
+                data: openapi::types::Object::new(to_value(response_data).expect("Failed to serialize disk usage")),
+                r_errors: None,
                 schema: None,
             };
-            EntityCollectionEntityIdDataDataIdGetResponse::TheRequestWasSuccessful(read_value)
+            EntityCollectionEntityIdDataDataIdGetResponse::Status200_TheRequestWasSuccessful(read_value)
         }
         _ => {
             info!("Unknown resource type: {}", resource);
@@ -911,7 +910,7 @@ pub fn handle_app_resource(
                 translation_id: None,
                 parameters: None,
             };
-            EntityCollectionEntityIdDataDataIdGetResponse::AnUnexpectedRequestOccurred(error)
+            EntityCollectionEntityIdDataDataIdGetResponse::Status0_AnUnexpectedRequestOccurred(error)
         }
     }
 }
@@ -1004,7 +1003,7 @@ pub fn handle_system_resource(
                 translation_id: None,
                 parameters: None,
             };
-            EntityCollectionEntityIdDataDataIdGetResponse::AnUnexpectedRequestOccurred(error)
+            EntityCollectionEntityIdDataDataIdGetResponse::Status0_AnUnexpectedRequestOccurred(error)
         }
     }
 }
@@ -1028,12 +1027,12 @@ pub fn handle_cpu_resource(id: &str) -> EntityCollectionEntityIdDataDataIdGetRes
 
         let read_value = EntityCollectionEntityIdDataDataIdGet200Response {
             id: id.to_string(),
-            data: to_value(response_data).expect("Failed to serialize handle cpu usage"),
-            errors: None,
+            data: openapi::types::Object::new(to_value(response_data).expect("Failed to serialize handle cpu usage")),
+            r_errors: None,
             schema: None,
         };
 
-        EntityCollectionEntityIdDataDataIdGetResponse::TheRequestWasSuccessful(read_value)
+        EntityCollectionEntityIdDataDataIdGetResponse::Status200_TheRequestWasSuccessful(read_value)
     } else {
         let error = AnyPathDocsGetDefaultResponse {
             error_code: "UnknownResource".to_string(),
@@ -1042,7 +1041,7 @@ pub fn handle_cpu_resource(id: &str) -> EntityCollectionEntityIdDataDataIdGetRes
             translation_id: None,
             parameters: None,
         };
-        EntityCollectionEntityIdDataDataIdGetResponse::AnUnexpectedRequestOccurred(error)
+        EntityCollectionEntityIdDataDataIdGetResponse::Status0_AnUnexpectedRequestOccurred(error)
     }
 }
 fn handle_memory_resource(id: &str) -> EntityCollectionEntityIdDataDataIdGetResponse {
@@ -1056,12 +1055,12 @@ fn handle_memory_resource(id: &str) -> EntityCollectionEntityIdDataDataIdGetResp
 
         let read_value = EntityCollectionEntityIdDataDataIdGet200Response {
             id: id.to_string(),
-            data: to_value(response_data).expect("Failed to serialize handle memory usage"),
-            errors: None,
+            data: openapi::types::Object::new(to_value(response_data).expect("Failed to serialize handle memory usage")),
+            r_errors: None,
             schema: None,
         };
 
-        EntityCollectionEntityIdDataDataIdGetResponse::TheRequestWasSuccessful(read_value)
+        EntityCollectionEntityIdDataDataIdGetResponse::Status200_TheRequestWasSuccessful(read_value)
     } else {
         let error = AnyPathDocsGetDefaultResponse {
             error_code: "UnknownResource".to_string(),
@@ -1070,7 +1069,7 @@ fn handle_memory_resource(id: &str) -> EntityCollectionEntityIdDataDataIdGetResp
             translation_id: None,
             parameters: None,
         };
-        EntityCollectionEntityIdDataDataIdGetResponse::AnUnexpectedRequestOccurred(error)
+        EntityCollectionEntityIdDataDataIdGetResponse::Status0_AnUnexpectedRequestOccurred(error)
     }
 }
 
@@ -1094,11 +1093,11 @@ pub fn handle_disk_resource(id: &str) -> EntityCollectionEntityIdDataDataIdGetRe
 
     let read_value = EntityCollectionEntityIdDataDataIdGet200Response {
         id: id.to_string(),
-        data: to_value(response_data).expect("Error"),
-        errors: None,
+        data: openapi::types::Object::new(to_value(response_data).expect("Error")),
+        r_errors: None,
         schema: None,
     };
-    EntityCollectionEntityIdDataDataIdGetResponse::TheRequestWasSuccessful(read_value)
+    EntityCollectionEntityIdDataDataIdGetResponse::Status200_TheRequestWasSuccessful(read_value)
 }
 
 fn handle_all_system_resources(
@@ -1184,12 +1183,12 @@ fn handle_all_system_resources(
 
     let read_value = EntityCollectionEntityIdDataDataIdGet200Response {
         id: id.to_string(),
-        data: to_value(response_data).expect("Failed to handle all system resource"),
-        errors: None,
+        data: openapi::types::Object::new(to_value(response_data).expect("Failed to handle all system resource")),
+        r_errors: None,
         schema: None,
     };
 
-    EntityCollectionEntityIdDataDataIdGetResponse::TheRequestWasSuccessful(read_value)
+    EntityCollectionEntityIdDataDataIdGetResponse::Status200_TheRequestWasSuccessful(read_value)
 }
 
 pub async fn gateway_request(
@@ -1389,7 +1388,7 @@ pub fn extract_response_data_from_json_to_response(
             // Add more fields here
             {
                 // Return of the created EntityCollectionEntityIdGetResponse
-                EntityCollectionEntityIdGetResponse::TheResponseBodyContainsAPropertyForEachSupportedResourceAndRelatedCollection(response)
+                EntityCollectionEntityIdGetResponse::Status200_TheResponseBodyContainsAPropertyForEachSupportedResourceAndRelatedCollection(response)
             } else {
                 // Return None if no values are present in the response
                 let error = AnyPathDocsGetDefaultResponse {
@@ -1399,7 +1398,7 @@ pub fn extract_response_data_from_json_to_response(
                     translation_id: None,
                     parameters: None,
                 };
-                EntityCollectionEntityIdGetResponse::AnUnexpectedRequestOccurred(error)
+                EntityCollectionEntityIdGetResponse::Status0_AnUnexpectedRequestOccurred(error)
             }
         } else {
             // Return None if the required fields are missing
@@ -1410,7 +1409,7 @@ pub fn extract_response_data_from_json_to_response(
                 translation_id: None,
                 parameters: None,
             };
-            EntityCollectionEntityIdGetResponse::AnUnexpectedRequestOccurred(error)
+            EntityCollectionEntityIdGetResponse::Status0_AnUnexpectedRequestOccurred(error)
         }
     } else {
         // Return None if it is not an object
@@ -1421,7 +1420,7 @@ pub fn extract_response_data_from_json_to_response(
             translation_id: None,
             parameters: None,
         };
-        EntityCollectionEntityIdGetResponse::AnUnexpectedRequestOccurred(error)
+        EntityCollectionEntityIdGetResponse::Status0_AnUnexpectedRequestOccurred(error)
     }
 }
 

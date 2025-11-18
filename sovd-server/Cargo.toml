@@ -21,7 +21,7 @@ hyper = { workspace = true }
 log = { workspace = true }
 mdns-sd = "0.15.1"
 once_cell = "1.21.3"
-openapi_client = { workspace = true }
+openapi = { workspace = true }
 openssl = { workspace = true }
 regex = "1.12.1"
 serde = { version = "1.0.228", features = ["derive"] }
@@ -30,6 +30,10 @@ sovd-handlers = { workspace = true }
 swagger = "6.5.3"
 tokio = { workspace = true }
 tokio-openssl = "0.6.5"
+axum = "0.8.6"
+axum-extra = "0.10.3"
+tower-http = { version = "0.6.6", features = ["fs", "cors"] }
+http = "1.3.1"
 
 [dev-dependencies]
 reqwest = "0.12.24"

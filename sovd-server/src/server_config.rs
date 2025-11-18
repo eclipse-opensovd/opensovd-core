@@ -11,49 +11,11 @@
 * SPDX-License-Identifier: Apache-2.0
 */
 
-use log::{error, info};
-use mdns_sd::{Error, Receiver, ServiceDaemon, ServiceEvent, ServiceInfo};
+use log::info;
 use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io;
-use std::time::Duration;
 
-use std::sync::{Arc, Mutex};
-pub struct ServiceDaemonWrapper {
-    mdns: Arc<Mutex<ServiceDaemon>>,
-}
-
-#[allow(dead_code)]
-impl ServiceDaemonWrapper {
-    pub fn new(mdns: ServiceDaemon) -> Self {
-        Self {
-            mdns: Arc::new(Mutex::new(mdns)),
-        }
-    }
-
-    pub fn browse(&self, service_type: &str) -> Result<Receiver<ServiceEvent>, Error> {
-        let mdns = self.mdns.lock().expect("Failed to lock mdns");
-        mdns.browse(service_type)
-    }
-
-    pub fn shutdown(&self) {
-        let mdns = self.mdns.lock().expect("Failed to lock mdns");
-
-        if let Err(e) = mdns.shutdown() {
-            error!("mDNS shutdown failed: {}", e);
-        }
-    }
-
-    pub fn register(&self, service_info: ServiceInfo) -> Result<(), Box<dyn std::error::Error>> {
-        // Entpacken des Arc und Sperren des Mutex
-        let mdns = self.mdns.lock().expect("Failed to lock ServiceDaemon");
-
-        // Aufruf der register-Methode auf der ServiceDaemon-Instanz
-        mdns.register(service_info)?;
-
-        Ok(())
-    }
-}
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ConfigEntry {
@@ -218,49 +180,6 @@ impl ServerConfig {
             io::ErrorKind::InvalidData,
             "Missing config_entries key",
         ))
-    }
-
-    pub fn get_ip_and_port(
-        &self,
-        mdns: &ServiceDaemonWrapper,
-        instance_name: &String,
-    ) -> Option<(String, u16)> {
-        // Check for mDNS messages
-        let service_type = "_sovd_server._udp.local.";
-        let receiver = mdns.browse(service_type).expect("Failed to browse mDNS");
-
-        let timeout = Duration::from_secs(2); // Timeout 2 seconds
-
-        // Infinite loop with timeout
-        let start_time = std::time::Instant::now();
-        while start_time.elapsed() < timeout {
-            match receiver.recv_timeout(timeout) {
-                Ok(event) => {
-                    if let ServiceEvent::ServiceResolved(info) = event {
-                        // Check if it is chassis-hpc
-                        if info.get_fullname().starts_with(instance_name) {
-                            // Extract IP-Address and Port
-                            let ip_address = info
-                                .get_addresses_v4()
-                                .iter()
-                                .next()
-                                .map(|ip| ip.to_string())
-                                .unwrap_or_else(|| "127.0.0.1".to_string());
-                            let port = info.get_port();
-                            return Some((ip_address, port));
-                        }
-                    }
-                }
-
-                Err(err) => {
-                    error!("Error receiving mDNS event: {:?}", err);
-                    break; // Break the loop on error or timeout
-                }
-            }
-        }
-
-        error!("mDNS browse timed out or no matching service found.");
-        None // No device found within timeout
     }
 
     pub fn create_server_settings(

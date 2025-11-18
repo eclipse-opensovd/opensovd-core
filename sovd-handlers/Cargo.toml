@@ -12,10 +12,10 @@ homepage.workspace = true
 license.workspace = true
 
 [dependencies]
-hyper = { workspace = true }
+hyper = { workspace = true, features = ["full"] }
 lazy_static = "1.5.0"
 log = { workspace = true }
-openapi_client = { workspace = true }
+openapi = { workspace = true }
 openssl = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

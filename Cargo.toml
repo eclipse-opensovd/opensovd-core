@@ -17,7 +17,7 @@ members = [
 [workspace.dependencies]
 hyper = "0.14"
 log = "0.4.28"
-openapi_client = { path = "target/generated/openapi_client"}
+openapi = { path = "target/generated/openapi"}
 openssl = { version = "0.10", features = ["vendored"] } 
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"

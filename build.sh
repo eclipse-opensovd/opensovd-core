@@ -5,11 +5,11 @@ CMD="${1:-}"
 
 # --- GLOBAL CONFIGURATION ---
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-OUT_DIR="${ROOT_DIR}/target/generated/openapi_client"
+OUT_DIR="${ROOT_DIR}/target/generated/openapi"
 SPEC_FILE="${ROOT_DIR}/sovd-interfaces/sovd-api.yaml"
 GENERATOR_DIR="${ROOT_DIR}/target"
 GENERATOR_JAR="${GENERATOR_DIR}/openapi-generator-cli.jar"
-GENERATOR_VERSION="7.10.0"
+GENERATOR_VERSION="7.17.0"
 GENERATOR_URL="https://repo1.maven.org/maven2/org/openapitools/openapi-generator-cli/${GENERATOR_VERSION}/openapi-generator-cli-${GENERATOR_VERSION}.jar"
 
 # --- HELPER FUNCTIONS ---
@@ -54,7 +54,7 @@ function ensure_openapi_generator() {
     fi
 }
 
-function generate_code() {
+function codegen() {
     echo "==> Starting SOVD code generation"
     echo "Project root: ${ROOT_DIR}"
 
@@ -68,11 +68,31 @@ function generate_code() {
     # Ensure output directory exists
     mkdir -p "${OUT_DIR}"
 
-    echo "==> Generating Rust server from ${SPEC_FILE} into ${OUT_DIR}"
+    echo "==> Generating Rust axum server from ${SPEC_FILE} into ${OUT_DIR}"
     java -jar "${GENERATOR_JAR}" generate \
         -i "${SPEC_FILE}" \
-        -g rust-server \
-        -o "${OUT_DIR}"
+        -g rust-axum \
+        -o "${OUT_DIR}" \
+        --skip-validate-spec
+
+    # Patch generated code
+    # It seems, that openapi generator isn't generating constructor and validator 
+    # implementations for self defined type 'Object'
+    echo >> "${OUT_DIR}/src/types.rs"
+    echo impl validator::Validate for ByteArray { >> "${OUT_DIR}/src/types.rs"
+    echo     fn validate\(\&self\) -\> std::result::Result\<\(\), validator::ValidationErrors\> { >> "${OUT_DIR}/src/types.rs"
+    echo         Ok\(\(\)\) >> "${OUT_DIR}/src/types.rs"
+    echo     } >> "${OUT_DIR}/src/types.rs"
+    echo } >> "${OUT_DIR}/src/types.rs"
+    echo >> "${OUT_DIR}/src/types.rs"
+    echo impl Object { >> "${OUT_DIR}/src/types.rs"
+    echo    pub fn new\(value: serde_json::Value\) -\> Self { >> "${OUT_DIR}/src/types.rs"
+    echo        Self\(value\) >> "${OUT_DIR}/src/types.rs"
+    echo    } >> "${OUT_DIR}/src/types.rs"
+    echo } >> "${OUT_DIR}/src/types.rs"
+    # Fix http return code in generated server code in some error cases (it 
+    # causes a runtime error elsewise)
+    sed -i 's/response.status(0)/response.status(200)/g' "${OUT_DIR}/src/server/mod.rs"
 
     echo "Generated Rust code at ${OUT_DIR}"
 }
@@ -96,7 +116,7 @@ function clean_project() {
 function start() {
     check_required_tools
     echo "==> Starting SOVD build process..."
-    generate_code
+    codegen
     build_project
 }
 
@@ -118,6 +138,8 @@ CMD="${1:-start}"
 case "$CMD" in
     start)
         start
+        ;;
+    codegen)
         ;;
     clean)
         clean_project

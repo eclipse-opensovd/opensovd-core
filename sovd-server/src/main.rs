@@ -17,12 +17,9 @@ use flexi_logger::{FileSpec, Logger};
 use log::{error, info};
 use std::{env, fs, path::PathBuf};
 
-mod server_config;
-mod sovd_server;
-
-use server_config::ServerConfig as MainServerConfig;
+use sovd_server::server_config::ServerConfig as MainServerConfig;
 use sovd_handlers::resolve_hostname;
-use sovd_server::create;
+use sovd_server::sovd_server::create;
 
 //This logger use simple log info to output data into folder
 
