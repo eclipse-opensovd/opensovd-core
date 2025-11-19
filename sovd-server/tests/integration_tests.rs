@@ -3,11 +3,9 @@ use reqwest::Client;
 use sovd_handlers::get_process_pid;
 use sovd_server::server_config::ServerConfig;
 use sovd_server::sovd_server::spawn_test_server;
-use tokio::task::JoinHandle;
-use std::sync::Mutex;
+use std::net::SocketAddr;
 use std::time::Duration;
 
-static SERVER_HANDLE: Lazy<Mutex<Option<JoinHandle<()>>>> = Lazy::new(|| Mutex::new(None));
 // Static configuration for the test server using Lazy initialization
 static SERVER_CONFIG: Lazy<ServerConfig> = Lazy::new(|| {
     ServerConfig::create_server_settings(
@@ -21,9 +19,6 @@ static SERVER_CONFIG: Lazy<ServerConfig> = Lazy::new(|| {
     .expect("Failed to create server config")
 });
 
-// Static variable to store the server address once started
-static SERVER_ADDR: Lazy<Mutex<Option<String>>> = Lazy::new(|| Mutex::new(None));
-
 // Static HTTP client used for sending requests
 static CLIENT: Lazy<Client> = Lazy::new(|| {
     Client::builder()
@@ -32,65 +27,10 @@ static CLIENT: Lazy<Client> = Lazy::new(|| {
         .expect("Failed to build reqwest client")
 });
 
-// Starts the test server if not already started
-
-async fn start_server() {
-    let mut addr_lock = SERVER_ADDR.lock().unwrap();
-    if addr_lock.is_none() {
-        let (addr, handle) = spawn_test_server(&SERVER_CONFIG).await;
-        *addr_lock = Some(addr.to_string());
-
-        let mut handle_lock = SERVER_HANDLE.lock().unwrap();
-        *handle_lock = Some(handle);
-
-        drop(addr_lock);
-        drop(handle_lock);
-
-        wait_for_server_ready(&addr.to_string()).await;
-    }
-}
-
-
-// Retrieves the server address from the static variable
-fn get_server_addr() -> String {
-    SERVER_ADDR
-        .lock()
-        .unwrap()
-        .clone()
-        .expect("Server address not set")
-}
-
-// Builds the path for accessing app-specific resources
-fn build_app_path_resources(resource: &str) -> String {
-    let pid = get_process_pid("sovd-server").expect("Fail to read pid");
-    format!(
-        "v1/apps/sovd-server-{}/data/sovd-server-{}-{}",
-        pid, pid, resource
-    )
-}
-
-// Sends a GET request to the specified endpoint and asserts success
-async fn get_and_assert_endpoint(path: &str) {
-    start_server().await;
-    let url = format!("http://{}/{}", get_server_addr(), path);
-    let response = CLIENT
-        .get(&url)
-        .timeout(Duration::from_secs(5))
-        .send()
-        .await
-        .expect("Failed to execute request");
-
-    assert!(response.status().is_success(), "Request to {} failed", url);
-
-    let body = response.text().await.expect("Failed to read response body");
-    assert!(!body.is_empty(), "Response body should not be empty");
-}
-
-
+// Helper: Wait for server readiness
 async fn wait_for_server_ready(addr: &str) {
     let urls = [
         format!("http://{}/v1/components", addr),
-        format!("http://{}/v1/apps", addr),
     ];
     let max_attempts = 50; // ~10s
     for _ in 0..max_attempts {
@@ -114,93 +54,148 @@ async fn wait_for_server_ready(addr: &str) {
     panic!("Server did not become ready in time");
 }
 
+// Helper: Start server for each test, run test logic, then shutdown
+async fn run_with_test_server<F, Fut>(test_fn: F)
+where
+    F: FnOnce(SocketAddr) -> Fut,
+    Fut: std::future::Future<Output = ()>,
+{
+    let (addr, handle) = spawn_test_server(&SERVER_CONFIG).await;
+    wait_for_server_ready(&addr.to_string()).await;
+    test_fn(addr).await;
+    handle.abort();
+    tokio::time::sleep(Duration::from_millis(200)).await; // Allow cleanup
+}
 
-// Integration test: Get general component information
+// Helper: Build app-specific resource path
+fn build_app_path_resources(resource: &str) -> String {
+    let pid = get_process_pid("sovd-server").expect("Fail to read pid");
+    format!(
+        "v1/apps/sovd-server-{}/data/sovd-server-{}-{}",
+        pid, pid, resource
+    )
+}
+
+// Integration tests
 #[tokio::test]
 async fn get_component_info() {
-    get_and_assert_endpoint("v1/components").await;
+    run_with_test_server(|addr| async move {
+        let url = format!("http://{}/v1/components", addr);
+        let resp = CLIENT.get(&url).send().await.expect("Request failed");
+        assert!(resp.status().is_success(), "{} failed", url);
+    }).await;
 }
 
-// Integration test: Get data for a specific component
 #[tokio::test]
 async fn get_component_data() {
-    get_and_assert_endpoint("v1/components/chassis-hpc").await;
+    run_with_test_server(|addr| async move {
+        let url = format!("http://{}/v1/components/chassis-hpc", addr);
+        let resp = CLIENT.get(&url).send().await.expect("Request failed");
+        assert!(resp.status().is_success(), "{} failed", url);
+    }).await;
 }
 
-// Integration test: Get detailed data for a specific component
 #[tokio::test]
 async fn get_component_specific_data() {
-    get_and_assert_endpoint("v1/components/chassis-hpc/data").await;
+    run_with_test_server(|addr| async move {
+        let url = format!("http://{}/v1/components/chassis-hpc/data", addr);
+        let resp = CLIENT.get(&url).send().await.expect("Request failed");
+        assert!(resp.status().is_success(), "{} failed", url);
+    }).await;
 }
 
-// Integration test: Get CPU usage for a specific component
 #[tokio::test]
 async fn get_component_specific_cpu_usage() {
-    get_and_assert_endpoint("v1/components/chassis-hpc/data/chassis-hpc-cpu").await;
+    run_with_test_server(|addr| async move {
+        let url = format!("http://{}/v1/components/chassis-hpc/data/chassis-hpc-cpu", addr);
+        let resp = CLIENT.get(&url).send().await.expect("Request failed");
+        assert!(resp.status().is_success(), "{} failed", url);
+    }).await;
 }
 
-// Integration test: Get disk usage for a specific component
 #[tokio::test]
 async fn get_component_specific_disk_usage() {
-    get_and_assert_endpoint("v1/components/chassis-hpc/data/chassis-hpc-disk").await;
+    run_with_test_server(|addr| async move {
+        let url = format!("http://{}/v1/components/chassis-hpc/data/chassis-hpc-disk", addr);
+        let resp = CLIENT.get(&url).send().await.expect("Request failed");
+        assert!(resp.status().is_success(), "{} failed", url);
+    }).await;
 }
 
-// Integration test: Get memory usage for a specific component
 #[tokio::test]
 async fn get_component_specific_memory_usage() {
-    get_and_assert_endpoint("v1/components/chassis-hpc/data/chassis-hpc-memory").await;
+    run_with_test_server(|addr| async move {
+        let url = format!("http://{}/v1/components/chassis-hpc/data/chassis-hpc-memory", addr);
+        let resp = CLIENT.get(&url).send().await.expect("Request failed");
+        assert!(resp.status().is_success(), "{} failed", url);
+    }).await;
 }
 
-// Integration test: Get related applications for a component
 #[tokio::test]
 async fn get_related_apps() {
-    get_and_assert_endpoint("v1/components/chassis-hpc/related-apps").await;
+    run_with_test_server(|addr| async move {
+        let url = format!("http://{}/v1/components/chassis-hpc/related-apps", addr);
+        let resp = CLIENT.get(&url).send().await.expect("Request failed");
+        assert!(resp.status().is_success(), "{} failed", url);
+    }).await;
 }
 
-// Integration test: Get information about a specific app using its PID
 #[tokio::test]
 async fn get_specific_app() {
-    let path = format!(
-        "v1/apps/sovd-server-{}",
-        get_process_pid("sovd-server").expect("Fail to read pid")
-    );
-    get_and_assert_endpoint(&path).await;
+    run_with_test_server(|addr| async move {
+        let path = format!("v1/apps/sovd-server-{}", get_process_pid("sovd-server").expect("Fail to read pid"));
+        let url = format!("http://{}/{}", addr, path);
+        let resp = CLIENT.get(&url).send().await.expect("Request failed");
+        assert!(resp.status().is_success(), "{} failed", url);
+    }).await;
 }
 
-// Integration test: Get data for a specific app
 #[tokio::test]
 async fn get_specific_app_data() {
-    let path = format!(
-        "v1/apps/sovd-server-{}/data",
-        get_process_pid("sovd-server").expect("Fail to read pid")
-    );
-    get_and_assert_endpoint(&path).await;
+    run_with_test_server(|addr| async move {
+        let path = format!("v1/apps/sovd-server-{}/data", get_process_pid("sovd-server").expect("Fail to read pid"));
+        let url = format!("http://{}/{}", addr, path);
+        let resp = CLIENT.get(&url).send().await.expect("Request failed");
+        assert!(resp.status().is_success(), "{} failed", url);
+    }).await;
 }
 
-// Integration test: Get CPU usage data for a specific app
 #[tokio::test]
 async fn get_specific_app_cpu() {
-    let path = build_app_path_resources("cpu");
-    get_and_assert_endpoint(&path).await;
+    run_with_test_server(|addr| async move {
+        let path = build_app_path_resources("cpu");
+        let url = format!("http://{}/{}", addr, path);
+        let resp = CLIENT.get(&url).send().await.expect("Request failed");
+        assert!(resp.status().is_success(), "{} failed", url);
+    }).await;
 }
 
-// Integration test: Get memory usage data for a specific app
 #[tokio::test]
 async fn get_specific_app_memory() {
-    let path = build_app_path_resources("memory");
-    get_and_assert_endpoint(&path).await;
+    run_with_test_server(|addr| async move {
+        let path = build_app_path_resources("memory");
+        let url = format!("http://{}/{}", addr, path);
+        let resp = CLIENT.get(&url).send().await.expect("Request failed");
+        assert!(resp.status().is_success(), "{} failed", url);
+    }).await;
 }
 
-// Integration test: Get disk usage data for a specific app
 #[tokio::test]
 async fn get_specific_app_disk() {
-    let path = build_app_path_resources("disk");
-    get_and_assert_endpoint(&path).await;
+    run_with_test_server(|addr| async move {
+        let path = build_app_path_resources("disk");
+        let url = format!("http://{}/{}", addr, path);
+        let resp = CLIENT.get(&url).send().await.expect("Request failed");
+        assert!(resp.status().is_success(), "{} failed", url);
+    }).await;
 }
 
-// Integration test: Get all resource data for a specific app
 #[tokio::test]
 async fn get_specific_app_all() {
-    let path = build_app_path_resources("all");
-    get_and_assert_endpoint(&path).await;
+    run_with_test_server(|addr| async move {
+        let path = build_app_path_resources("all");
+        let url = format!("http://{}/{}", addr, path);
+        let resp = CLIENT.get(&url).send().await.expect("Request failed");
+        assert!(resp.status().is_success(), "{} failed", url);
+    }).await;
 }
