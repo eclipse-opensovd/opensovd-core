@@ -1,0 +1,35 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 Contributors to the Eclipse Foundation
+# SPDX-License-Identifier: Apache-2.0
+
+[package]
+name = "opensovd-mcp"
+version.workspace = true
+description = "OpenSOVD MCP Server"
+edition.workspace = true
+license.workspace = true
+readme = "README.md"
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+clap = { workspace = true, features = ["derive", "help", "std", "usage"] }
+libcli = { workspace = true }
+opensovd-client = { workspace = true }
+opensovd-models = { workspace = true }
+tokio = { workspace = true, features = ["rt", "macros", "io-std", "io-util"] }
+tracing = { workspace = true }
+rmcp = { workspace = true, features = ["server", "transport-io", "macros"] }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+mock-http-connector = { workspace = true, features = ["hyper_1"] }
+rmcp = { workspace = true, features = ["client", "transport-io"] }
+serde_json = { workspace = true }
+
+[build-dependencies]
+time = { workspace = true, features = ["formatting", "macros"] }
+
+[lints]
+workspace = true

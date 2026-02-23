@@ -1,0 +1,5 @@
+newline_style = "Unix"
+group_imports = "StdExternalCrate"
+imports_granularity = "Crate"
+style_edition = "2024"
+max_width = 100

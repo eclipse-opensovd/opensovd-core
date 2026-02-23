@@ -1,0 +1,60 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 Contributors to the Eclipse Foundation
+# SPDX-License-Identifier: Apache-2.0
+
+[project]
+name = "opensovd-tests"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = [
+    "cryptography>=46.0.0",
+    "pytest>=9.0.2",
+    "httpx>=0.28.1",
+    "jsonschema>=4.26",
+    "openapi-spec-validator>=0.7.2",
+    "PyJWT>=2.10",
+]
+
+[dependency-groups]
+tools = ["prek>=0.3.1", "ruff>=0.14.14", "ty>=0.0.14"]
+docs = ["sphinx>=9.1", "furo>=2025.12.19", "myst-parser>=5.0"]
+dev = [
+    "pytest-html>=4.2.0",
+    "pytest-metadata>=3.1.1",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["tests"]
+markers = [
+    "conformance: Conformance tests (require bru CLI)",
+    "schema: Tests that validate response schema",
+    "bruno: Bruno API conformance tests",
+    "req: Requirement ID for traceability (e.g., @pytest.mark.req('SOVD-7.1.1'))",
+]
+
+[tool.ruff]
+line-length = 100
+include = ["tests/**/*.py"]
+
+[tool.ruff.lint]
+select = [
+    "E",      # pycodestyle (error)
+    "F",      # pyflakes
+    "B",      # bugbear
+    "B9",
+    "C4",     # flake8-comprehensions
+    "SIM",    # flake8-simplify
+    "I",      # isort
+    "UP",     # pyupgrade
+    "PIE",    # flake8-pie
+    "PGH",    # pygrep-hooks
+    "PYI",    # flake8-pyi
+    "RUF",
+    "PT",     # flake8-pytest-style
+]
+
+[tool.ty.src]
+include = ["tests"]
+
+[tool.ty.environment]
+extra-paths = ["tests"]

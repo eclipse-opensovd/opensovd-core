@@ -1,0 +1,20 @@
+caches:
+  - https://devenv.cachix.org
+  - https://nix-community.cachix.org
+  - https://cache.nixos.org
+
+inputs:
+  fenix:
+    url: github:nix-community/fenix
+    inputs:
+      nixpkgs:
+        follows: nixpkgs
+  nixpkgs:
+    url: github:NixOS/nixpkgs/nixos-25.05
+  nixpkgs-unstable:
+    url: github:NixOS/nixpkgs/nixos-unstable
+  nixpkgs-python:
+    url: github:cachix/nixpkgs-python
+    inputs:
+      nixpkgs:
+        follows: nixpkgs

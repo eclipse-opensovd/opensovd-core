@@ -1,0 +1,41 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 Contributors to the Eclipse Foundation
+# SPDX-License-Identifier: Apache-2.0
+
+[package]
+name = "opensovd-examples-server"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[[example]]
+name = "simple"
+path = "simple/simple.rs"
+
+[[example]]
+name = "systemd"
+path = "systemd/systemd.rs"
+
+[[example]]
+name = "auth"
+path = "auth/auth.rs"
+
+[dependencies]
+async-trait = { workspace = true }
+jsonwebtoken = { workspace = true }
+libcli = { workspace = true }
+opensovd-core = { workspace = true }
+opensovd-extra = { workspace = true, features = ["auth"] }
+opensovd-mocks = { workspace = true }
+opensovd-models = { workspace = true }
+opensovd-providers = { workspace = true }
+opensovd-server = { workspace = true }
+sysinfo = { workspace = true }
+tokio = { workspace = true, features = ["net", "rt-multi-thread", "macros", "fs"] }
+tracing = { workspace = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+sd-notify = { workspace = true }
+
+[lints]
+workspace = true

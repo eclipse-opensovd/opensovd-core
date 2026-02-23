@@ -1,0 +1,31 @@
+meta {
+  name: Get Version Info Without Schema
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{base_url}}/version-info
+  body: none
+  auth: none
+}
+
+params:query {
+  include-schema: false
+}
+
+docs {
+  # Version info without schema
+
+  Explicitly requests version information without the JSON Schema.
+  Verifies that the schema field is absent when include-schema=false.
+}
+
+assert {
+  res.status: eq 200
+  res.headers['content-type']: contains application/json
+  res.body.sovd_info: isDefined
+  res.body.sovd_info[0].version: eq {{sovd_version}}
+  res.body.sovd_info[0].base_uri: eq {{versioned_url}}
+  res.body.schema: isUndefined
+}

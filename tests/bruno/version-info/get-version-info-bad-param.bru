@@ -1,0 +1,28 @@
+meta {
+  name: Get Version Info Bad Parameter Value
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{base_url}}/version-info?include-schema=bad
+  body: none
+  auth: none
+}
+
+params:query {
+  include-schema: bad
+}
+
+assert {
+  res.status: eq 400
+  res.headers['content-type']: contains application/json
+  res.body.error_code: eq incomplete-request
+  res.body.message: isDefined
+}
+
+docs {
+  # Bad parameter value
+
+  Tests that invalid include-schema values return 400 with GenericError.
+}

@@ -1,0 +1,40 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 Contributors to the Eclipse Foundation
+# SPDX-License-Identifier: Apache-2.0
+
+[package]
+name = "opensovd-client"
+version.workspace = true
+description.workspace = true
+edition.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+opensovd-models = { workspace = true }
+hyper = { workspace = true, features = ["client", "http1"] }
+hyper-util = { workspace = true, features = ["client-legacy", "http1", "tokio"] }
+http = { workspace = true }
+http-body = { workspace = true }
+http-body-util = { workspace = true }
+bytes = { workspace = true }
+percent-encoding = { workspace = true }
+serde = { workspace = true, features = ["derive", "std"] }
+serde_json = { workspace = true, features = ["std"] }
+thiserror = { workspace = true }
+tower = { workspace = true, features = ["util"] }
+
+[target.'cfg(unix)'.dependencies]
+tokio = { workspace = true, features = ["net"] }
+tower-service = { workspace = true }
+
+[dev-dependencies]
+mock-http-connector = { workspace = true, features = ["hyper_1"] }
+tower = { workspace = true, features = ["timeout"] }
+tokio = { workspace = true, features = ["rt", "macros", "time", "net", "io-util"] }
+serde_json = { workspace = true, features = ["std"] }
+
+[lints]
+workspace = true

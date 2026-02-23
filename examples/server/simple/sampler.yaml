@@ -1,0 +1,17 @@
+variables:
+  base_url: http://localhost:9000/sovd/v1/components/linux/data
+
+runcharts:
+  - title: CPU and Memory
+    rate-ms: 1000
+    scale: 1
+    legend:
+      enabled: true
+      details: false
+    items:
+      - label: CPU %
+        sample: curl -s $base_url/cpu.usage | jq '.data.value'
+        color: 178
+      - label: Memory %
+        sample: curl -s $base_url/mem.usage | jq '.data.value'
+        color: 38

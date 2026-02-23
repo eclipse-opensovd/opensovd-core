@@ -1,0 +1,28 @@
+meta {
+  name: Get Version Info With Schema Validation
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{base_url}}/version-info?include-schema=true
+  body: none
+  auth: none
+}
+
+params:query {
+  include-schema: true
+}
+
+assert {
+  res.status: eq 200
+  res.body.sovd_info: isDefined
+  res.body.schema: isDefined
+}
+
+docs {
+  # Version info with schema
+
+  Requests version information with JSON Schema included in the response.
+  The schema can be used for client-side validation of the sovd_info structure.
+}

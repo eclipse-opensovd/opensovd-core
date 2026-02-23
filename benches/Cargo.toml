@@ -1,0 +1,37 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 Contributors to the Eclipse Foundation
+# SPDX-License-Identifier: Apache-2.0
+
+[package]
+name = "opensovd-benches"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+autobins = false
+
+[dependencies]
+opensovd-core = { workspace = true }
+opensovd-extra = { workspace = true, features = ["auth"] }
+opensovd-models = { workspace = true }
+opensovd-providers = { workspace = true }
+opensovd-server = { workspace = true }
+axum = { workspace = true }
+criterion = { workspace = true, features = ["async_tokio"] }
+http = { workspace = true }
+jsonwebtoken = { workspace = true }
+rand = { workspace = true, features = ["std", "std_rng", "thread_rng"] }
+tokio = { workspace = true, features = ["rt", "rt-multi-thread"] }
+tower = { workspace = true, features = ["util"] }
+
+[[bench]]
+name = "auth"
+harness = false
+path = "src/main.rs"
+
+[[bench]]
+name = "topology"
+harness = false
+path = "src/topology.rs"
+
+[lints]
+workspace = true

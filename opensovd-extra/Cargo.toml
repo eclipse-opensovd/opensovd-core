@@ -1,0 +1,37 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 Contributors to the Eclipse Foundation
+# SPDX-License-Identifier: Apache-2.0
+
+[package]
+name = "opensovd-extra"
+version.workspace = true
+description.workspace = true
+edition.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[features]
+unit = ["dep:serde"]
+auth = ["dep:jsonwebtoken", "dep:regorus", "dep:serde", "dep:serde_json", "dep:http", "dep:tracing", "dep:opensovd-server"]
+
+[dependencies]
+opensovd-server = { workspace = true, optional = true }
+jsonwebtoken = { workspace = true, optional = true }
+regorus = { workspace = true, optional = true }
+serde = { workspace = true, optional = true, features = ["derive", "std"] }
+serde_json = { workspace = true, optional = true, features = ["std"] }
+http = { workspace = true, optional = true }
+tracing = { workspace = true, optional = true }
+
+[dev-dependencies]
+serde_json = { workspace = true, features = ["std"] }
+tokio = { workspace = true, features = ["macros", "rt"] }
+http = { workspace = true }
+rsa = { workspace = true }
+rand = { workspace = true, features = ["std", "std_rng", "thread_rng"] }
+pkcs1 = { workspace = true, features = ["alloc", "pkcs8"] }
+
+[lints]
+workspace = true

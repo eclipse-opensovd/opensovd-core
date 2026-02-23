@@ -1,0 +1,43 @@
+
+{
+  "name": "OpenSOVD Core",
+  "image": "mcr.microsoft.com/devcontainers/rust:1-1-bookworm",
+  "overrideCommand": false,
+  "remoteUser": "vscode",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker": {},
+    "ghcr.io/devcontainers/features/github-cli": {},
+    "ghcr.io/devcontainers/features/python:1": {
+      "version": "3.13",
+      "toolsToInstall": "uv"
+    }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "mkhl.direnv",
+        "rust-lang.rust-analyzer",
+        "tamasfe.even-better-toml",
+        "redhat.vscode-yaml",
+        "usernamehw.errorlens",
+        "eamodio.gitlens",
+        "ms-python.python",
+        "charliermarsh.ruff",
+        "fill-labs.dependi",
+        "vadimcn.vscode-lldb"
+      ],
+      "settings": {
+        "editor.formatOnSave": true,
+        "rust-analyzer.check.command": "clippy",
+        "rust-analyzer.cargo.allFeatures": true,
+        "terminal.integrated.defaultProfile.linux": "fish",
+        "files.associations": {
+          ".clippy.toml": "toml",
+          "*.toml.j2": "toml"
+        }
+      }
+    }
+  },
+  "forwardPorts": [7690],
+  "postCreateCommand": "uv sync"
+}

@@ -1,0 +1,51 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 Contributors to the Eclipse Foundation
+# SPDX-License-Identifier: Apache-2.0
+
+[package]
+name = "opensovd-gateway"
+version.workspace = true
+description.workspace = true
+edition.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[[bin]]
+name = "opensovd-gateway"
+path = "src/main.rs"
+
+[features]
+default = ["jsonschema", "json-preserve-order", "mock", "http2"]
+jsonschema = ["opensovd-server/jsonschema", "dep:schemars"]
+json-preserve-order = ["opensovd-server/json-preserve-order"]
+mock = ["dep:opensovd-mocks"]
+http2 = ["opensovd-server/http2"]
+
+[dependencies]
+anyhow = { workspace = true }
+libcli = { workspace = true }
+opensovd-server = { workspace = true }
+opensovd-core = { workspace = true }
+opensovd-extra = { workspace = true, features = ["auth"] }
+opensovd-mocks = { workspace = true, optional = true }
+schemars = { workspace = true, optional = true }
+serde = { workspace = true, features = ["derive"] }
+tokio = { workspace = true, features = ["net", "rt", "signal", "time", "sync"] }
+base64 = { workspace = true }
+http = { workspace = true }
+tower = { workspace = true, features = ["util"] }
+tower-http = { workspace = true, features = ["cors", "fs"] }
+tracing = { workspace = true }
+clap = { workspace = true, features = ["cargo", "derive", "env", "help", "std", "usage"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+sd-notify = { workspace = true }
+
+[build-dependencies]
+time = { workspace = true, features = ["formatting", "macros"] }
+
+
+[lints]
+workspace = true

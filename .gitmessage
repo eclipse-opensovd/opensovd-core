@@ -1,0 +1,29 @@
+<type>(<scope>): <brief-summary>
+
+# <type>(<scope>): <brief-summary>
+# ------ -------   ---------------
+#   |      |              |
+#   |      |              Present tense, lower case. No period at the end.
+#   |      |
+#   |      Scope: client|server|sovd
+#   |
+#   Type: feat|fix|doc|perf|refactor|style|test|ci|build|revert|chore
+#
+# An optional footer may contain a GitHub Issue/PR.
+#
+# Issue: sovd/sovd-core#1
+# Close: sovd/sovd-core#42
+#
+### Example: New Feature
+#
+# feat(client): support mTLS connection
+#
+### Example: Documentation change
+#
+# doc: add more rustdoc
+#
+### Example: Fix issue
+#
+# fix: handle connection timeout graceful
+#
+# Close: sovd/sovd-core#42

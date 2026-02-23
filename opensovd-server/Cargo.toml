@@ -1,0 +1,52 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 Contributors to the Eclipse Foundation
+# SPDX-License-Identifier: Apache-2.0
+
+[package]
+name = "opensovd-server"
+version.workspace = true
+description.workspace = true
+edition.workspace = true
+license.workspace = true
+readme = "README.md"
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[features]
+default = ["jsonschema"]
+jsonschema = ["dep:schemars", "opensovd-models/jsonschema"]
+json-preserve-order = ["serde_json/preserve_order"]
+http2 = ["axum/http2"]
+
+[dependencies]
+opensovd-core = { workspace = true }
+opensovd-models = { workspace = true }
+schemars = { workspace = true, optional = true }
+axum = { workspace = true, features = ["json", "matched-path", "query", "tokio", "http1"] }
+bytes = { workspace = true }
+http-body = { workspace = true }
+axum-extra = { workspace = true, features = ["query", "with-rejection"] }
+futures = { workspace = true, features = ["std", "async-await"] }
+http = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true, features = ["std"] }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["net", "rt", "signal", "time"] }
+percent-encoding = { workspace = true }
+tower = { workspace = true, features = ["util"] }
+tracing = { workspace = true }
+
+[dev-dependencies]
+async-trait = { workspace = true }
+bytes = { workspace = true }
+futures = { workspace = true }
+http-body-util = { workspace = true }
+hyper = { workspace = true, features = ["client", "http1", "http2"] }
+hyper-util = { workspace = true, features = ["client-legacy", "http1", "http2", "tokio"] }
+libc = { workspace = true }
+opensovd-mocks = { workspace = true }
+tokio = { workspace = true, features = ["rt", "macros", "sync", "time"] }
+tower = { workspace = true, features = ["util"] }
+
+[lints]
+workspace = true

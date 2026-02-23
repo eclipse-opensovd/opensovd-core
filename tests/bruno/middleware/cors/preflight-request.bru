@@ -1,0 +1,31 @@
+meta {
+  name: Preflight Request
+  type: http
+  seq: 1
+}
+
+options {
+  url: {{base_url}}/version-info
+  body: none
+  auth: none
+}
+
+headers {
+  Origin: {{cors_origin}}
+  Access-Control-Request-Method: {{cors_method}}
+  Access-Control-Request-Headers: {{cors_header}}
+}
+
+docs {
+  # CORS Preflight Request (Default - No CORS Configured)
+
+  Tests that the server rejects OPTIONS preflight requests when CORS is not configured.
+  This verifies the secure default behavior - CORS must be explicitly enabled.
+}
+
+assert {
+  res.status: eq 405
+  res.headers['access-control-allow-origin']: isUndefined
+  res.headers['access-control-allow-methods']: isUndefined
+  res.headers['access-control-allow-headers']: isUndefined
+}

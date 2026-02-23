@@ -1,0 +1,28 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 Contributors to the Eclipse Foundation
+# SPDX-License-Identifier: Apache-2.0
+
+[package]
+name = "opensovd-examples-client"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[[example]]
+name = "client"
+path = "src/client.rs"
+
+[dependencies]
+bytes = { workspace = true }
+clap = { workspace = true, features = ["derive", "help", "std", "usage"] }
+http = { workspace = true }
+http-body-util = { workspace = true }
+hyper = { workspace = true, features = ["http1"] }
+libcli = { workspace = true }
+opensovd-client = { workspace = true }
+tokio = { workspace = true, features = ["net", "rt", "macros", "signal"] }
+tower-http = { workspace = true, features = ["trace"] }
+tracing = { workspace = true }
+
+[lints]
+workspace = true

@@ -1,0 +1,64 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 Contributors to the Eclipse Foundation
+# SPDX-License-Identifier: Apache-2.0
+
+# Crate labels
+crate:core:
+  - changed-files:
+      - any-glob-to-any-file: opensovd-core/**
+
+crate:models:
+  - changed-files:
+      - any-glob-to-any-file: opensovd-models/**
+
+crate:server:
+  - changed-files:
+      - any-glob-to-any-file: opensovd-server/**
+
+crate:cli:
+  - changed-files:
+      - any-glob-to-any-file: opensovd-cli/**
+
+crate:examples:
+  - changed-files:
+      - any-glob-to-any-file: examples/**
+
+crate:benches:
+  - changed-files:
+      - any-glob-to-any-file: benches/**
+
+# Binary labels
+bin:gateway:
+  - changed-files:
+      - any-glob-to-any-file: opensovd-cli/gateway/**
+
+bin:mcp:
+  - changed-files:
+      - any-glob-to-any-file: opensovd-cli/mcp/**
+
+# Category labels
+ci:
+  - changed-files:
+      - any-glob-to-any-file: .github/**
+
+tests:
+  - changed-files:
+      - any-glob-to-any-file:
+          - tests/**
+          - "**/tests/**/*.rs"
+
+docs:
+  - changed-files:
+      - any-glob-to-any-file:
+          - docs/**
+          - "*.md"
+
+docker:
+  - changed-files:
+      - any-glob-to-any-file:
+          - docker/**
+          - Dockerfile*
+          - .dockerignore
+
+scripts:
+  - changed-files:
+      - any-glob-to-any-file: scripts/**

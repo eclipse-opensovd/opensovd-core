@@ -1,0 +1,25 @@
+meta {
+  name: Get Version Info
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{base_url}}/version-info
+  body: none
+  auth: none
+}
+
+docs {
+  # Basic version info retrieval
+
+  Retrieves version information from the SOVD server.
+}
+
+assert {
+  res.status: eq 200
+  res.headers['content-type']: contains application/json
+  res.body.sovd_info: isDefined
+  res.body.sovd_info[0].version: eq {{sovd_version}}
+  res.body.sovd_info[0].base_uri: eq {{versioned_url}}
+}

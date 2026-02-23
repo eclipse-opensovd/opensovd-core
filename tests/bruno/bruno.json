@@ -1,0 +1,9 @@
+{
+  "version": "1",
+  "name": "sovd",
+  "type": "collection",
+  "ignore": [
+    "node_modules",
+    "__pycache__"
+  ]
+}

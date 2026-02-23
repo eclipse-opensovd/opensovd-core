@@ -1,0 +1,106 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 Contributors to the Eclipse Foundation
+# SPDX-License-Identifier: Apache-2.0
+
+[workspace]
+members = ["benches", "examples/client", "examples/server", "opensovd-mocks", "opensovd-client", "opensovd-core", "opensovd-extra", "opensovd-models", "opensovd-providers", "opensovd-server", "opensovd-cli/lib", "opensovd-cli/gateway", "opensovd-cli/mcp"]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.1"
+description = "OpenSOVD"
+edition = "2024"
+license = "Apache-2.0"
+readme = "README.md"
+repository = "https://github.com/eclipse-opensovd/opensovd-core"
+keywords = ["sovd", "diagnostic"]
+categories = ["embedded"]
+
+[workspace.dependencies]
+opensovd-core = { path = "opensovd-core" }
+opensovd-extra = { path = "opensovd-extra" }
+opensovd-models = { path = "opensovd-models" }
+opensovd-providers = { path = "opensovd-providers" }
+opensovd-client = { path = "opensovd-client" }
+opensovd-server = { path = "opensovd-server" }
+opensovd-mocks = { path = "opensovd-mocks" }
+libcli = { path = "opensovd-cli/lib" }
+
+anyhow = { version = "1", default-features = false, features = ["std"] }
+async-trait = { version = "0.1", default-features = false }
+base64 = { version = "0.22", default-features = false, features = ["std"] }
+axum = { version = "0.8", default-features = false }
+axum-extra = { version = "0.12", default-features = false }
+dashmap = { version = "6", default-features = false }
+bytes = { version = "1", default-features = false }
+chrono = { version = "0.4", default-features = false }
+clap = { version = "4", default-features = false }
+criterion = { version = "0.8", default-features = false }
+futures = { version = "0.3", default-features = false }
+futures-core = { version = "0.3", default-features = false }
+indexmap = { version = "2", default-features = false, features = ["std"] }
+jsonwebtoken = { version = "10", default-features = false, features = ["rust_crypto"] }
+http = { version = "1", default-features = false, features = ["std"] }
+http-body = { version = "1", default-features = false }
+http-body-util = { version = "0.1", default-features = false }
+hyper = { version = "1", default-features = false }
+hyper-util = { version = "0.1", default-features = false }
+libc = { version = "0.2", default-features = false }
+percent-encoding = { version = "2", default-features = false }
+pin-project = { version = "1", default-features = false }
+regorus = { version = "0.9", default-features = false, features = ["arc", "glob"] }
+schemars = { version = "1", default-features = false }
+sysinfo = { version = "0.38", default-features = false, features = ["system"] }
+sd-notify = { version = "0.4", default-features = false }
+serde = { version = "1", default-features = false }
+serde_json = { version = "1", default-features = false }
+thiserror = { version = "2", default-features = false }
+time = { version = "0.3", default-features = false }
+tempfile = { version = "3", default-features = false }
+tokio = { version = "1", default-features = false }
+tower = { version = "0.5", default-features = false }
+tower-service = { version = "0.3", default-features = false }
+tower-http = { version = "0.6", default-features = false }
+tracing = { version = "0.1", default-features = false }
+tracing-subscriber = { version = "0.3", default-features = false }
+mock-http-connector = { version = "0.5", default-features = false }
+pkcs1 = { version = "0.7", default-features = false }
+rand = { version = "0.10", default-features = false }
+rmcp = { version = "0.16.0" }
+rsa = { version = "0.9", default-features = false }
+
+[workspace.lints.rust]
+unused = { level = "deny", priority = -1 }
+unsafe_code = "deny"
+dead_code = "deny"
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage,coverage_nightly)'] }
+rust_2024_compatibility = { level = "warn", priority = -1 }
+
+[workspace.lints.clippy]
+pedantic = { level = "deny", priority = -1 }
+cargo = { level = "deny", priority = -1 }
+multiple_crate_versions = "deny"
+clone_on_ref_ptr = "deny"
+expect_used = "deny"
+indexing_slicing = "deny"
+string_slice = "deny"
+unwrap_used = "deny"
+arithmetic_side_effects = "deny"
+separated_literal_suffix = "deny"
+doc_markdown = "allow"
+print_stdout = "deny"
+print_stderr = "deny"
+unwrap_in_result = "deny"
+implicit_clone = "deny"
+rc_buffer = "deny"
+rc_mutex = "deny"
+
+[workspace.metadata.cargo-machete]
+ignored = ["time"]
+
+[profile.release-small]
+inherits = "release"
+codegen-units = 1
+lto = true
+opt-level = "z"
+panic = "abort"
+strip = true

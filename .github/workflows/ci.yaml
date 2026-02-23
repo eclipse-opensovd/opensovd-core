@@ -1,0 +1,414 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 Contributors to the Eclipse Foundation
+# SPDX-License-Identifier: Apache-2.0
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  schedule:
+    - cron: '0 2 * * *' # 02:00 UTC daily
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  CARGO_DENY_VERSION: 0.18.9
+  CARGO_LLVM_COV_VERSION: 0.6.21
+  GIT_CLIFF_VERSION: 2.11.0
+
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    outputs:
+      should_run: ${{ steps.check.outputs.should_run }}
+      release: ${{ steps.check.outputs.release }}
+    steps:
+      - uses: actions/checkout@v6
+        if: github.event_name == 'schedule'
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - id: check
+        run: |
+          if [[ "${{ github.event_name }}" == "schedule" ]]; then
+            LAST_SHA=$(git rev-parse nightly 2>/dev/null || echo "")
+            if [[ "$LAST_SHA" == "${{ github.sha }}" ]]; then
+              echo "No changes since last nightly, skipping"
+              echo "should_run=false" >> "$GITHUB_OUTPUT"
+              echo "release=none" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "release=nightly" >> "$GITHUB_OUTPUT"
+          elif [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "release=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+          elif [[ "$GITHUB_REF" == "refs/heads/main" ]]; then
+            echo "release=latest" >> "$GITHUB_OUTPUT"
+          else
+            echo "release=none" >> "$GITHUB_OUTPUT"
+          fi
+          echo "should_run=true" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: prepare
+    if: needs.prepare.outputs.should_run == 'true'
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {os: ubuntu-24.04, target: x86_64-unknown-linux-gnu, profile: release-small, tests: [unittest, pytest]}
+          # - {os: ubuntu-24.04-arm, target: aarch64-unknown-linux-gnu, profile: release-small, tests: [unittest]}
+          - {os: windows-2025, target: x86_64-pc-windows-msvc, profile: release-small, tests: [unittest]}
+          - {os: macos-15, target: aarch64-apple-darwin, profile: release-small, tests: [unittest]}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          target: ${{ matrix.target }}
+          cache-shared-key: ci
+
+      - run: cargo build --locked --profile ${{ matrix.profile }} --target ${{ matrix.target }}
+
+      - if: contains(matrix.tests, 'unittest')
+        run: cargo test --locked --all-features
+
+      - uses: astral-sh/setup-uv@v7
+      - if: contains(matrix.tests, 'pytest')
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+      - if: contains(matrix.tests, 'pytest')
+        run: npm install -g @usebruno/cli
+
+      - if: contains(matrix.tests, 'pytest')
+        run: |
+          uv run pytest tests/ \
+            --opensovd-binary target/${{ matrix.target }}/${{ matrix.profile }}/opensovd-gateway${{ runner.os == 'Windows' && '.exe' || '' }} \
+            --html=pytest-report.html \
+            --self-contained-html \
+            --metadata "Branch" "${{ github.ref_name }}" \
+            --metadata "Repository" "${{ github.repository }}" \
+            --metadata "Run ID" "${{ github.run_id }}" \
+            --metadata "Commit" "${{ github.sha }}" \
+            --metadata "Coverage_URL" "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/coverage/"
+
+      - if: contains(matrix.tests, 'pytest')
+        uses: actions/upload-artifact@v6
+        with:
+          name: pytest-report
+          path: pytest-report.html
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: opensovd-gateway-${{ matrix.target }}
+          path: target/${{ matrix.target }}/${{ matrix.profile }}/opensovd-gateway${{ runner.os == 'Windows' && '.exe' || '' }}
+
+  licenses:
+    needs: prepare
+    if: needs.prepare.outputs.should_run == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny@${{ env.CARGO_DENY_VERSION }}
+      - run: cargo deny check licenses sources
+
+  advisories:
+    needs: prepare
+    if: needs.prepare.outputs.should_run == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny@${{ env.CARGO_DENY_VERSION }}
+
+      - name: Check advisories (SARIF)
+        if: needs.prepare.outputs.release == 'nightly' || needs.prepare.outputs.release == 'latest'
+        run: cargo deny --format sarif check advisories > advisories.sarif || true
+
+      - name: Upload SARIF
+        if: (needs.prepare.outputs.release == 'nightly' || needs.prepare.outputs.release == 'latest') && github.repository_owner == 'eclipse-opensovd'
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: advisories.sarif
+          category: cargo-deny-advisories
+
+      - name: Check advisories
+        if: needs.prepare.outputs.release != 'nightly' && needs.prepare.outputs.release != 'latest'
+        run: cargo deny check advisories
+
+  lint:
+    needs: prepare
+    if: needs.prepare.outputs.should_run == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          cache-shared-key: ci
+      # Required for gitleaks hook
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.25'
+          cache: false
+      - uses: astral-sh/setup-uv@v7
+      # Install Python dependencies and tools (prek, ruff, ty)
+      - run: uv sync --group tools
+      # Cache prek hooks
+      - uses: actions/cache@v5
+        with:
+          path: ~/.cache/prek
+          key: prek-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml', 'pyproject.toml') }}
+          restore-keys: |
+            prek-${{ runner.os }}-
+
+      - run: uv run prek run --all-files --show-diff-on-failure
+
+  coverage:
+    needs: prepare
+    if: needs.prepare.outputs.should_run == 'true'
+    timeout-minutes: 30
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          cache-shared-key: ci
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov@${{ env.CARGO_LLVM_COV_VERSION }}
+
+      - run: cargo llvm-cov test --locked --all-features --html
+      - run: cargo llvm-cov report --json --output-path coverage.json
+
+      - id: cov
+        run: |
+          PERCENT=$(jq -r '.data[0].totals.lines.percent | floor' coverage.json)
+          COLOR=$([[ $PERCENT -ge 80 ]] && echo 28A745 || ([[ $PERCENT -ge 60 ]] && echo B08800 || echo CB2431))
+          curl -s "https://img.shields.io/badge/coverage-${PERCENT}%25-${COLOR}" -o target/llvm-cov/html/badge.svg
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: coverage-report
+          path: target/llvm-cov/html
+
+  pages:
+    needs: [prepare, build, coverage]
+    if: needs.prepare.outputs.should_run == 'true' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          name: pytest-report
+          path: site
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: coverage-report
+          path: site/coverage
+        continue-on-error: true
+
+      - run: |
+          if [ -f site/pytest-report.html ]; then
+            mv site/pytest-report.html site/index.html
+          fi
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: site
+      - uses: actions/deploy-pages@v4
+
+  docker:
+    needs: [prepare, build]
+    if: needs.prepare.outputs.release != 'none'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    env:
+      DOCKER_BUILD_SUMMARY: false
+      DOCKER_BUILD_RECORD_UPLOAD: false
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v7
+        with:
+          path: target/release-small
+
+      - name: Prepare Docker build
+        id: prepare
+        run: |
+          PLATFORMS=""
+          if [ -d "target/release-small/opensovd-gateway-x86_64-unknown-linux-gnu" ]; then
+            ln -s opensovd-gateway-x86_64-unknown-linux-gnu target/release-small/amd64
+            chmod +x target/release-small/amd64/opensovd-gateway
+            PLATFORMS="linux/amd64"
+          fi
+          if [ -d "target/release-small/opensovd-gateway-aarch64-unknown-linux-gnu" ]; then
+            ln -s opensovd-gateway-aarch64-unknown-linux-gnu target/release-small/arm64
+            chmod +x target/release-small/arm64/opensovd-gateway
+            [ -n "$PLATFORMS" ] && PLATFORMS="$PLATFORMS,"
+            PLATFORMS="${PLATFORMS}linux/arm64"
+          fi
+          echo "platforms=$PLATFORMS" >> $GITHUB_OUTPUT
+
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata from Cargo.toml
+        id: cargo
+        run: |
+          PKG=$(cargo metadata --format-version 1 --no-deps | jq '.packages[] | select(.name == "opensovd-gateway")')
+          echo "version=$(echo "$PKG" | jq -r '.version')" >> $GITHUB_OUTPUT
+          echo "description=$(echo "$PKG" | jq -r '.description')" >> $GITHUB_OUTPUT
+          echo "license=$(echo "$PKG" | jq -r '.license')" >> $GITHUB_OUTPUT
+          echo "repository=$(echo "$PKG" | jq -r '.repository')" >> $GITHUB_OUTPUT
+
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/opensovd-gateway
+          tags: |
+            type=raw,value=${{ needs.prepare.outputs.release }}
+            type=raw,value=nightly-{{date 'YYYY-MM-DD'}},enable=${{ needs.prepare.outputs.release == 'nightly' }}
+            type=raw,value=latest,enable=${{ needs.prepare.outputs.release == 'latest' || startsWith(needs.prepare.outputs.release, 'v') }}
+          labels: |
+            org.opencontainers.image.title=opensovd-gateway
+            org.opencontainers.image.description=${{ steps.cargo.outputs.description }}
+            org.opencontainers.image.version=${{ steps.cargo.outputs.version }}
+            org.opencontainers.image.licenses=${{ steps.cargo.outputs.license }}
+            org.opencontainers.image.source=${{ steps.cargo.outputs.repository }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          load: true
+          tags: opensovd-gateway:test
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: TARGETARCH=amd64
+          cache-from: |
+            type=gha,scope=opensovd-core-${{ github.ref_name }}
+            type=gha,scope=opensovd-core-main
+          cache-to: type=gha,mode=max,scope=opensovd-core-${{ github.ref_name }}
+
+      - uses: astral-sh/setup-uv@v7
+      - name: Test Docker image
+        run: uv run pytest tests/test_version.py --opensovd-docker opensovd-gateway:test
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          push: true
+          platforms: ${{ steps.prepare.outputs.platforms }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          annotations: ${{ steps.meta.outputs.annotations }}
+          cache-from: |
+            type=gha,scope=opensovd-core-${{ github.ref_name }}
+            type=gha,scope=opensovd-core-main
+
+  release:
+    needs: [prepare, build]
+    if: needs.prepare.outputs.release != 'none'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      attestations: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: git-cliff@${{ env.GIT_CLIFF_VERSION }}
+
+      - uses: actions/download-artifact@v7
+        with:
+          path: artifacts
+
+      - run: |
+          VERSION="${{ needs.prepare.outputs.release }}"
+          if [[ "$VERSION" == "nightly" || "$VERSION" == "latest" ]]; then
+            git cliff --unreleased -o CHANGELOG.md
+          else
+            git cliff --current -o CHANGELOG.md
+          fi
+          mkdir -p artifacts/release
+          for dir in artifacts/opensovd-gateway-*; do
+            target=$(basename "$dir" | sed 's/opensovd-gateway-//')
+            if [[ "$target" == *windows* ]]; then
+              zip "artifacts/release/opensovd-gateway-${VERSION}-${target}.zip" "$dir/opensovd-gateway.exe"
+            else
+              chmod +x "$dir/opensovd-gateway"
+              tar -czf "artifacts/release/opensovd-gateway-${VERSION}-${target}.tar.gz" -C "$dir" opensovd-gateway
+            fi
+          done
+          cd artifacts/release
+          for file in *.tar.gz *.zip; do
+            sha512sum "$file" > "$file.sha512"
+          done
+
+      - uses: actions/attest-build-provenance@v3
+        if: github.repository_owner == 'eclipse-opensovd'
+        with:
+          subject-path: 'artifacts/release/*'
+
+      - name: Delete existing prerelease
+        if: needs.prepare.outputs.release == 'nightly' || needs.prepare.outputs.release == 'latest'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release delete "${{ needs.prepare.outputs.release }}" --yes --cleanup-tag || true
+
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ needs.prepare.outputs.release }}" \
+            --title "${{ needs.prepare.outputs.release }}" \
+            --notes-file CHANGELOG.md \
+            ${{ !startsWith(needs.prepare.outputs.release, 'v') && '--prerelease' || '' }} \
+            artifacts/release/*
+
+  gate:
+    needs: [prepare, build, licenses, advisories, lint, coverage, pages, docker, release]
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - run: |
+          if [[ "${{ contains(needs.*.result, 'failure') }}" == "true" ]]; then
+            echo "One or more jobs failed"
+            exit 1
+          fi
+          echo "All checks passed (results: ${{ join(needs.*.result, ', ') }})"

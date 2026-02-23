@@ -1,0 +1,14 @@
+{
+  "role_permissions": {
+    "reader": [
+      { "paths": ["/sovd/v1/components", "/sovd/v1/components/**", "/sovd/v1/apps", "/sovd/v1/apps/**", "/sovd/v1/areas", "/sovd/v1/areas/**"], "methods": ["GET"] }
+    ],
+    "technician": [
+      { "paths": ["/sovd/v1/components/*/data/*"], "methods": ["GET", "PUT"] },
+      { "paths": ["/sovd/v1/components", "/sovd/v1/components/**"], "methods": ["GET"] }
+    ],
+    "admin": [
+      { "paths": ["/sovd/v1/components", "/sovd/v1/components/**", "/sovd/v1/apps", "/sovd/v1/apps/**", "/sovd/v1/areas", "/sovd/v1/areas/**"], "methods": ["GET", "PUT", "POST", "DELETE"] }
+    ]
+  }
+}

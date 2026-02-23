@@ -1,0 +1,37 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 Contributors to the Eclipse Foundation
+# SPDX-License-Identifier: Apache-2.0
+
+name: first-interaction
+
+on:
+  issues:
+    types: [opened]
+  pull_request:
+    types: [opened]
+
+jobs:
+  first-interaction:
+    runs-on: ubuntu-24.04
+    permissions:
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/first-interaction@v3
+        if: contains(github.actor, '[bot]') == false
+        with:
+          issue_message: |
+            Hi @${{ github.event.issue.user.login }},
+
+            Thanks for opening your first issue!
+            We appreciate your contribution and will review it as soon as possible.
+          pr_message: |
+            Hi @${{ github.event.pull_request.user.login }},
+
+            Thanks for your first pull request!
+
+            Before we can accept your contribution, please ensure you have:
+
+            1. Signed the [Eclipse Contributor Agreement (ECA)](https://accounts.eclipse.org/user/eca)
+            2. Run the prek hooks as documented in [CONTRIBUTING.md](CONTRIBUTING.md)
+
+            We appreciate your contribution and will review it as soon as possible.

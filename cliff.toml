@@ -1,0 +1,56 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 Contributors to the Eclipse Foundation
+# SPDX-License-Identifier: Apache-2.0
+
+[changelog]
+header = """
+# Changelog
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+"""
+body = """
+{% for group, commits in commits | group_by(attribute="group") %}
+### {{ group | striptags | trim | upper_first }}
+{% for commit in commits
+| filter(attribute="scope")
+| sort(attribute="scope") %}
+- **({{commit.scope}})** {{ commit.message | upper_first }}
+{%- if commit.breaking %}
+{% raw %}  {% endraw %}- **BREAKING**: {{ commit.breaking_description }}
+{%- endif %}
+{% endfor %}
+{%- for commit in commits %}
+{%- if not commit.scope %}
+- {{ commit.message | upper_first }}
+{%- if commit.breaking %}
+{% raw %}  {% endraw %}- **BREAKING**: {{ commit.breaking_description }}
+{%- endif %}
+{%- endif %}
+{% endfor %}
+{% endfor %}
+"""
+
+[git]
+commit_parsers = [
+    { message = "^feat", group = "Added" },
+    { message = "^fix", group = "Fixed" },
+    { message = "^doc", group = "Documentation" },
+    { message = "^perf", group = "Performance" },
+    { message = "^refactor", group = "Changed" },
+    { message = "^style", group = "Styling" },
+    { message = "^test", group = "Testing" },
+    { message = "^chore\\(release\\): prepare for", skip = true },
+    { message = "^chore", skip = true },
+    { body = ".*security", group = "Security" },
+]
+conventional_commits = true
+filter_unconventional = true
+split_commits = false
+protect_breaking_commits = false
+filter_commits = false
+tag_pattern = "v[0-9]*"
+skip_tags = ""
+ignore_tags = ""
+topo_order = false
+sort_commits = "oldest"
