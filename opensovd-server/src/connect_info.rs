@@ -49,3 +49,12 @@ impl Connected<IncomingStream<'_, UnixListener>> for ConnectInfo {
         })
     }
 }
+
+#[cfg(feature = "tls")]
+impl Connected<IncomingStream<'_, crate::tls::TlsListener>> for ConnectInfo {
+    fn connect_info(target: IncomingStream<'_, crate::tls::TlsListener>) -> Self {
+        ConnectInfo::Tcp(TcpConnectInfo {
+            remote_addr: *target.remote_addr(),
+        })
+    }
+}
