@@ -9,6 +9,7 @@ import subprocess
 import threading
 import time
 from pathlib import Path
+from typing import Self
 
 import httpx
 import pytest
@@ -90,7 +91,7 @@ class Gateway:
         env: dict | None = None,
         banner: str | re.Pattern | None = None,
         docker_container: str | None = None,
-    ) -> Gateway:
+    ) -> Self:
         """Spawn process, wait for listening, return ready Gateway.
 
         Args:
