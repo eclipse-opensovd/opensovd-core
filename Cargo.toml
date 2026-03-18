@@ -38,7 +38,7 @@ criterion = { version = "0.8", default-features = false }
 futures = { version = "0.3", default-features = false }
 futures-core = { version = "0.3", default-features = false }
 indexmap = { version = "2", default-features = false, features = ["std"] }
-jsonwebtoken = { version = "10", default-features = false, features = ["rust_crypto"] }
+jsonwebtoken = { version = "10", default-features = false, features = ["aws_lc_rs", "use_pem"] }
 http = { version = "1", default-features = false, features = ["std"] }
 http-body = { version = "1", default-features = false }
 http-body-util = { version = "0.1", default-features = false }
@@ -63,10 +63,9 @@ tower-http = { version = "0.6", default-features = false }
 tracing = { version = "0.1", default-features = false }
 tracing-subscriber = { version = "0.3", default-features = false }
 mock-http-connector = { version = "0.5", default-features = false }
-pkcs1 = { version = "0.7", default-features = false }
+aws-lc-rs = { version = "1", default-features = false, features = ["aws-lc-sys"] }
 rand = { version = "0.10", default-features = false }
 rmcp = { version = "0.16.0" }
-rsa = { version = "0.9", default-features = false }
 
 [workspace.lints.rust]
 unused = { level = "deny", priority = -1 }
