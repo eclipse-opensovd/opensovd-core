@@ -3,3 +3,5 @@ __pycache__/
 *.pyc
 .devenv/
 .devenv.flake.nix
+examples/server/mtls/*.key
+examples/server/mtls/*.crt

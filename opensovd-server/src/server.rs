@@ -152,6 +152,8 @@ pub struct ServerBuilder<Vendor = VendorInfo, Authn = NoAuth, Authz = AllowAll, 
     discovery_providers: Vec<Box<dyn DiscoveryProvider>>,
     layer: Layer,
     services: Vec<(String, Service)>,
+    #[cfg(feature = "tls")]
+    tls_config: Option<crate::tls::TlsConfig>,
 }
 
 pub struct Server<Vendor = VendorInfo, Authn = NoAuth, Authz = AllowAll, Layer = Identity> {
@@ -165,6 +167,8 @@ pub struct Server<Vendor = VendorInfo, Authn = NoAuth, Authz = AllowAll, Layer =
     discovery_providers: Vec<Box<dyn DiscoveryProvider>>,
     layer: Layer,
     services: Vec<(String, Service)>,
+    #[cfg(feature = "tls")]
+    tls_config: Option<crate::tls::TlsConfig>,
 }
 
 #[allow(clippy::expect_used)] // Panic on signal handler failure is intentional
@@ -203,6 +207,8 @@ impl ServerBuilder<VendorInfo, NoAuth, AllowAll, Identity> {
             discovery_providers: Vec::new(),
             layer: Identity::new(),
             services: Vec::new(),
+            #[cfg(feature = "tls")]
+            tls_config: None,
         }
     }
 }
@@ -251,6 +257,8 @@ impl<Vendor, Authn, Authz, Layer> ServerBuilder<Vendor, Authn, Authz, Layer> {
             discovery_providers: self.discovery_providers,
             layer: self.layer,
             services: self.services,
+            #[cfg(feature = "tls")]
+            tls_config: self.tls_config,
         }
     }
 
@@ -270,6 +278,8 @@ impl<Vendor, Authn, Authz, Layer> ServerBuilder<Vendor, Authn, Authz, Layer> {
             discovery_providers: self.discovery_providers,
             layer: self.layer,
             services: self.services,
+            #[cfg(feature = "tls")]
+            tls_config: self.tls_config,
         }
     }
 
@@ -293,6 +303,8 @@ impl<Vendor, Authn, Authz, Layer> ServerBuilder<Vendor, Authn, Authz, Layer> {
             discovery_providers: self.discovery_providers,
             layer: self.layer,
             services: self.services,
+            #[cfg(feature = "tls")]
+            tls_config: self.tls_config,
         }
     }
 
@@ -314,6 +326,8 @@ impl<Vendor, Authn, Authz, Layer> ServerBuilder<Vendor, Authn, Authz, Layer> {
             discovery_providers: self.discovery_providers,
             layer: Stack::new(layer, self.layer),
             services: self.services,
+            #[cfg(feature = "tls")]
+            tls_config: self.tls_config,
         }
     }
 
@@ -354,6 +368,13 @@ impl<Vendor, Authn, Authz, Layer> ServerBuilder<Vendor, Authn, Authz, Layer> {
         self
     }
 
+    // wrap the TCP listener with TLS.
+    #[cfg(feature = "tls")]
+    pub fn tls(mut self, config: crate::tls::TlsConfig) -> Self {
+        self.tls_config = Some(config);
+        self
+    }
+
     /// Builds the server.
     ///
     /// # Errors
@@ -371,6 +392,8 @@ impl<Vendor, Authn, Authz, Layer> ServerBuilder<Vendor, Authn, Authz, Layer> {
             discovery_providers: self.discovery_providers,
             layer: self.layer,
             services: self.services,
+            #[cfg(feature = "tls")]
+            tls_config: self.tls_config,
         })
     }
 }
@@ -478,7 +501,37 @@ where
 
         let (addr, transport) = self.listener.local_addr()?;
 
+        // if TLS is configured, override the transport label for logging
+        #[cfg(feature = "tls")]
+        let transport = match &self.tls_config {
+            Some(cfg) if cfg.has_client_ca() => "mtls",
+            Some(_) => "tls",
+            None => transport,
+        };
+
         tracing::info!(target: "srv", addr = %addr, r#type = %transport, base = %base.as_deref().unwrap_or("/"), "Listening");
+
+        // TLS path: wrap the TCP listener and serve over TLS
+        #[cfg(feature = "tls")]
+        if let Some(tls_cfg) = self.tls_config {
+            return match self.listener {
+                Listener::Tcp(l) => {
+                    let tls_listener = tls_cfg.build(l).map_err(std::io::Error::other)?;
+                    axum::serve(
+                        tls_listener,
+                        router.into_make_service_with_connect_info::<ConnectInfo>(),
+                    )
+                    .with_graceful_shutdown(self.shutdown)
+                    .await
+                }
+                #[cfg(unix)]
+                _ => Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "TLS is only supported on TCP listeners",
+                )),
+            };
+        }
+
         match self.listener {
             Listener::Tcp(l) => {
                 axum::serve(
