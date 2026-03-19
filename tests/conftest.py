@@ -120,8 +120,33 @@ def gateway_banner() -> str:
 
 
 @pytest.fixture(scope="module")
-def gateway(request, gateway_args, gateway_banner):
-    gw = spawn_gateway(request.config, gateway_args, gateway_banner)
+def gateway_extra_features() -> list[str]:
+    """Extra cargo features to compile into the gateway binary.
+
+    Override in test modules that require optional features (e.g. ["tls"]).
+    """
+    return []
+
+
+@pytest.fixture(scope="module")
+def gateway_ssl_context():
+    """SSL context for the gateway's httpx client.
+
+    Override in TLS/mTLS test modules to return an ssl.SSLContext configured
+    with the appropriate CA and (for mTLS) client certificate.
+    """
+    return None
+
+
+@pytest.fixture(scope="module")
+def gateway(request, gateway_args, gateway_banner, gateway_extra_features, gateway_ssl_context):
+    gw = spawn_gateway(
+        request.config,
+        gateway_args,
+        gateway_banner,
+        extra_features=gateway_extra_features or None,
+        ssl_context=gateway_ssl_context,
+    )
 
     # Store URL for Bruno tests to access
     if gw.base_url:
