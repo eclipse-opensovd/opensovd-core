@@ -3,6 +3,8 @@
 
 """Shared test fixtures and utilities for gateway tests."""
 
+from __future__ import annotations
+
 import re
 import shlex
 import subprocess
@@ -19,7 +21,9 @@ GATEWAY_SPAWN_TIMEOUT = 30.0
 GATEWAY_WAIT_TIMEOUT = 1.0
 GATEWAY_TERMINATE_TIMEOUT = 5.0
 
-LISTENING_PATTERN = re.compile(r"Listening addr=([^\s]+) type=(tcp|unix|abstract|tls|mtls) base=([^\s]+)")
+LISTENING_PATTERN = re.compile(
+    r"Listening addr=([^\s]+) type=(tcp|unix|abstract|tls|mtls) base=([^\s]+)"
+)
 
 
 def _build_gateway(config: pytest.Config, extra_features: list[str] | None = None) -> Path:
@@ -152,7 +156,10 @@ class Gateway:
                         gw.client = httpx.Client(base_url=gw.base_url)
                     elif gw.transport in ("tls", "mtls"):
                         gw.base_url = f"https://{gw.addr}{base}"
-                        gw.client = httpx.Client(base_url=gw.base_url, verify=ssl_context)
+                        gw.client = httpx.Client(
+                            base_url=gw.base_url,
+                            verify=ssl_context if ssl_context is not None else True,
+                        )
                     else:
                         gw.base_url = f"http://localhost{base}"
                         uds_addr = "\0" + gw.addr if gw.transport == "abstract" else gw.addr

@@ -30,9 +30,12 @@ def gateway_args(request, tls_certs):
     )
     return default_gateway_args(
         request.config,
-        "--tls-cert", str(srv_cert),
-        "--tls-key", str(srv_key),
-        "--tls-client-ca", str(ca_path),
+        "--tls-cert",
+        str(srv_cert),
+        "--tls-key",
+        str(srv_key),
+        "--tls-client-ca",
+        str(ca_path),
     )
 
 
