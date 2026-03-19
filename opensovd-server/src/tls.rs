@@ -62,7 +62,12 @@ impl TlsConfig {
         !self.client_cas.is_empty()
     }
 
-    // build a TlsListener from this config and give TCP listener
+    /// Build a [`TlsListener`] from this config and the given TCP listener.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`TlsConfigError`] if the certificate or key files cannot be read,
+    /// contain no valid PEM entries, or if rustls rejects the TLS configuration.
     pub fn build(self, listener: TcpListener) -> Result<TlsListener, TlsConfigError> {
         let certs = load_certs(&self.cert)?;
         let key = load_key(&self.key)?;
