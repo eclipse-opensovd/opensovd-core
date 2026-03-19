@@ -30,8 +30,10 @@ def gateway_args(request, tls_certs):
     )
     return default_gateway_args(
         request.config,
-        "--tls-cert", str(srv_cert),
-        "--tls-key", str(srv_key),
+        "--tls-cert",
+        str(srv_cert),
+        "--tls-key",
+        str(srv_key),
     )
 
 
@@ -60,6 +62,6 @@ def test_tls_transport(gateway):
 
 def test_tls_rejects_untrusted_ca(gateway):
     """Client using system CA store cannot verify the self-signed server cert."""
-    with httpx.Client(base_url=gateway.base_url) as client:  # verify=True (system CAs)
-        with pytest.raises(httpx.ConnectError):
-            client.get("/version-info")
+    # verify=True (system CAs) — cannot verify self-signed cert
+    with httpx.Client(base_url=gateway.base_url) as client, pytest.raises(httpx.ConnectError):
+        client.get("/version-info")

@@ -48,9 +48,15 @@ def generate_test_certs(tmp) -> dict:
         .add_extension(x509.BasicConstraints(ca=True, path_length=None), critical=True)
         .add_extension(
             x509.KeyUsage(
-                digital_signature=True, key_cert_sign=True, crl_sign=True,
-                content_commitment=False, key_encipherment=False, data_encipherment=False,
-                key_agreement=False, encipher_only=False, decipher_only=False,
+                digital_signature=True,
+                key_cert_sign=True,
+                crl_sign=True,
+                content_commitment=False,
+                key_encipherment=False,
+                data_encipherment=False,
+                key_agreement=False,
+                encipher_only=False,
+                decipher_only=False,
             ),
             critical=True,
         )
@@ -75,10 +81,12 @@ def generate_test_certs(tmp) -> dict:
         .not_valid_before(now)
         .not_valid_after(now + 365 * day)
         .add_extension(
-            x509.SubjectAlternativeName([
-                x509.IPAddress(ipaddress.IPv4Address("127.0.0.1")),
-                x509.DNSName("localhost"),
-            ]),
+            x509.SubjectAlternativeName(
+                [
+                    x509.IPAddress(ipaddress.IPv4Address("127.0.0.1")),
+                    x509.DNSName("localhost"),
+                ]
+            ),
             critical=False,
         )
         .add_extension(
@@ -98,9 +106,7 @@ def generate_test_certs(tmp) -> dict:
         .serial_number(x509.random_serial_number())
         .not_valid_before(now)
         .not_valid_after(now + 365 * day)
-        .add_extension(
-            x509.ExtendedKeyUsage([ExtendedKeyUsageOID.CLIENT_AUTH]), critical=False
-        )
+        .add_extension(x509.ExtendedKeyUsage([ExtendedKeyUsageOID.CLIENT_AUTH]), critical=False)
         .add_extension(x509.BasicConstraints(ca=False, path_length=None), critical=True)
         .add_extension(
             x509.AuthorityKeyIdentifier.from_issuer_public_key(ca_key.public_key()),
