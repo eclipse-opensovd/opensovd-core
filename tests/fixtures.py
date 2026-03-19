@@ -33,7 +33,7 @@ def _build_gateway(config: pytest.Config, extra_features: list[str] | None = Non
         Path to the gateway binary
     """
     binary = config.getoption("--opensovd-binary")
-    if binary:
+    if binary and not extra_features:
         return Path(binary)
 
     release_mode = config.getoption("--opensovd-release")
