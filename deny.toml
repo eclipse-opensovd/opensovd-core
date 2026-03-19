@@ -16,6 +16,10 @@ version = 2
 ignore = [
     # Unmaintained (not vulnerable) transitive dev-only dependency: paste via mock-http-connector
     { id = "RUSTSEC-2024-0436", reason = "unmaintained transitive dev-only dep (paste via mock-http-connector)" },
+    # Marvin Attack timing side-channel in rsa crate (no patch available); pulled in by jsonwebtoken.
+    # rsa is only used for JWT signature verification in controlled environments, not for direct RSA
+    # decryption exposed to network attackers.
+    { id = "RUSTSEC-2023-0071", reason = "no patch available; rsa used only for JWT verification via jsonwebtoken, not for direct RSA operations exposed to timing attacks" },
 ]
 
 [licenses]
