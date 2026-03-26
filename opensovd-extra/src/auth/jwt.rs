@@ -250,28 +250,38 @@ mod tests {
         );
     }
 
-    use pkcs1::{EncodeRsaPrivateKey, EncodeRsaPublicKey};
-    use rsa::RsaPrivateKey;
+    use aws_lc_rs::encoding::AsDer;
+    use aws_lc_rs::rsa::KeySize;
+    use aws_lc_rs::signature::{KeyPair, RsaKeyPair};
 
     struct RsaTestKeys {
-        private_der: Vec<u8>,
+        private_pem: Vec<u8>,
         public_der: Vec<u8>,
     }
 
     static RSA_KEYS: LazyLock<RsaTestKeys> = LazyLock::new(|| {
-        let private_key = RsaPrivateKey::new(&mut rsa::rand_core::OsRng, 2048).unwrap();
-        let public_key = private_key.to_public_key();
+        use base64::Engine;
+        let key_pair = RsaKeyPair::generate(KeySize::Rsa2048).unwrap();
+        let public_der = key_pair.public_key().as_ref().to_vec();
+        let pkcs8_der = key_pair.as_der().unwrap();
+        let b64 = base64::engine::general_purpose::STANDARD.encode(pkcs8_der.as_ref());
+        let mut pem = String::from("-----BEGIN PRIVATE KEY-----\n");
+        for chunk in b64.as_bytes().chunks(64) {
+            pem.push_str(std::str::from_utf8(chunk).unwrap());
+            pem.push('\n');
+        }
+        pem.push_str("-----END PRIVATE KEY-----\n");
         RsaTestKeys {
-            private_der: private_key.to_pkcs1_der().unwrap().as_bytes().to_vec(),
-            public_der: public_key.to_pkcs1_der().unwrap().into_vec(),
+            private_pem: pem.into_bytes(),
+            public_der,
         }
     });
 
     fn make_rs512_token(claims: &Claims) -> String {
         encode(
             &Header::new(Algorithm::RS512),
-            claims,
-            &EncodingKey::from_rsa_der(&RSA_KEYS.private_der),
+            &claims,
+            &EncodingKey::from_rsa_pem(&RSA_KEYS.private_pem).unwrap(),
         )
         .unwrap()
     }
