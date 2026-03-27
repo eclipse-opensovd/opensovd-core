@@ -1,2 +1,4 @@
 sovd-interfaces
 target
+*.log
+.openapi-generator/

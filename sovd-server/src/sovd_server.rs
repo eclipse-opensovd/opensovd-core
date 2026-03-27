@@ -1,15 +1,14 @@
 /*
-* Copyright (c) 2025 The Contributors to Eclipse OpenSOVD (see CONTRIBUTORS)
-*
-* See the NOTICE file(s) distributed with this work for additional
-* information regarding copyright ownership.
-*
-* This program and the accompanying materials are made available under the
-* terms of the Apache License Version 2.0 which is available at
-* https://www.apache.org/licenses/LICENSE-2.0
-*
-* SPDX-License-Identifier: Apache-2.0
-*/
+ * SPDX-License-Identifier: Apache-2.0
+ * SPDX-FileCopyrightText: 2026 The Contributors to Eclipse OpenSOVD (see CONTRIBUTORS)
+ *
+ * See the NOTICE file(s) distributed with this work for additional
+ * information regarding copyright ownership.
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Apache License Version 2.0 which is available at
+ * https://www.apache.org/licenses/LICENSE-2.0
+ */
 
 //! Main library entry point for sovd_interfaces implementation.
 
@@ -25,6 +24,35 @@ use hyper::server::conn::Http;
 use hyper::service::Service;
 use hyper::{Body, Request, Response, header};
 use log::{error, info, warn};
+use openapi_client::{
+    EntityCollectionEntityIdClearDataCachedDataPutResponse,
+    EntityCollectionEntityIdClearDataClientDefinedResourcesPutResponse,
+    EntityCollectionEntityIdClearDataGetResponse,
+    EntityCollectionEntityIdClearDataLearnedDataPutResponse,
+    EntityCollectionEntityIdClearDataStatusGetResponse,
+    EntityCollectionEntityIdCyclicSubscriptionsGetResponse,
+    EntityCollectionEntityIdCyclicSubscriptionsIdDeleteResponse,
+    EntityCollectionEntityIdCyclicSubscriptionsIdGetResponse,
+    EntityCollectionEntityIdCyclicSubscriptionsIdPutResponse,
+    EntityCollectionEntityIdCyclicSubscriptionsPostResponse,
+    EntityCollectionEntityIdLogsGetResponse, EntityCollectionEntityIdScriptsGetResponse,
+    EntityCollectionEntityIdScriptsPostResponse,
+    EntityCollectionEntityIdScriptsScriptIdDeleteResponse,
+    EntityCollectionEntityIdScriptsScriptIdExecutionsExecutionIdDeleteResponse,
+    EntityCollectionEntityIdScriptsScriptIdExecutionsExecutionIdGetResponse,
+    EntityCollectionEntityIdScriptsScriptIdExecutionsExecutionIdPutResponse,
+    EntityCollectionEntityIdScriptsScriptIdExecutionsGetResponse,
+    EntityCollectionEntityIdScriptsScriptIdExecutionsPostResponse,
+    EntityCollectionEntityIdScriptsScriptIdGetResponse,
+    EntityCollectionEntityIdStatusForceRestartPutResponse,
+    EntityCollectionEntityIdStatusForceShutdownPutResponse,
+    EntityCollectionEntityIdStatusGetResponse, EntityCollectionEntityIdStatusRestartPutResponse,
+    EntityCollectionEntityIdStatusShutdownPutResponse,
+    EntityCollectionEntityIdStatusStartPutResponse, EntityCollectionEntityIdTriggersGetResponse,
+    EntityCollectionEntityIdTriggersIdDeleteResponse,
+    EntityCollectionEntityIdTriggersIdGetResponse, EntityCollectionEntityIdTriggersIdPutResponse,
+    EntityCollectionEntityIdTriggersPostResponse,
+};
 use openssl::ssl::{Ssl, SslAcceptor, SslAcceptorBuilder, SslFiletype, SslMethod};
 use regex::Regex;
 use serde_json::Value;
@@ -164,7 +192,7 @@ pub async fn get_m_dns_messages(
             match event {
                 ServiceEvent::ServiceResolved(info) => {
                     // Example: Handling ServiceResolved event
-                    if let Some(text_property) = info.get_property("sovd_mode") {
+                                                                        if let Some(text_property) = info.get_property("sovd_mode") {
                         let val_text = text_property.val_str();
                         info!("val_text in spawn: {}", val_text);
                     }
@@ -412,14 +440,20 @@ where
         entity_id: String,
         category: models::EntityCollectionEntityIdBulkDataGet200ResponseItemsInner,
         include_schema: Option<bool>,
+        tags: Option<&Vec<String>>,
+        from_timestamp: Option<chrono::DateTime<chrono::Utc>>,
+        to_timestamp: Option<chrono::DateTime<chrono::Utc>>,
         context: &C,
     ) -> Result<EntityCollectionEntityIdBulkDataCategoryGetResponse, ApiError> {
         info!(
-            "entity_collection_entity_id_bulk_data_category_get({:?}, \"{}\", {:?}, {:?}) - X-Span-ID: {:?}",
+            "entity_collection_entity_id_bulk_data_category_get({:?}, \"{}\", {:?}, {:?}, {:?}, {:?}, {:?}) - X-Span-ID: {:?}",
             entity_collection,
             entity_id,
             category,
             include_schema,
+            tags,
+            from_timestamp,
+            to_timestamp,
             context.get().0.clone()
         );
         Err(ApiError("Api-Error: Operation is NOT implemented".into()))
@@ -611,13 +645,15 @@ where
         entity_collection: models::EntityCollectionEntityIdDataCategoriesGetEntityCollectionParameter,
         entity_id: String,
         include_schema: Option<bool>,
+        tags: Option<&Vec<String>>,
         context: &C,
     ) -> Result<EntityCollectionEntityIdConfigurationsGetResponse, ApiError> {
         info!(
-            "entity_collection_entity_id_configurations_get({:?}, \"{}\", {:?}) - X-Span-ID: {:?}",
+            "entity_collection_entity_id_configurations_get({:?}, \"{}\", {:?}, {:?}) - X-Span-ID: {:?}",
             entity_collection,
             entity_id,
             include_schema,
+            tags,
             context.get().0.clone()
         );
         Err(ApiError("Api-Error: Operation is NOT implemented".into()))
@@ -674,7 +710,12 @@ where
             context.get().0.clone()
         );
         let response = EntityCollectionEntityIdDataCategoriesGet200Response {
-            items: vec!["sysInfo".to_string()],
+            items: vec![
+                models::EntityCollectionEntityIdDataCategoriesGet200ResponseItemsInner {
+                    item: "sysInfo".to_string(),
+                    category_translation_id: None,
+                },
+            ],
         };
 
         Ok(EntityCollectionEntityIdDataCategoriesGetResponse::TheRequestWasSuccessful(response))
@@ -687,15 +728,17 @@ where
         groups: Option<String>,
         category: Option<&Vec<String>>,
         include_schema: Option<bool>,
+        tags: Option<&Vec<String>>,
         context: &C,
     ) -> Result<EntityCollectionEntityIdDataGetResponse, ApiError> {
         info!(
-            "entity_collection_entity_id_data_get(\"{}\", \"{}\", {:?}, {:?}, {:?}) - X-Span-ID: {:?}",
+            "entity_collection_entity_id_data_get(\"{}\", \"{}\", {:?}, {:?}, {:?}, {:?}) - X-Span-ID: {:?}",
             entity_collection,
             entity_id,
             groups,
             category,
             include_schema,
+            tags,
             context.get().0.clone()
         );
 
@@ -760,12 +803,14 @@ where
         &self,
         entity_collection: models::EntityCollectionEntityIdDataCategoriesGetEntityCollectionParameter,
         entity_id: String,
+        tags: Option<&Vec<String>>,
         context: &C,
     ) -> Result<EntityCollectionEntityIdDataGroupsGetResponse, ApiError> {
         info!(
-            "entity_collection_entity_id_data_groups_get(\"{}\", \"{}\") - X-Span-ID: {:?}",
+            "entity_collection_entity_id_data_groups_get(\"{}\", \"{}\", {:?}) - X-Span-ID: {:?}",
             entity_collection,
             entity_id,
+            tags,
             context.get().0.clone()
         );
 
@@ -784,12 +829,14 @@ where
         &self,
         entity_collection: models::EntityCollectionEntityIdDataCategoriesGetEntityCollectionParameter,
         entity_id: String,
+        tags: Option<&Vec<String>>,
         context: &C,
     ) -> Result<EntityCollectionEntityIdDataListsGetResponse, ApiError> {
         info!(
-            "entity_collection_entity_id_data_lists_get({:?}, \"{}\") - X-Span-ID: {:?}",
+            "entity_collection_entity_id_data_lists_get({:?}, \"{}\", {:?}) - X-Span-ID: {:?}",
             entity_collection,
             entity_id,
+            tags,
             context.get().0.clone()
         );
         Err(ApiError("Api-Error: Operation is NOT implemented".into()))
@@ -1756,12 +1803,14 @@ where
         &self,
         entity_collection: models::EntityCollectionEntityIdDataCategoriesGetEntityCollectionParameter,
         include_schema: Option<bool>,
+        tags: Option<&Vec<String>>,
         context: &C,
     ) -> Result<EntityCollectionGetResponse, ApiError> {
         info!(
-            "entity_collection_get(\"{}\", {:?}) - X-Span-ID: {:?}",
+            "entity_collection_get(\"{}\", {:?}, {:?}) - X-Span-ID: {:?}",
             entity_collection,
             include_schema,
+            tags,
             context.get().0.clone()
         );
 
@@ -2098,7 +2147,7 @@ where
 
                 // Call entity_collection_get and process the response
                 match self
-                    .entity_collection_get(entity_collection, None, context)
+                    .entity_collection_get(entity_collection, None, None, context)
                     .await
                 {
                     Ok(EntityCollectionGetResponse::ResponseBody(response_body)) => {
@@ -2207,16 +2256,18 @@ where
         entity_collection: models::EntityCollectionEntityIdDataCategoriesGetEntityCollectionParameter,
         entity_id: String,
         include_schema: Option<bool>,
+        tags: Option<&Vec<String>>,
         status_left_square_bracket_key_right_square_bracket: Option<String>,
         severity: Option<i32>,
         scope: Option<String>,
         context: &C,
     ) -> Result<GetFaultsResponse, ApiError> {
         info!(
-            "get_faults({:?}, \"{}\", {:?}, {:?}, {:?}, {:?}) - X-Span-ID: {:?}",
+            "get_faults({:?}, \"{}\", {:?}, {:?}, {:?}, {:?}, {:?}) - X-Span-ID: {:?}",
             entity_collection,
             entity_id,
             include_schema,
+            tags,
             status_left_square_bracket_key_right_square_bracket,
             severity,
             scope,
@@ -2332,7 +2383,7 @@ where
         entity_collection: models::EntityCollectionEntityIdDataCategoriesGetEntityCollectionParameter,
         entity_id: String,
         lock_id: String,
-        entity_collection_entity_id_locks_post_request: models::EntityCollectionEntityIdLocksPostRequest,
+        entity_collection_entity_id_locks_post_request: models::EntityCollectionEntityIdLocksLockIdPutRequest,
         context: &C,
     ) -> Result<EntityCollectionEntityIdLocksLockIdPutResponse, ApiError> {
         info!(
@@ -2418,14 +2469,16 @@ where
         entity_id: String,
         include_proximity_proof: Option<bool>,
         include_schema: Option<bool>,
+        tags: Option<&Vec<String>>,
         context: &C,
     ) -> Result<EntityCollectionEntityIdOperationsGetResponse, ApiError> {
         info!(
-            "entity_collection_entity_id_operations_get({:?}, \"{}\", {:?}, {:?}) - X-Span-ID: {:?}",
+            "entity_collection_entity_id_operations_get({:?}, \"{}\", {:?}, {:?}, {:?}) - X-Span-ID: {:?}",
             entity_collection,
             entity_id,
             include_proximity_proof,
             include_schema,
+            tags,
             context.get().0.clone()
         );
         Err(ApiError("Api-Error: Operation is NOT implemented".into()))
@@ -2555,13 +2608,15 @@ where
         entity_collection: models::EntityCollectionEntityIdDataCategoriesGetEntityCollectionParameter,
         entity_id: String,
         include_schema: Option<bool>,
+        tags: Option<&Vec<String>>,
         context: &C,
     ) -> Result<EntityCollectionEntityIdModesGetResponse, ApiError> {
         info!(
-            "entity_collection_entity_id_modes_get({:?}, \"{}\", {:?}) - X-Span-ID: {:?}",
+            "entity_collection_entity_id_modes_get({:?}, \"{}\", {:?}, {:?}) - X-Span-ID: {:?}",
             entity_collection,
             entity_id,
             include_schema,
+            tags,
             context.get().0.clone()
         );
         Err(ApiError("Api-Error: Operation is NOT implemented".into()))
@@ -2714,6 +2769,545 @@ where
         );
         Err(ApiError("Api-Error: Operation is NOT implemented".into()))
     }
+
+    // Clear data methods
+    async fn entity_collection_entity_id_clear_data_cached_data_put(
+        &self,
+        entity_collection: models::EntityCollectionEntityIdDataCategoriesGetEntityCollectionParameter,
+        entity_id: String,
+        context: &C,
+    ) -> Result<EntityCollectionEntityIdClearDataCachedDataPutResponse, ApiError> {
+        info!(
+            "entity_collection_entity_id_clear_data_cached_data_put({:?}, \"{}\") - X-Span-ID: {:?}",
+            entity_collection,
+            entity_id,
+            context.get().0.clone()
+        );
+        Err(ApiError("Api-Error: Operation is NOT implemented".into()))
+    }
+
+    async fn entity_collection_entity_id_clear_data_client_defined_resources_put(
+        &self,
+        entity_collection: models::EntityCollectionEntityIdDataCategoriesGetEntityCollectionParameter,
+        entity_id: String,
+        context: &C,
+    ) -> Result<EntityCollectionEntityIdClearDataClientDefinedResourcesPutResponse, ApiError> {
+        info!(
+            "entity_collection_entity_id_clear_data_client_defined_resources_put({:?}, \"{}\") - X-Span-ID: {:?}",
+            entity_collection,
+            entity_id,
+            context.get().0.clone()
+        );
+        Err(ApiError("Api-Error: Operation is NOT implemented".into()))
+    }
+
+    async fn entity_collection_entity_id_clear_data_get(
+        &self,
+        entity_collection: models::EntityCollectionEntityIdDataCategoriesGetEntityCollectionParameter,
+        entity_id: String,
+        context: &C,
+    ) -> Result<EntityCollectionEntityIdClearDataGetResponse, ApiError> {
+        info!(
+            "entity_collection_entity_id_clear_data_get({:?}, \"{}\") - X-Span-ID: {:?}",
+            entity_collection,
+            entity_id,
+            context.get().0.clone()
+        );
+        Err(ApiError("Api-Error: Operation is NOT implemented".into()))
+    }
+
+    async fn entity_collection_entity_id_clear_data_learned_data_put(
+        &self,
+        entity_collection: models::EntityCollectionEntityIdDataCategoriesGetEntityCollectionParameter,
+        entity_id: String,
+        context: &C,
+    ) -> Result<EntityCollectionEntityIdClearDataLearnedDataPutResponse, ApiError> {
+        info!(
+            "entity_collection_entity_id_clear_data_learned_data_put({:?}, \"{}\") - X-Span-ID: {:?}",
+            entity_collection,
+            entity_id,
+            context.get().0.clone()
+        );
+        Err(ApiError("Api-Error: Operation is NOT implemented".into()))
+    }
+
+    async fn entity_collection_entity_id_clear_data_status_get(
+        &self,
+        entity_collection: models::EntityCollectionEntityIdDataCategoriesGetEntityCollectionParameter,
+        entity_id: String,
+        include_schema: Option<bool>,
+        context: &C,
+    ) -> Result<EntityCollectionEntityIdClearDataStatusGetResponse, ApiError> {
+        info!(
+            "entity_collection_entity_id_clear_data_status_get({:?}, \"{}\", {:?}) - X-Span-ID: {:?}",
+            entity_collection,
+            entity_id,
+            include_schema,
+            context.get().0.clone()
+        );
+        Err(ApiError("Api-Error: Operation is NOT implemented".into()))
+    }
+
+    // Cyclic subscriptions methods
+    async fn entity_collection_entity_id_cyclic_subscriptions_get(
+        &self,
+        entity_collection: models::EntityCollectionEntityIdDataCategoriesGetEntityCollectionParameter,
+        entity_id: String,
+        context: &C,
+    ) -> Result<EntityCollectionEntityIdCyclicSubscriptionsGetResponse, ApiError> {
+        info!(
+            "entity_collection_entity_id_cyclic_subscriptions_get({:?}, \"{}\") - X-Span-ID: {:?}",
+            entity_collection,
+            entity_id,
+            context.get().0.clone()
+        );
+        Err(ApiError("Api-Error: Operation is NOT implemented".into()))
+    }
+
+    async fn entity_collection_entity_id_cyclic_subscriptions_post(
+        &self,
+        entity_collection: models::EntityCollectionEntityIdDataCategoriesGetEntityCollectionParameter,
+        entity_id: String,
+        _entity_collection_entity_id_cyclic_subscriptions_post_request: models::EntityCollectionEntityIdCyclicSubscriptionsPostRequest,
+        include_schema: Option<bool>,
+        context: &C,
+    ) -> Result<EntityCollectionEntityIdCyclicSubscriptionsPostResponse, ApiError> {
+        info!(
+            "entity_collection_entity_id_cyclic_subscriptions_post({:?}, \"{}\", {:?}) - X-Span-ID: {:?}",
+            entity_collection,
+            entity_id,
+            include_schema,
+            context.get().0.clone()
+        );
+        Err(ApiError("Api-Error: Operation is NOT implemented".into()))
+    }
+
+    async fn entity_collection_entity_id_cyclic_subscriptions_id_delete(
+        &self,
+        entity_collection: models::EntityCollectionEntityIdDataCategoriesGetEntityCollectionParameter,
+        entity_id: String,
+        id: String,
+        context: &C,
+    ) -> Result<EntityCollectionEntityIdCyclicSubscriptionsIdDeleteResponse, ApiError> {
+        info!(
+            "entity_collection_entity_id_cyclic_subscriptions_id_delete({:?}, \"{}\", \"{}\") - X-Span-ID: {:?}",
+            entity_collection,
+            entity_id,
+            id,
+            context.get().0.clone()
+        );
+        Err(ApiError("Api-Error: Operation is NOT implemented".into()))
+    }
+
+    async fn entity_collection_entity_id_cyclic_subscriptions_id_get(
+        &self,
+        entity_collection: models::EntityCollectionEntityIdDataCategoriesGetEntityCollectionParameter,
+        entity_id: String,
+        id: String,
+        include_schema: Option<bool>,
+        context: &C,
+    ) -> Result<EntityCollectionEntityIdCyclicSubscriptionsIdGetResponse, ApiError> {
+        info!(
+            "entity_collection_entity_id_cyclic_subscriptions_id_get({:?}, \"{}\", \"{}\", {:?}) - X-Span-ID: {:?}",
+            entity_collection,
+            entity_id,
+            id,
+            include_schema,
+            context.get().0.clone()
+        );
+        Err(ApiError("Api-Error: Operation is NOT implemented".into()))
+    }
+
+    async fn entity_collection_entity_id_cyclic_subscriptions_id_put(
+        &self,
+        entity_collection: models::EntityCollectionEntityIdDataCategoriesGetEntityCollectionParameter,
+        entity_id: String,
+        id: String,
+        _entity_collection_entity_id_cyclic_subscriptions_id_put_request: models::EntityCollectionEntityIdCyclicSubscriptionsIdPutRequest,
+        context: &C,
+    ) -> Result<EntityCollectionEntityIdCyclicSubscriptionsIdPutResponse, ApiError> {
+        info!(
+            "entity_collection_entity_id_cyclic_subscriptions_id_put({:?}, \"{}\", \"{}\") - X-Span-ID: {:?}",
+            entity_collection,
+            entity_id,
+            id,
+            context.get().0.clone()
+        );
+        Err(ApiError("Api-Error: Operation is NOT implemented".into()))
+    }
+
+    // Logs method
+    async fn entity_collection_entity_id_logs_get(
+        &self,
+        entity_collection: models::EntityCollectionEntityIdDataCategoriesGetEntityCollectionParameter,
+        entity_id: String,
+        context: &C,
+    ) -> Result<EntityCollectionEntityIdLogsGetResponse, ApiError> {
+        info!(
+            "entity_collection_entity_id_logs_get({:?}, \"{}\") - X-Span-ID: {:?}",
+            entity_collection,
+            entity_id,
+            context.get().0.clone()
+        );
+        Err(ApiError("Api-Error: Operation is NOT implemented".into()))
+    }
+
+    // Scripts methods
+    async fn entity_collection_entity_id_scripts_get(
+        &self,
+        entity_collection: models::EntityCollectionEntityIdDataCategoriesGetEntityCollectionParameter,
+        entity_id: String,
+        include_schema: Option<bool>,
+        tags: Option<&Vec<String>>,
+        context: &C,
+    ) -> Result<EntityCollectionEntityIdScriptsGetResponse, ApiError> {
+        info!(
+            "entity_collection_entity_id_scripts_get({:?}, \"{}\", {:?}, {:?}) - X-Span-ID: {:?}",
+            entity_collection,
+            entity_id,
+            include_schema,
+            tags,
+            context.get().0.clone()
+        );
+        Err(ApiError("Api-Error: Operation is NOT implemented".into()))
+    }
+
+    async fn entity_collection_entity_id_scripts_post(
+        &self,
+        entity_collection: models::EntityCollectionEntityIdDataCategoriesGetEntityCollectionParameter,
+        entity_id: String,
+        _content_type: String,
+        _content_length: i32,
+        _content_disposition: String,
+        _body: swagger::ByteArray,
+        context: &C,
+    ) -> Result<EntityCollectionEntityIdScriptsPostResponse, ApiError> {
+        info!(
+            "entity_collection_entity_id_scripts_post({:?}, \"{}\") - X-Span-ID: {:?}",
+            entity_collection,
+            entity_id,
+            context.get().0.clone()
+        );
+        Err(ApiError("Api-Error: Operation is NOT implemented".into()))
+    }
+
+    async fn entity_collection_entity_id_scripts_script_id_delete(
+        &self,
+        entity_collection: models::EntityCollectionEntityIdDataCategoriesGetEntityCollectionParameter,
+        entity_id: String,
+        script_id: String,
+        context: &C,
+    ) -> Result<EntityCollectionEntityIdScriptsScriptIdDeleteResponse, ApiError> {
+        info!(
+            "entity_collection_entity_id_scripts_script_id_delete({:?}, \"{}\", \"{}\") - X-Span-ID: {:?}",
+            entity_collection,
+            entity_id,
+            script_id,
+            context.get().0.clone()
+        );
+        Err(ApiError("Api-Error: Operation is NOT implemented".into()))
+    }
+
+    async fn entity_collection_entity_id_scripts_script_id_get(
+        &self,
+        entity_collection: models::EntityCollectionEntityIdDataCategoriesGetEntityCollectionParameter,
+        entity_id: String,
+        script_id: String,
+        include_schema: Option<bool>,
+        context: &C,
+    ) -> Result<EntityCollectionEntityIdScriptsScriptIdGetResponse, ApiError> {
+        info!(
+            "entity_collection_entity_id_scripts_script_id_get({:?}, \"{}\", \"{}\", {:?}) - X-Span-ID: {:?}",
+            entity_collection,
+            entity_id,
+            script_id,
+            include_schema,
+            context.get().0.clone()
+        );
+        Err(ApiError("Api-Error: Operation is NOT implemented".into()))
+    }
+
+    async fn entity_collection_entity_id_scripts_script_id_executions_get(
+        &self,
+        entity_collection: models::EntityCollectionEntityIdDataCategoriesGetEntityCollectionParameter,
+        entity_id: String,
+        script_id: String,
+        context: &C,
+    ) -> Result<EntityCollectionEntityIdScriptsScriptIdExecutionsGetResponse, ApiError> {
+        info!(
+            "entity_collection_entity_id_scripts_script_id_executions_get({:?}, \"{}\", \"{}\") - X-Span-ID: {:?}",
+            entity_collection,
+            entity_id,
+            script_id,
+            context.get().0.clone()
+        );
+        Err(ApiError("Api-Error: Operation is NOT implemented".into()))
+    }
+
+    async fn entity_collection_entity_id_scripts_script_id_executions_post(
+        &self,
+        entity_collection: models::EntityCollectionEntityIdDataCategoriesGetEntityCollectionParameter,
+        entity_id: String,
+        script_id: String,
+        _entity_collection_entity_id_operations_operation_id_executions_post_request: models::EntityCollectionEntityIdOperationsOperationIdExecutionsPostRequest,
+        context: &C,
+    ) -> Result<EntityCollectionEntityIdScriptsScriptIdExecutionsPostResponse, ApiError> {
+        info!(
+            "entity_collection_entity_id_scripts_script_id_executions_post({:?}, \"{}\", \"{}\") - X-Span-ID: {:?}",
+            entity_collection,
+            entity_id,
+            script_id,
+            context.get().0.clone()
+        );
+        Err(ApiError("Api-Error: Operation is NOT implemented".into()))
+    }
+
+    async fn entity_collection_entity_id_scripts_script_id_executions_execution_id_delete(
+        &self,
+        entity_collection: models::EntityCollectionEntityIdDataCategoriesGetEntityCollectionParameter,
+        entity_id: String,
+        script_id: String,
+        execution_id: String,
+        context: &C,
+    ) -> Result<EntityCollectionEntityIdScriptsScriptIdExecutionsExecutionIdDeleteResponse, ApiError>
+    {
+        info!(
+            "entity_collection_entity_id_scripts_script_id_executions_execution_id_delete({:?}, \"{}\", \"{}\", \"{}\") - X-Span-ID: {:?}",
+            entity_collection,
+            entity_id,
+            script_id,
+            execution_id,
+            context.get().0.clone()
+        );
+        Err(ApiError("Api-Error: Operation is NOT implemented".into()))
+    }
+
+    async fn entity_collection_entity_id_scripts_script_id_executions_execution_id_get(
+        &self,
+        entity_collection: models::EntityCollectionEntityIdDataCategoriesGetEntityCollectionParameter,
+        entity_id: String,
+        script_id: String,
+        execution_id: String,
+        include_schema: Option<bool>,
+        context: &C,
+    ) -> Result<EntityCollectionEntityIdScriptsScriptIdExecutionsExecutionIdGetResponse, ApiError>
+    {
+        info!(
+            "entity_collection_entity_id_scripts_script_id_executions_execution_id_get({:?}, \"{}\", \"{}\", \"{}\", {:?}) - X-Span-ID: {:?}",
+            entity_collection,
+            entity_id,
+            script_id,
+            execution_id,
+            include_schema,
+            context.get().0.clone()
+        );
+        Err(ApiError("Api-Error: Operation is NOT implemented".into()))
+    }
+
+    async fn entity_collection_entity_id_scripts_script_id_executions_execution_id_put(
+        &self,
+        entity_collection: models::EntityCollectionEntityIdDataCategoriesGetEntityCollectionParameter,
+        entity_id: String,
+        script_id: String,
+        execution_id: String,
+        _entity_collection_entity_id_scripts_script_id_executions_execution_id_put_request: models::EntityCollectionEntityIdScriptsScriptIdExecutionsExecutionIdPutRequest,
+        context: &C,
+    ) -> Result<EntityCollectionEntityIdScriptsScriptIdExecutionsExecutionIdPutResponse, ApiError>
+    {
+        info!(
+            "entity_collection_entity_id_scripts_script_id_executions_execution_id_put({:?}, \"{}\", \"{}\", \"{}\") - X-Span-ID: {:?}",
+            entity_collection,
+            entity_id,
+            script_id,
+            execution_id,
+            context.get().0.clone()
+        );
+        Err(ApiError("Api-Error: Operation is NOT implemented".into()))
+    }
+
+    // Status management methods
+    async fn entity_collection_entity_id_status_force_restart_put(
+        &self,
+        entity_collection: models::EntityCollectionEntityIdDataCategoriesGetEntityCollectionParameter,
+        entity_id: String,
+        _entity_collection_entity_id_status_restart_put_request: models::EntityCollectionEntityIdStatusRestartPutRequest,
+        context: &C,
+    ) -> Result<EntityCollectionEntityIdStatusForceRestartPutResponse, ApiError> {
+        info!(
+            "entity_collection_entity_id_status_force_restart_put({:?}, \"{}\") - X-Span-ID: {:?}",
+            entity_collection,
+            entity_id,
+            context.get().0.clone()
+        );
+        Err(ApiError("Api-Error: Operation is NOT implemented".into()))
+    }
+
+    async fn entity_collection_entity_id_status_force_shutdown_put(
+        &self,
+        entity_collection: models::EntityCollectionEntityIdDataCategoriesGetEntityCollectionParameter,
+        entity_id: String,
+        context: &C,
+    ) -> Result<EntityCollectionEntityIdStatusForceShutdownPutResponse, ApiError> {
+        info!(
+            "entity_collection_entity_id_status_force_shutdown_put({:?}, \"{}\") - X-Span-ID: {:?}",
+            entity_collection,
+            entity_id,
+            context.get().0.clone()
+        );
+        Err(ApiError("Api-Error: Operation is NOT implemented".into()))
+    }
+
+    async fn entity_collection_entity_id_status_get(
+        &self,
+        entity_collection: models::EntityCollectionEntityIdDataCategoriesGetEntityCollectionParameter,
+        entity_id: String,
+        context: &C,
+    ) -> Result<EntityCollectionEntityIdStatusGetResponse, ApiError> {
+        info!(
+            "entity_collection_entity_id_status_get({:?}, \"{}\") - X-Span-ID: {:?}",
+            entity_collection,
+            entity_id,
+            context.get().0.clone()
+        );
+        Err(ApiError("Api-Error: Operation is NOT implemented".into()))
+    }
+
+    async fn entity_collection_entity_id_status_restart_put(
+        &self,
+        entity_collection: models::EntityCollectionEntityIdDataCategoriesGetEntityCollectionParameter,
+        entity_id: String,
+        _entity_collection_entity_id_status_restart_put_request: models::EntityCollectionEntityIdStatusRestartPutRequest,
+        context: &C,
+    ) -> Result<EntityCollectionEntityIdStatusRestartPutResponse, ApiError> {
+        info!(
+            "entity_collection_entity_id_status_restart_put({:?}, \"{}\") - X-Span-ID: {:?}",
+            entity_collection,
+            entity_id,
+            context.get().0.clone()
+        );
+        Err(ApiError("Api-Error: Operation is NOT implemented".into()))
+    }
+
+    async fn entity_collection_entity_id_status_shutdown_put(
+        &self,
+        entity_collection: models::EntityCollectionEntityIdDataCategoriesGetEntityCollectionParameter,
+        entity_id: String,
+        context: &C,
+    ) -> Result<EntityCollectionEntityIdStatusShutdownPutResponse, ApiError> {
+        info!(
+            "entity_collection_entity_id_status_shutdown_put({:?}, \"{}\") - X-Span-ID: {:?}",
+            entity_collection,
+            entity_id,
+            context.get().0.clone()
+        );
+        Err(ApiError("Api-Error: Operation is NOT implemented".into()))
+    }
+
+    async fn entity_collection_entity_id_status_start_put(
+        &self,
+        entity_collection: models::EntityCollectionEntityIdDataCategoriesGetEntityCollectionParameter,
+        entity_id: String,
+        _entity_collection_entity_id_status_start_put_request: models::EntityCollectionEntityIdStatusStartPutRequest,
+        context: &C,
+    ) -> Result<EntityCollectionEntityIdStatusStartPutResponse, ApiError> {
+        info!(
+            "entity_collection_entity_id_status_start_put({:?}, \"{}\") - X-Span-ID: {:?}",
+            entity_collection,
+            entity_id,
+            context.get().0.clone()
+        );
+        Err(ApiError("Api-Error: Operation is NOT implemented".into()))
+    }
+
+    // Triggers methods
+    async fn entity_collection_entity_id_triggers_get(
+        &self,
+        entity_collection: models::EntityCollectionEntityIdDataCategoriesGetEntityCollectionParameter,
+        entity_id: String,
+        include_schema: Option<bool>,
+        context: &C,
+    ) -> Result<EntityCollectionEntityIdTriggersGetResponse, ApiError> {
+        info!(
+            "entity_collection_entity_id_triggers_get({:?}, \"{}\", {:?}) - X-Span-ID: {:?}",
+            entity_collection,
+            entity_id,
+            include_schema,
+            context.get().0.clone()
+        );
+        Err(ApiError("Api-Error: Operation is NOT implemented".into()))
+    }
+
+    async fn entity_collection_entity_id_triggers_post(
+        &self,
+        entity_collection: models::EntityCollectionEntityIdDataCategoriesGetEntityCollectionParameter,
+        entity_id: String,
+        _entity_collection_entity_id_triggers_post_request: models::EntityCollectionEntityIdTriggersPostRequest,
+        include_schema: Option<bool>,
+        context: &C,
+    ) -> Result<EntityCollectionEntityIdTriggersPostResponse, ApiError> {
+        info!(
+            "entity_collection_entity_id_triggers_post({:?}, \"{}\", {:?}) - X-Span-ID: {:?}",
+            entity_collection,
+            entity_id,
+            include_schema,
+            context.get().0.clone()
+        );
+        Err(ApiError("Api-Error: Operation is NOT implemented".into()))
+    }
+
+    async fn entity_collection_entity_id_triggers_id_delete(
+        &self,
+        entity_collection: models::EntityCollectionEntityIdDataCategoriesGetEntityCollectionParameter,
+        entity_id: String,
+        id: String,
+        context: &C,
+    ) -> Result<EntityCollectionEntityIdTriggersIdDeleteResponse, ApiError> {
+        info!(
+            "entity_collection_entity_id_triggers_id_delete({:?}, \"{}\", \"{}\") - X-Span-ID: {:?}",
+            entity_collection,
+            entity_id,
+            id,
+            context.get().0.clone()
+        );
+        Err(ApiError("Api-Error: Operation is NOT implemented".into()))
+    }
+
+    async fn entity_collection_entity_id_triggers_id_get(
+        &self,
+        entity_collection: models::EntityCollectionEntityIdDataCategoriesGetEntityCollectionParameter,
+        entity_id: String,
+        id: String,
+        include_schema: Option<bool>,
+        context: &C,
+    ) -> Result<EntityCollectionEntityIdTriggersIdGetResponse, ApiError> {
+        info!(
+            "entity_collection_entity_id_triggers_id_get({:?}, \"{}\", \"{}\", {:?}) - X-Span-ID: {:?}",
+            entity_collection,
+            entity_id,
+            id,
+            include_schema,
+            context.get().0.clone()
+        );
+        Err(ApiError("Api-Error: Operation is NOT implemented".into()))
+    }
+
+    async fn entity_collection_entity_id_triggers_id_put(
+        &self,
+        entity_collection: models::EntityCollectionEntityIdDataCategoriesGetEntityCollectionParameter,
+        entity_id: String,
+        id: String,
+        _entity_collection_entity_id_triggers_id_put_request: models::EntityCollectionEntityIdTriggersIdPutRequest,
+        context: &C,
+    ) -> Result<EntityCollectionEntityIdTriggersIdPutResponse, ApiError> {
+        info!(
+            "entity_collection_entity_id_triggers_id_put({:?}, \"{}\", \"{}\") - X-Span-ID: {:?}",
+            entity_collection,
+            entity_id,
+            id,
+            context.get().0.clone()
+        );
+        Err(ApiError("Api-Error: Operation is NOT implemented".into()))
+    }
 }
 
 #[cfg(test)]
@@ -2721,14 +3315,13 @@ mod tests {
 
     use super::*;
     use {
-        EntityCollectionEntityIdDataCategoriesGetEntityCollectionParameter as ColParam,
-        EntityCollectionEntityIdBulkDataGetResponse as BulkResp,
-        EntityCollectionEntityIdDataDataIdGetResponse as DataIdResp,
-        ComponentsComponentIdRelatedAppsGetResponse as AppsResp,
-        EntityCollectionEntityIdDataGetResponse as DataResp,
-        EntityCollectionGetResponse as EntityResp,
         AnyPathDocsGetDefaultResponse as ErrBody,
-        serde_json::Value as Value,
+        ComponentsComponentIdRelatedAppsGetResponse as AppsResp,
+        EntityCollectionEntityIdBulkDataGetResponse as BulkResp,
+        EntityCollectionEntityIdDataCategoriesGetEntityCollectionParameter as ColParam,
+        EntityCollectionEntityIdDataDataIdGetResponse as DataIdResp,
+        EntityCollectionEntityIdDataGetResponse as DataResp,
+        EntityCollectionGetResponse as EntityResp, serde_json::Value,
     };
 
     //Mock struct for tests
@@ -2737,34 +3330,41 @@ mod tests {
 
     //Mock TestContext for tests
     impl Has<XSpanIdString> for TestContext {
-        fn get(&self) -> &XSpanIdString { &self.0 }
-        fn get_mut(&mut self) -> &mut XSpanIdString { &mut self.0 }
-        fn set(&mut self, v: XSpanIdString) { self.0 = v; }
+        fn get(&self) -> &XSpanIdString {
+            &self.0
+        }
+        fn get_mut(&mut self) -> &mut XSpanIdString {
+            &mut self.0
+        }
+        fn set(&mut self, v: XSpanIdString) {
+            self.0 = v;
+        }
     }
 
     // Function used as mock SERVER_CONFIG for some of the tests.
     fn ensure_server_config(sovd_mode: String, host_name: String) {
         #[allow(unused)]
-        let cfg =     ServerConfig::create_server_settings(
-        "../config/sovd_server_apps.conf",
-        "http".to_string(),
-        "127.0.0.1".to_string(),
-        "8080".to_string(),
-        sovd_mode,
-        host_name,
-        ).expect("Failed to create server config");
+        let cfg = ServerConfig::create_server_settings(
+            "../config/sovd_server_apps.conf",
+            "http".to_string(),
+            "127.0.0.1".to_string(),
+            "8080".to_string(),
+            sovd_mode,
+            host_name,
+        )
+        .expect("Failed to create server config");
 
         if SERVER_CONFIG.get().is_none() {
             let _ = SERVER_CONFIG.set(cfg);
         }
-        
     }
-    
+
     //Mock for tests
-    fn make_server<C>() -> Server<C> { Server { marker: PhantomData } }
-
-
-
+    fn make_server<C>() -> Server<C> {
+        Server {
+            marker: PhantomData,
+        }
+    }
 
     /**
      * Test: `bulk_data_get_schema_none_when_not_requested`
@@ -2782,7 +3382,6 @@ mod tests {
 
     #[tokio::test]
     async fn bulk_data_get_schema_none_when_not_requested() {
- 
         let server = make_server::<TestContext>();
         let ctx = TestContext(XSpanIdString("span-1".into()));
 
@@ -2800,8 +3399,6 @@ mod tests {
         }
     }
 
-    
-    
     /**
      * Test: `bulk_data_get_schema_some_false_when_true_requested`
      *
@@ -2822,7 +3419,12 @@ mod tests {
         let ctx = TestContext(XSpanIdString("span-2".into()));
 
         let rsp = server
-            .entity_collection_entity_id_bulk_data_get(ColParam::Apps, "id-2".into(), Some(true), &ctx)
+            .entity_collection_entity_id_bulk_data_get(
+                ColParam::Apps,
+                "id-2".into(),
+                Some(true),
+                &ctx,
+            )
             .await
             .expect("Fail for entity_collection_entity_id_bulk_data_get");
 
@@ -2835,8 +3437,6 @@ mod tests {
         }
     }
 
-    
-    
     /**
      * Test: `data_get_apps_builds_four_items_with_expected_ids_and_name`
      *
@@ -2853,7 +3453,6 @@ mod tests {
 
     #[tokio::test]
     async fn data_get_apps_builds_four_items_with_expected_ids_and_name() {
-
         let server = make_server::<TestContext>();
         let ctx = TestContext(XSpanIdString("span-a".into()));
 
@@ -2877,19 +3476,23 @@ mod tests {
                     for item in &body.items {
                         if id == item.id {
                             assert_eq!(item.id, id);
-                            assert_eq!(item.name.to_lowercase(), format!("current {} usage for apps {}", id, entity_id.split('-').next().unwrap()));
+                            assert_eq!(
+                                item.name.to_lowercase(),
+                                format!(
+                                    "current {} usage for apps {}",
+                                    id,
+                                    entity_id.split('-').next().unwrap()
+                                )
+                            );
                             break;
                         }
                     }
                 }
-                
             }
             other => panic!("unexpected variant: {:?}", other),
         }
     }
 
-    
-    
     /**
      * Test: `data_get_components_builds_four_items`
      *
@@ -2905,7 +3508,6 @@ mod tests {
 
     #[tokio::test]
     async fn data_get_components_builds_four_items() {
-
         let server = make_server::<TestContext>();
         let ctx = TestContext(XSpanIdString("span-b".into()));
 
@@ -2914,8 +3516,8 @@ mod tests {
             .entity_collection_entity_id_data_get(
                 ColParam::Components,
                 entity_id.to_string(),
-                None, 
-                None,  
+                None,
+                None,
                 None,
                 &ctx,
             )
@@ -2925,7 +3527,7 @@ mod tests {
         match rsp {
             DataResp::TheRequestWasSuccessful(body) => {
                 assert_eq!(body.items.len(), 4);
-                
+
                 let ids: Vec<_> = body.items.iter().map(|it| it.id.as_str()).collect();
                 assert!(ids.iter().any(|id| id.ends_with("-cpu")));
                 assert!(ids.iter().any(|id| id.ends_with("-disk")));
@@ -2935,8 +3537,6 @@ mod tests {
             other => panic!("unexpected variant: {:?}", other),
         }
     }
-
-    
 
     /**
      * Test: `data_get_default_branch_returns_not_yet_implemented`
@@ -2955,7 +3555,6 @@ mod tests {
 
     #[tokio::test]
     async fn data_get_default_branch_returns_not_yet_implemented() {
-
         let server = make_server::<TestContext>();
         let ctx = TestContext(XSpanIdString("span-c".into()));
 
@@ -2980,8 +3579,6 @@ mod tests {
         }
     }
 
-    
-    
     /**
      * Test: `data_groups_get_forwards_success_from_group_by_writability`
      *
@@ -2997,7 +3594,6 @@ mod tests {
 
     #[tokio::test]
     async fn data_groups_get_forwards_success_from_group_by_writability() {
-
         let server = make_server::<TestContext>();
         let ctx = TestContext(XSpanIdString("span-ok".into()));
 
@@ -3005,7 +3601,6 @@ mod tests {
 
         let expected = group_by_writability(&test).expect("should succeed for test data");
 
-       
         let got = server
             .entity_collection_entity_id_data_groups_get(
                 ColParam::Apps,
@@ -3015,12 +3610,12 @@ mod tests {
             .await
             .expect("Fail for entity_collection_entity_id_data_groups_get");
 
-        
-        assert_eq!(format!("{:?}", got), format!("{:?}", expected),
-            "API result should equal processor result");
+        assert_eq!(
+            format!("{:?}", got),
+            format!("{:?}", expected),
+            "API result should equal processor result"
+        );
     }
-
-    
 
     /**
      * Test: `entity_collection_entity_id_data_data_id_get_not_initialized`
@@ -3038,7 +3633,6 @@ mod tests {
 
     #[tokio::test]
     async fn entity_collection_entity_id_data_data_id_get_not_initialized() {
-
         let server = make_server::<TestContext>();
         let ctx = TestContext(XSpanIdString("span-c".into()));
 
@@ -3059,12 +3653,10 @@ mod tests {
                 let error_code = "UnknownResource".to_string();
                 assert_eq!(error_code, body.error_code);
             }
-            other => panic!("unexpected variant: {:?}", other)
+            other => panic!("unexpected variant: {:?}", other),
         }
     }
 
-
-    
     /**
      * Test: `entity_collection_entity_id_data_data_id_get_apps_fail_to_find_process`
      *
@@ -3081,7 +3673,6 @@ mod tests {
 
     #[tokio::test]
     async fn entity_collection_entity_id_data_data_id_get_apps_fail_to_find_process() {
-
         ensure_server_config(String::from("standalone"), String::from("noprocess"));
         let server = make_server::<TestContext>();
         let ctx = TestContext(XSpanIdString("span-c".into()));
@@ -3103,12 +3694,10 @@ mod tests {
                 let error_code = "ProcessNotFound".to_string();
                 assert_eq!(error_code, body.error_code);
             }
-            other => panic!("unexpected variant: {:?}", other)
+            other => panic!("unexpected variant: {:?}", other),
         }
     }
-    
 
-    
     /**
      * Test: `entity_collection_entity_id_data_data_id_get_apps_by_process_with_unknown_resource`
      *
@@ -3125,13 +3714,11 @@ mod tests {
 
     #[tokio::test]
     async fn entity_collection_entity_id_data_data_id_get_apps_by_process_with_unknown_resource() {
-
         ensure_server_config(String::from("standalone"), String::from("chassis-hpc"));
-        
+
         let server = make_server::<TestContext>();
         let ctx = TestContext(XSpanIdString("span-c".into()));
 
-    
         let rsp = server
             .entity_collection_entity_id_data_data_id_get(
                 ColParam::Apps,
@@ -3148,12 +3735,10 @@ mod tests {
                 let error_code = "UnknownResource".to_string();
                 assert_eq!(error_code, body.error_code);
             }
-            other => panic!("unexpected variant: {:?}", other)
+            other => panic!("unexpected variant: {:?}", other),
         }
-            
     }
 
-    
     /**
      * Test: `entity_collection_entity_id_data_data_id_get_apps_by_process_with_cpu_usage`
      *
@@ -3170,16 +3755,13 @@ mod tests {
      * This test uses the real endpoint function to simulate an actual API call.
      */
 
-
     #[tokio::test]
     async fn entity_collection_entity_id_data_data_id_get_apps_by_process_with_cpu_usage() {
-
         ensure_server_config(String::from("standalone"), String::from("chassis-hpc"));
-        
+
         let server = make_server::<TestContext>();
         let ctx = TestContext(XSpanIdString("span-c".into()));
 
-    
         let rsp = server
             .entity_collection_entity_id_data_data_id_get(
                 ColParam::Apps,
@@ -3193,7 +3775,6 @@ mod tests {
 
         match rsp {
             DataIdResp::TheRequestWasSuccessful(body) => {
-                
                 let data = json!({
                     "cpu_usage": body.data.get("cpu_usage").and_then(|val| val.as_str()),
                     "description": "CPU usage for sovd_server",
@@ -3201,15 +3782,11 @@ mod tests {
                 });
 
                 assert_eq!(body.data, data);
-            
             }
-            other => panic!("unexpected variant: {:?}", other)
+            other => panic!("unexpected variant: {:?}", other),
         }
-            
     }
 
-
-    
     /**
      * Test: `entity_collection_entity_id_data_data_id_get_apps_process_not_found`
      *
@@ -3226,13 +3803,11 @@ mod tests {
 
     #[tokio::test]
     async fn entity_collection_entity_id_data_data_id_get_apps_process_not_found() {
-
         ensure_server_config(String::from("no_process"), String::from("chassis-hpc"));
-        
+
         let server = make_server::<TestContext>();
         let ctx = TestContext(XSpanIdString("span-c".into()));
 
-    
         let rsp = server
             .entity_collection_entity_id_data_data_id_get(
                 ColParam::Functions,
@@ -3249,12 +3824,9 @@ mod tests {
                 let error_code = "EntityCollectionNotFound".to_string();
                 assert_eq!(error_code, body.error_code);
             }
-            other => panic!("unexpected variant: {:?}", other)
+            other => panic!("unexpected variant: {:?}", other),
         }
-            
     }
-
-    
 
     /**
      * Test: `components_component_id_related_apps_get_sovd_mode_standalone`
@@ -3271,18 +3843,14 @@ mod tests {
 
     #[tokio::test]
     async fn components_component_id_related_apps_get_sovd_mode_standalone() {
-
         ensure_server_config(String::from("standalone"), String::from("chassis-hpc"));
-        
+
         let server = make_server::<TestContext>();
         let ctx = TestContext(XSpanIdString("span-c".into()));
 
         let component_id = "chassis-hpc".to_string();
         let rsp = server
-            .components_component_id_related_apps_get(
-                component_id,
-                &ctx,
-            )
+            .components_component_id_related_apps_get(component_id, &ctx)
             .await
             .expect("Fail for components_component_id_related_apps_get");
 
@@ -3290,13 +3858,10 @@ mod tests {
             AppsResp::ResponseBody(body) => {
                 assert!(!body.items.is_empty());
             }
-            other => panic!("unexpected variant: {:?}", other)
+            other => panic!("unexpected variant: {:?}", other),
         }
-            
     }
 
-
-    
     /**
      * Test: `entity_collection_get_chassis_hpc_with_schema`
      *
@@ -3312,35 +3877,26 @@ mod tests {
 
     #[tokio::test]
     async fn entity_collection_get_chassis_hpc_with_schema() {
-
         ensure_server_config(String::from("standalone"), String::from("chassis-hpc"));
-        
+
         let server = make_server::<TestContext>();
         let ctx = TestContext(XSpanIdString("span-c".into()));
 
         let rsp = server
-            .entity_collection_get(
-                ColParam::Components,
-                Some(true),
-                &ctx,
-            )
+            .entity_collection_get(ColParam::Components, Some(true), &ctx)
             .await
             .expect("Fail for entity_collection_get");
 
         match rsp {
             EntityResp::ResponseBody(body) => {
-                let expect = body.items.iter()
-                .any(|item| item.name == "Chassis-HPC");
+                let expect = body.items.iter().any(|item| item.name == "Chassis-HPC");
                 assert!(expect);
                 assert_eq!(body.schema, Some(false)); //Currently in the actual implementation there is just Some(false)
             }
-            other => panic!("unexpected variant: {:?}", other)
+            other => panic!("unexpected variant: {:?}", other),
         }
-            
     }
 
-
-    
     /**
      * Test: `entity_collection_get_chassis_hpc`
      *
@@ -3356,34 +3912,25 @@ mod tests {
 
     #[tokio::test]
     async fn entity_collection_get_chassis_hpc() {
-
         ensure_server_config(String::from("standalone"), String::from("chassis-hpc"));
-        
+
         let server = make_server::<TestContext>();
         let ctx = TestContext(XSpanIdString("span-c".into()));
 
         let rsp = server
-            .entity_collection_get(
-                ColParam::Components,
-                Some(false),
-                &ctx,
-            )
+            .entity_collection_get(ColParam::Components, Some(false), &ctx)
             .await
             .expect("Fail for entity_collection_get");
 
         match rsp {
             EntityResp::ResponseBody(body) => {
-                let expect = body.items.iter()
-                .any(|item| item.name == "Chassis-HPC");
+                let expect = body.items.iter().any(|item| item.name == "Chassis-HPC");
                 assert!(expect);
             }
-            other => panic!("unexpected variant: {:?}", other)
+            other => panic!("unexpected variant: {:?}", other),
         }
-            
     }
 
-
-    
     /**
      * Test: `entity_collection_get_no_defined_collection`
      *
@@ -3400,18 +3947,13 @@ mod tests {
 
     #[tokio::test]
     async fn entity_collection_get_no_defined_collection() {
-
         ensure_server_config(String::from("standalone"), String::from("chassis-hpc"));
-        
+
         let server = make_server::<TestContext>();
         let ctx = TestContext(XSpanIdString("span-c".into()));
 
         let rsp = server
-            .entity_collection_get(
-                ColParam::Apps,
-                Some(false),
-                &ctx,
-            )
+            .entity_collection_get(ColParam::Apps, Some(false), &ctx)
             .await
             .expect("Fail for entity_collection_get");
 
@@ -3420,10 +3962,7 @@ mod tests {
                 let error_code = "UnexpectedRequest".to_string();
                 assert_eq!(body.error_code, error_code);
             }
-            other => panic!("unexpected variant: {:?}", other)
+            other => panic!("unexpected variant: {:?}", other),
         }
-            
     }
-    
-
 }

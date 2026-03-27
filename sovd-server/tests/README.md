@@ -51,4 +51,3 @@ Each test performs the following steps:
 - The server address is dynamically assigned and stored in a static variable.
 - The process PID is retrieved using `get_process_pid("sovd-server")`.
 - The tests are asynchronous and use a shared HTTP client.
-

@@ -1,10 +1,10 @@
-# Introduction 
+# Introduction
 
 This repository will contain the In-Vehicle SOVD Gateway and Server Implementation of the Eclipse OpenSOVD project and its documentation.
 
 In the SOVD (Service-Oriented Vehicle Diagnostics) context, the In-Vehicle SOVD Gateway and Server provides a central point for handling diagnostic requests within the vehicle. It exposes standardized SOVD interfaces to clients (such as diagnostic tools or cloud services) while coordinating access to multiple ECUs through various adapters (for e.g. classic UDS adapters or newer vehicle-specific protocols).
 
-The gateway receives SOVD-REST requests, authenticates and routes them to the appropriate in-vehicle components, and aggregates responses before returning them to the client. 
+The gateway receives SOVD-REST requests, authenticates and routes them to the appropriate in-vehicle components, and aggregates responses before returning them to the client.
 
 # Goals:
 
@@ -18,10 +18,10 @@ Aggregate and standardize responses from other HPCs.
 # Getting Started
 The source code has parts generated with OpenAPI generator (https://github.com/OpenAPITools/openapi-generator )
 
-# Notes 
+# Notes
 - The software is in beta development. Please be aware of unexpected changes.
 - Due to copyright, the sovd schema files cannot be provided. The user is responsible get it.
- 
+
  Please read the schema [Notice](sovd-interfaces/NOTICE)
 
 # Build Instructions
@@ -86,7 +86,7 @@ Then following specifications start to interogate sovd_server for CPU consumptio
                               The response contain actual value of CPU load.
 
 
-#NOTE: 
+#NOTE:
    <data_id>-cpu: This resource provides information on the current CPU usage for the specified <data_id>.
    <data_id>-disk: This resource provides information on the current disk usage for the specified <data_id>.
    <data_id>-memory: This resource provides information on the current memory usage for the specified <data_id>.

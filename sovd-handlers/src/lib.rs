@@ -1,15 +1,14 @@
 /*
-* Copyright (c) 2025 The Contributors to Eclipse OpenSOVD (see CONTRIBUTORS)
-*
-* See the NOTICE file(s) distributed with this work for additional
-* information regarding copyright ownership.
-*
-* This program and the accompanying materials are made available under the
-* terms of the Apache License Version 2.0 which is available at
-* https://www.apache.org/licenses/LICENSE-2.0
-*
-* SPDX-License-Identifier: Apache-2.0
-*/
+ * SPDX-License-Identifier: Apache-2.0
+ * SPDX-FileCopyrightText: 2026 The Contributors to Eclipse OpenSOVD (see CONTRIBUTORS)
+ *
+ * See the NOTICE file(s) distributed with this work for additional
+ * information regarding copyright ownership.
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Apache License Version 2.0 which is available at
+ * https://www.apache.org/licenses/LICENSE-2.0
+ */
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Value as JsonValue, to_value};
@@ -268,6 +267,7 @@ pub fn create_entity_collection_response(
                 category_translation_id: None,
                 group: None,
                 group_translation_id: None,
+                tags: None,
             }
         })
         .collect();
@@ -360,7 +360,7 @@ fn create_group(
     group_id: String,
 ) -> Result<
     Vec<EntityCollectionEntityIdDataGet200ResponseItemsInner>,
-    Box<EntityCollectionEntityIdDataDataIdGet200ResponseErrorsInnerError,>,
+    Box<EntityCollectionEntityIdDataDataIdGet200ResponseErrorsInnerError>,
 > {
     Ok(elements
         .into_iter()
@@ -375,6 +375,7 @@ fn create_group(
                 translation_id: None, // If needed, you can add the translation here
                 category: "identData".to_string(),
                 groups: Some(vec![group_id.clone()]),
+                tags: None,
             }
         })
         .collect())
@@ -632,13 +633,14 @@ pub fn get_disk_usage_for_pid(pid: i32) -> Option<u64> {
     info!("get_disk_usage_for_pid with {}", pid);
     if let Ok(entries) = fs::read_dir(proc_fd_path) {
         for entry in entries {
-            if let Ok(entry) = entry && let Ok(metadata) = entry.metadata() {
-                    // Nur reguläre Dateien berücksichtigen
-                    if metadata.is_file() {
-                        disk_usage += metadata.len();
-                    }
+            if let Ok(entry) = entry
+                && let Ok(metadata) = entry.metadata()
+            {
+                // Nur reguläre Dateien berücksichtigen
+                if metadata.is_file() {
+                    disk_usage += metadata.len();
                 }
-            
+            }
         }
         info!("get_disk_usage_for_pid {}", disk_usage);
         Some(disk_usage)
@@ -680,7 +682,8 @@ pub fn get_memory_usage(pid: &str) -> Option<u64> {
     let s = System::new_all();
 
     if let Ok(pid_int) = pid.parse::<u32>() {
-        s.process(Pid::from_u32(pid_int)).map(|process| process.memory() / 1000)
+        s.process(Pid::from_u32(pid_int))
+            .map(|process| process.memory() / 1000)
     } else {
         None
     }
@@ -1253,10 +1256,12 @@ pub async fn gateway_request(
 
 use std::net::ToSocketAddrs;
 pub async fn is_host_available(host: &str, port: u16) -> bool {
-    if TcpStream::connect_timeout (
+    if TcpStream::connect_timeout(
         &(host, port).to_socket_addrs().unwrap().next().unwrap(),
         Duration::from_secs(5),
-    ).is_ok() {
+    )
+    .is_ok()
+    {
         info!("Verbindung zu {}:{} erfolgreich.", host, port);
         true // Connection successful -> Port available
     } else {
@@ -1271,17 +1276,17 @@ pub fn update_href_with_base_uri(json_value: &mut Value, base_uri: &str) {
         // Iterate over each element in the "items" array
         for item in items_array.iter_mut() {
             // Check if the element is an object and contains the "href" field
-            if let Some(obj) = item.as_object_mut() &&
-             let Some(href_value) = obj.get("href").and_then(|v| v.as_str()) {
-                    // Check if the "href" matches the base URI
-                    if !href_value.starts_with(base_uri) {
-                        // Replace the non-matching part of the URI with the base URI
-                        let updated_href = format!("{}{}", base_uri, href_value);
-                        // Replace the value of the "href" field in the object
-                        obj.insert("href".to_string(), Value::String(updated_href));
-                    }
+            if let Some(obj) = item.as_object_mut()
+                && let Some(href_value) = obj.get("href").and_then(|v| v.as_str())
+            {
+                // Check if the "href" matches the base URI
+                if !href_value.starts_with(base_uri) {
+                    // Replace the non-matching part of the URI with the base URI
+                    let updated_href = format!("{}{}", base_uri, href_value);
+                    // Replace the value of the "href" field in the object
+                    obj.insert("href".to_string(), Value::String(updated_href));
                 }
-            
+            }
         }
     }
 }
@@ -1306,8 +1311,9 @@ pub fn extract_response_data(
     data.insert("operations".to_string(), response.operations);
     data.insert("updates".to_string(), response.updates);
     data.insert("modes".to_string(), response.modes);
-    data.insert("relatedapps".to_string(), response.relatedapps);
-    data.insert("relatedcomponents".to_string(), response.relatedcomponents);
+    // Note: relatedapps and relatedcomponents fields don't exist in the schema
+    // data.insert("relatedapps".to_string(), response.relatedapps);
+    // data.insert("relatedcomponents".to_string(), response.relatedcomponents);
     data.insert("subareas".to_string(), response.subareas);
     data.insert("subcomponents".to_string(), response.subcomponents);
     data.insert("locks".to_string(), response.locks);
@@ -1356,18 +1362,17 @@ pub fn extract_response_data_from_json_to_response(
                 if let Some(field_value_str) = field_value.as_str() {
                     // Format the value using the base URI and the corresponding path
                     let formatted_value = format!(
-                            "{}/apps/{}/{}",
-                            base_uri,
-                            id,
-                            match field_name.as_str() {
-                                "data" => "data",
-                                "configurations" => "configuration",
-                                "bulk_data" => "bulk-data",
-                                // add other fields here
-                                _ => "",
-                            }
-                        );
-                    
+                        "{}/apps/{}/{}",
+                        base_uri,
+                        id,
+                        match field_name.as_str() {
+                            "data" => "data",
+                            "configurations" => "configuration",
+                            "bulk_data" => "bulk-data",
+                            // add other fields here
+                            _ => "",
+                        }
+                    );
 
                     // Add the field to the response if the value is not empty
                     if !field_value_str.is_empty() {
@@ -1426,8 +1431,9 @@ pub fn extract_response_data_from_json_to_response(
 }
 
 pub fn resolve_hostname(hostname: &str) -> Result<String, std::io::Error> {
-    let addr = (hostname, 0).to_socket_addrs()?.next().ok_or_else(|| {
-        std::io::Error::other("Hostname resolution failed")
-    })?;
+    let addr = (hostname, 0)
+        .to_socket_addrs()?
+        .next()
+        .ok_or_else(|| std::io::Error::other("Hostname resolution failed"))?;
     Ok(addr.ip().to_string())
 }

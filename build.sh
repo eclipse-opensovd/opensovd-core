@@ -64,7 +64,7 @@ function generate_code() {
     fi
 
     ensure_openapi_generator
-   
+
     # Ensure output directory exists
     mkdir -p "${OUT_DIR}"
 
@@ -75,6 +75,29 @@ function generate_code() {
         -o "${OUT_DIR}"
 
     echo "Generated Rust code at ${OUT_DIR}"
+}
+
+function fix_regex_patterns() {
+    echo "==> Fixing regex capture group names (hyphens -> underscores)"
+    local server_mod="${OUT_DIR}/src/server/mod.rs"
+
+    if [[ -f "${server_mod}" ]]; then
+        # Fix regex capture group names: (?P<name-with-hyphens> -> (?P<name_with_underscores>
+        # Multiple passes for parameters with multiple hyphens
+        for i in {1..5}; do
+            sed -i 's/(?P<\([^>]*\)-\([^>]*\)>/(?P<\1_\2>/g' "${server_mod}"
+        done
+
+        # Fix path_params accessor strings: path_params["name-with-hyphens"] -> path_params["name_with_underscores"]
+        # Multiple passes for parameters with multiple hyphens
+        for i in {1..5}; do
+            sed -i 's/path_params\["\([^"]*\)-\([^"]*\)"\]/path_params["\1_\2"]/g' "${server_mod}"
+        done
+
+        echo "Fixed regex patterns and accessors in ${server_mod}"
+    else
+        echo "Warning: ${server_mod} not found, skipping regex fix"
+    fi
 }
 
 function build_project() {
@@ -97,6 +120,7 @@ function start() {
     check_required_tools
     echo "==> Starting SOVD build process..."
     generate_code
+    fix_regex_patterns
     build_project
 }
 
@@ -113,7 +137,7 @@ function help() {
 }
 
 # --- MAIN ENTRYPOINT ---
-CMD="${1:-start}"   
+CMD="${1:-start}"
 
 case "$CMD" in
     start)

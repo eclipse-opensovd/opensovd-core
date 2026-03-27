@@ -29,7 +29,7 @@ if "%~1"=="" (
 )
 :: Progress command line parameter
 if defined %1 (
-  goto :%1 
+  goto :%1
 ) else (
   goto :help
 )
