@@ -285,6 +285,14 @@ pub struct TopologyWriteGuard<'a> {
     pending: Vec<TopologyEvent>,
 }
 
+impl Deref for TopologyWriteGuard<'_> {
+    type Target = TopologyState;
+
+    fn deref(&self) -> &Self::Target {
+        &self.state
+    }
+}
+
 impl TopologyWriteGuard<'_> {
     /// Adds a component. Overwrites an existing entry with the same ID.
     pub fn add_component(&mut self, component: Component) {
@@ -706,6 +714,15 @@ mod tests {
         topology.write().await.remove_area("network");
 
         assert_eq!(topology.read().await.apps_of_area("network").count(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_write_guard_read_through_deref() {
+        let topology = Topology::new();
+        let mut t = topology.write().await;
+        t.add_component(Component::new("ecu1", "ECU 1"));
+        assert_eq!(t.get_component("ecu1").unwrap().id(), "ecu1");
+        assert_eq!(t.components().len(), 1);
     }
 
     #[tokio::test]
