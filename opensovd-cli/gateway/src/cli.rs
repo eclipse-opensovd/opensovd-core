@@ -118,9 +118,6 @@ pub struct TlsArgs {
     )]
     pub client_ca: Vec<std::path::PathBuf>,
 
-    // directory of CA certs; all *.crt and *.pem files inside are loaded
-    #[arg(long = "tls-client-ca-dir", value_name = "DIR")]
-    pub client_ca_dir: Option<std::path::PathBuf>,
 }
 
 #[cfg(feature = "tls")]
@@ -137,23 +134,6 @@ impl TlsArgs {
 
         for ca in self.client_ca {
             cfg = cfg.with_client_ca(ca);
-        }
-
-        if let Some(dir) = self.client_ca_dir {
-            // walk the directory and add any .crt / .pem files
-            let entries = std::fs::read_dir(&dir).map_err(|e| {
-                anyhow::anyhow!("cannot read --tls-client-ca-dir {}: {e}", dir.display())
-            })?;
-            for entry in entries {
-                let path = entry
-                    .map_err(|e| anyhow::anyhow!("directory read error: {e}"))?
-                    .path();
-                if let Some(ext) = path.extension()
-                    && (ext == "crt" || ext == "pem")
-                {
-                    cfg = cfg.with_client_ca(path);
-                }
-            }
         }
 
         Ok(Some(cfg))
