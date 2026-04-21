@@ -117,7 +117,6 @@ pub struct TlsArgs {
         env = "SOVD_TLS_CLIENT_CA"
     )]
     pub client_ca: Vec<std::path::PathBuf>,
-
 }
 
 #[cfg(feature = "tls")]
