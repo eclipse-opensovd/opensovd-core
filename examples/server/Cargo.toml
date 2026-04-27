@@ -20,6 +20,15 @@ path = "systemd/systemd.rs"
 name = "auth"
 path = "auth/auth.rs"
 
+
+[[example]]
+name = "mtls"
+path = "mtls/mtls.rs"
+required-features = ["tls"]
+
+[features]
+tls = ["opensovd-server/tls"]
+
 [dependencies]
 async-trait = { workspace = true }
 jsonwebtoken = { workspace = true }

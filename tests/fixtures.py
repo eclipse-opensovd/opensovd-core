@@ -3,6 +3,8 @@
 
 """Shared test fixtures and utilities for gateway tests."""
 
+from __future__ import annotations
+
 import re
 import shlex
 import subprocess
@@ -19,31 +21,37 @@ GATEWAY_SPAWN_TIMEOUT = 30.0
 GATEWAY_WAIT_TIMEOUT = 1.0
 GATEWAY_TERMINATE_TIMEOUT = 5.0
 
-LISTENING_PATTERN = re.compile(r"Listening addr=([^\s]+) type=(tcp|unix|abstract) base=([^\s]+)")
+LISTENING_PATTERN = re.compile(
+    r"Listening addr=([^\s]+) type=(tcp|unix|abstract|tls|mtls) base=([^\s]+)"
+)
 
 
-def get_gateway_binary(config: pytest.Config) -> Path:
-    """Build or locate the gateway binary based on pytest options.
+def _build_gateway(config: pytest.Config, extra_features: list[str] | None = None) -> Path:
+    """Build or locate the gateway binary.
 
     Args:
         config: pytest configuration object
+        extra_features: Additional cargo features to enable on top of --opensovd-features
 
     Returns:
         Path to the gateway binary
     """
     binary = config.getoption("--opensovd-binary")
-    if binary:
+    if binary and not extra_features:
         return Path(binary)
 
     release_mode = config.getoption("--opensovd-release")
-    features = config.getoption("--opensovd-features")
+    configured = config.getoption("--opensovd-features") or ""
+    features: set[str] = {f for f in configured.split(",") if f}
+    if extra_features:
+        features.update(extra_features)
 
     project_root = Path(__file__).parent.parent
     cargo_cmd = ["cargo", "build", "-p", "opensovd-gateway"]
     if release_mode:
         cargo_cmd.append("--release")
     if features:
-        cargo_cmd.extend(["--features", features])
+        cargo_cmd.extend(["--features", ",".join(sorted(features))])
 
     result = subprocess.run(
         cargo_cmd,
@@ -56,6 +64,16 @@ def get_gateway_binary(config: pytest.Config) -> Path:
 
     profile = "release" if release_mode else "debug"
     return project_root / "target" / profile / "opensovd-gateway"
+
+
+def get_gateway_binary(config: pytest.Config) -> Path:
+    """Build or locate the gateway binary based on pytest options."""
+    return _build_gateway(config)
+
+
+def get_tls_gateway_binary(config: pytest.Config) -> Path:
+    """Build or locate the gateway binary with the tls feature enabled."""
+    return _build_gateway(config, extra_features=["tls"])
 
 
 class Gateway:
@@ -91,6 +109,7 @@ class Gateway:
         env: dict | None = None,
         banner: str | re.Pattern | None = None,
         docker_container: str | None = None,
+        ssl_context=None,
     ) -> Self:
         """Spawn process, wait for listening, return ready Gateway.
 
@@ -135,6 +154,12 @@ class Gateway:
                     if gw.transport == "tcp":
                         gw.base_url = f"http://{gw.addr}{base}"
                         gw.client = httpx.Client(base_url=gw.base_url)
+                    elif gw.transport in ("tls", "mtls"):
+                        gw.base_url = f"https://{gw.addr}{base}"
+                        gw.client = httpx.Client(
+                            base_url=gw.base_url,
+                            verify=ssl_context if ssl_context is not None else True,
+                        )
                     else:
                         gw.base_url = f"http://localhost{base}"
                         uds_addr = "\0" + gw.addr if gw.transport == "abstract" else gw.addr
@@ -265,6 +290,8 @@ def spawn_gateway(
     config: pytest.Config,
     args: list[str],
     banner: str | re.Pattern | None = "Listening addr=",
+    extra_features: list[str] | None = None,
+    ssl_context=None,
 ) -> Gateway:
     """Spawn a gateway process with the given arguments.
 
@@ -275,6 +302,8 @@ def spawn_gateway(
         config: pytest configuration object
         args: Command-line arguments for the gateway
         banner: Pattern to wait for before considering ready (None to skip)
+        extra_features: Additional cargo features to enable (e.g. ["tls"])
+        ssl_context: ssl.SSLContext for HTTPS gateways; passed to httpx.Client
 
     Returns:
         A running Gateway instance (caller must call close())
@@ -310,6 +339,6 @@ def spawn_gateway(
         docker_container = container_name if socket_type == "tcp" else None
         return Gateway.spawn(cmd, banner=banner, docker_container=docker_container)
     else:
-        bin_path = get_gateway_binary(config)
+        bin_path = _build_gateway(config, extra_features=extra_features)
         cmd = [str(bin_path), *args]
-        return Gateway.spawn(cmd, banner=banner)
+        return Gateway.spawn(cmd, banner=banner, ssl_context=ssl_context)

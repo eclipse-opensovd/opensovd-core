@@ -58,6 +58,10 @@ pub struct Cli {
     #[command(flatten)]
     pub auth: AuthArgs,
 
+    #[cfg(feature = "tls")]
+    #[command(flatten)]
+    pub tls: TlsArgs,
+
     /// Enable mock entities for testing and development.
     #[arg(help_heading = "Options")]
     #[cfg(feature = "mock")]
@@ -92,6 +96,47 @@ pub struct CorsArgs {
     /// Max age for CORS preflight cache in seconds.
     #[arg(long = "cors-max-age", value_name = "SECONDS")]
     pub max_age: Option<u64>,
+}
+
+#[cfg(feature = "tls")]
+#[derive(Args)]
+#[command(next_help_heading = "TLS Options")]
+pub struct TlsArgs {
+    // path to the server TLS certificate (PEM format).
+    #[arg(long = "tls-cert", value_name = "FILE", env = "SOVD_TLS_CERT")]
+    pub cert: Option<std::path::PathBuf>,
+
+    // path to the server TLS private key (PEM format).
+    #[arg(long = "tls-key", value_name = "FILE", env = "SOVD_TLS_KEY")]
+    pub key: Option<std::path::PathBuf>,
+
+    // one or more client CA cert files set, mTLS is enabled
+    #[arg(
+        long = "tls-client-ca",
+        value_name = "FILE",
+        env = "SOVD_TLS_CLIENT_CA"
+    )]
+    pub client_ca: Vec<std::path::PathBuf>,
+}
+
+#[cfg(feature = "tls")]
+impl TlsArgs {
+    // returns a TlsConfig if cert+key are provided, otherwise None
+    pub fn build(self) -> anyhow::Result<Option<opensovd_server::TlsConfig>> {
+        let (cert, key) = match (self.cert, self.key) {
+            (Some(c), Some(k)) => (c, k),
+            (None, None) => return Ok(None),
+            _ => anyhow::bail!("--tls-cert and --tls-key must both be provided"),
+        };
+
+        let mut cfg = opensovd_server::TlsConfig::new(cert, key);
+
+        for ca in self.client_ca {
+            cfg = cfg.with_client_ca(ca);
+        }
+
+        Ok(Some(cfg))
+    }
 }
 
 #[derive(Args)]
