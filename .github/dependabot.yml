@@ -13,3 +13,14 @@ updates:
           - "*"
     commit-message:
       prefix: "chore(deps)"
+
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      python:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: "chore(deps)"
