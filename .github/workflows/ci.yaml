@@ -218,8 +218,7 @@ jobs:
 
   pages:
     needs: [prepare, build, coverage]
-    # Disabled until GitHub Pages is enabled on the repository.
-    if: false
+    if: needs.prepare.outputs.should_run == 'true' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     permissions:
       pages: write
