@@ -7,7 +7,7 @@ version = "0.1.0"
 requires-python = ">=3.13"
 dependencies = [
     "cryptography>=46.0.0",
-    "pytest>=9.0.2",
+    "pytest>=9.0.3",
     "httpx>=0.28.1",
     "jsonschema>=4.26",
     "openapi-spec-validator>=0.7.2",
