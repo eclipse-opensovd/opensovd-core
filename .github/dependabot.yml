@@ -24,3 +24,14 @@ updates:
           - "*"
     commit-message:
       prefix: "chore(deps)"
+
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      cargo:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: "chore(deps)"
