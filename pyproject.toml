@@ -6,7 +6,7 @@ name = "opensovd-tests"
 version = "0.1.0"
 requires-python = ">=3.13"
 dependencies = [
-    "cryptography>=46.0.0",
+    "cryptography>=46.0.7",
     "pytest>=9.0.2",
     "httpx>=0.28.1",
     "jsonschema>=4.26",
