@@ -9,4 +9,4 @@ COPY target/release-small/${TARGETARCH}/opensovd-gateway /usr/local/bin/opensovd
 EXPOSE 7690
 
 ENTRYPOINT ["/usr/local/bin/opensovd-gateway"]
-CMD ["--url", "0.0.0.0:7690"]
+CMD ["--url", "http://0.0.0.0:7690/sovd"]
