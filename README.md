@@ -14,7 +14,7 @@ SPDX-License-Identifier: Apache-2.0
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 [![Good First Issues](https://img.shields.io/github/issues/eclipse-opensovd/opensovd-core/good%20first%20issue?label=good%20first%20issues&color=blue)](https://github.com/eclipse-opensovd/opensovd-core/labels/good%20first%20issue)
 
-Open-source implementation of the [ISO 22901-1](https://www.iso.org/standard/86587.html) SOVD (Service-Oriented Vehicle Diagnostics) standard.
+Open-source implementation of the [ISO 17978-3:2026](https://www.iso.org/standard/86587.html) SOVD (Service-Oriented Vehicle Diagnostics) standard.
 
 ## Quick Start
 
