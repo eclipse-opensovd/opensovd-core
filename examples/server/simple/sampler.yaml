@@ -1,5 +1,5 @@
 variables:
-  base_url: http://localhost:9000/sovd/v1/components/linux/data
+  base_url: http://localhost:7690/sovd/v1/components/linux/data
 
 runcharts:
   - title: CPU and Memory
