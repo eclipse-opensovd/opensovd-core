@@ -16,7 +16,7 @@ Exposes [OpenSOVD](https://github.com/eclipse-opensovd/opensovd-core) diagnostic
 opensovd-gateway
 
 # Listen on all interfaces
-opensovd-gateway --url 0.0.0.0:8080
+opensovd-gateway --url http://0.0.0.0:8080/sovd
 
 # Listen on a Unix socket
 opensovd-gateway --unix-socket /tmp/opensovd.sock
@@ -34,7 +34,7 @@ Mock data comes from the shared `opensovd-mocks` crate used across examples and 
 
 | Option          | Description                                          |
 |-----------------|------------------------------------------------------|
-| `--url`         | TCP address to listen on (default: `localhost:7690`) |
+| `--url`         | Server URL with base URI path (default: `http://localhost:7690/sovd`) |
 | `--unix-socket` | Unix socket path (`@` prefix for abstract sockets)   |
 | `--mock`        | Enable mock entities for testing                     |
 | `--serve-dir`   | Serve static files (`PATH:DIRECTORY`)                |
