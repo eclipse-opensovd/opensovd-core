@@ -165,6 +165,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
       - uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           cache-shared-key: ci
@@ -185,6 +187,24 @@ jobs:
             prek-${{ runner.os }}-
 
       - run: uv run prek run --all-files --show-diff-on-failure
+
+      - name: Validate commit subjects (Conventional Commits)
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          fail=0
+          for sha in $(git rev-list "$BASE_SHA..$HEAD_SHA"); do
+            git log -1 --format=%B "$sha" > /tmp/commit-msg
+            if ! uv run prek run --hook-stage commit-msg \
+                --commit-msg-filename /tmp/commit-msg conventional-pre-commit; then
+              echo "::error::Non-conventional commit subject: $(git log -1 --format='%h %s' "$sha")"
+              fail=1
+            fi
+          done
+          exit "$fail"
 
   coverage:
     needs: prepare
