@@ -8,6 +8,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use rustls::ServerConfig;
+use rustls::pki_types::pem::{self, PemObject};
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use rustls::server::WebPkiClientVerifier;
 use tokio::net::TcpListener;
@@ -126,11 +127,11 @@ fn read_file(path: &Path) -> Result<Vec<u8>, TlsConfigError> {
 
 fn load_certs(path: &Path) -> Result<Vec<CertificateDer<'static>>, TlsConfigError> {
     let data = read_file(path)?;
-    let certs: Vec<_> = rustls_pemfile::certs(&mut data.as_slice())
+    let certs: Vec<_> = CertificateDer::pem_slice_iter(&data)
         .collect::<Result<_, _>>()
         .map_err(|e| TlsConfigError::Io {
             path: path.display().to_string(),
-            source: e,
+            source: io::Error::other(e),
         })?;
     if certs.is_empty() {
         return Err(TlsConfigError::NoCerts(path.display().to_string()));
@@ -140,12 +141,13 @@ fn load_certs(path: &Path) -> Result<Vec<CertificateDer<'static>>, TlsConfigErro
 
 fn load_key(path: &Path) -> Result<PrivateKeyDer<'static>, TlsConfigError> {
     let data = read_file(path)?;
-    rustls_pemfile::private_key(&mut data.as_slice())
-        .map_err(|e| TlsConfigError::Io {
+    PrivateKeyDer::from_pem_slice(&data).map_err(|e| match e {
+        pem::Error::NoItemsFound => TlsConfigError::NoKey(path.display().to_string()),
+        other => TlsConfigError::Io {
             path: path.display().to_string(),
-            source: e,
-        })?
-        .ok_or_else(|| TlsConfigError::NoKey(path.display().to_string()))
+            source: io::Error::other(other),
+        },
+    })
 }
 
 /*
