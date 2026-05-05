@@ -17,7 +17,7 @@ name = "opensovd-gateway"
 path = "src/main.rs"
 
 [features]
-default = ["jsonschema", "json-preserve-order", "mock", "http2"]
+default = ["jsonschema", "json-preserve-order", "mock", "http2", "tls"]
 jsonschema = ["opensovd-server/jsonschema", "dep:schemars"]
 json-preserve-order = ["opensovd-server/json-preserve-order"]
 mock = ["dep:opensovd-mocks"]
