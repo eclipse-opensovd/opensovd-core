@@ -5,6 +5,8 @@
 
 use std::path::PathBuf;
 
+#[cfg(feature = "tls")]
+use anyhow::Context;
 use clap::{Args, Parser};
 
 pub const ABOUT: &str = "OpenSOVD Gateway Server";
@@ -121,21 +123,67 @@ pub struct TlsArgs {
 
 #[cfg(feature = "tls")]
 impl TlsArgs {
-    // returns a TlsConfig if cert+key are provided, otherwise None
-    pub fn build(self) -> anyhow::Result<Option<opensovd_server::TlsConfig>> {
-        let (cert, key) = match (self.cert, self.key) {
+    // returns a rustls::ServerConfig if cert+key are provided, otherwise None
+    pub fn build(self) -> anyhow::Result<Option<rustls::ServerConfig>> {
+        use std::sync::Arc;
+
+        use rustls::pki_types::pem::PemObject;
+        use rustls::pki_types::{CertificateDer, PrivateKeyDer};
+
+        let (cert_path, key_path) = match (self.cert, self.key) {
             (Some(c), Some(k)) => (c, k),
             (None, None) => return Ok(None),
             _ => anyhow::bail!("--tls-cert and --tls-key must both be provided"),
         };
 
-        let mut cfg = opensovd_server::TlsConfig::new(cert, key);
+        let certs: Vec<CertificateDer<'static>> = CertificateDer::pem_file_iter(&cert_path)
+            .with_context(|| format!("failed to read {}", cert_path.display()))?
+            .collect::<Result<_, _>>()
+            .with_context(|| format!("failed to parse {}", cert_path.display()))?;
+        anyhow::ensure!(
+            !certs.is_empty(),
+            "no certificates found in {}",
+            cert_path.display()
+        );
 
-        for ca in self.client_ca {
-            cfg = cfg.with_client_ca(ca);
-        }
+        let key = PrivateKeyDer::from_pem_file(&key_path)
+            .with_context(|| format!("failed to read private key from {}", key_path.display()))?;
 
-        Ok(Some(cfg))
+        let provider = Arc::new(rustls::crypto::aws_lc_rs::default_provider());
+        let builder = rustls::ServerConfig::builder_with_provider(Arc::clone(&provider))
+            .with_safe_default_protocol_versions()
+            .context("rustls protocol version setup")?;
+
+        let config = if self.client_ca.is_empty() {
+            builder
+                .with_no_client_auth()
+                .with_single_cert(certs, key)
+                .context("rustls server config")?
+        } else {
+            let mut roots = rustls::RootCertStore::empty();
+            for ca in &self.client_ca {
+                for cert in CertificateDer::pem_file_iter(ca)
+                    .with_context(|| format!("failed to read {}", ca.display()))?
+                {
+                    let cert = cert.with_context(|| format!("failed to parse {}", ca.display()))?;
+                    roots
+                        .add(cert)
+                        .with_context(|| format!("invalid CA cert in {}", ca.display()))?;
+                }
+            }
+            let verifier = rustls::server::WebPkiClientVerifier::builder_with_provider(
+                Arc::new(roots),
+                provider,
+            )
+            .build()
+            .context("client cert verifier")?;
+            builder
+                .with_client_cert_verifier(verifier)
+                .with_single_cert(certs, key)
+                .context("rustls server config")?
+        };
+
+        Ok(Some(config))
     }
 }
 

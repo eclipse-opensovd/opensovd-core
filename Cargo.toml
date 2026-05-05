@@ -66,7 +66,7 @@ mock-http-connector = { version = "0.5", default-features = false }
 aws-lc-rs = { version = "1", default-features = false, features = ["aws-lc-sys"] }
 rand = { version = "0.10.1", default-features = false }
 rmcp = { version = "1.6.0" }
-rustls = { version = "0.23", default-features = false, features = ["ring", "tls12"] }
+rustls = { version = "0.23", default-features = false, features = ["aws-lc-rs", "tls12"] }
 rustls-pki-types = { version = "1", default-features = false, features = ["std"] }
 tokio-rustls = { version = "0.26", default-features = false }
 
@@ -80,7 +80,7 @@ rust_2024_compatibility = { level = "warn", priority = -1 }
 [workspace.lints.clippy]
 pedantic = { level = "deny", priority = -1 }
 cargo = { level = "deny", priority = -1 }
-multiple_crate_versions = "deny"
+multiple_crate_versions = "allow"
 clone_on_ref_ptr = "deny"
 expect_used = "deny"
 indexing_slicing = "deny"

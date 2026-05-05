@@ -11,7 +11,7 @@ mod routes;
 mod schema;
 mod server;
 #[cfg(feature = "tls")]
-pub mod tls;
+mod tls;
 
 pub use ::http::request::Parts;
 pub use auth::{
@@ -26,5 +26,3 @@ pub use opensovd_core::{DataProvider, Topology};
 pub use opensovd_models::version::VendorInfo;
 pub use schema::JsonSchema;
 pub use server::{BuilderError, Listener, Server, ServerBuilder};
-#[cfg(feature = "tls")]
-pub use tls::{TlsConfig, TlsConfigError, TlsListener};

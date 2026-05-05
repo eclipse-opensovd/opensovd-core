@@ -17,8 +17,12 @@
             https://127.0.0.1:8443/sovd/v1/components
 */
 
+use std::sync::Arc;
+
 use opensovd_mocks::create_mock_topology;
-use opensovd_server::{Server, TlsConfig};
+use opensovd_server::Server;
+use rustls::pki_types::pem::PemObject;
+use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use tokio::net::TcpListener;
 
 // paths relative to workspace root; run scripts/mkcerts.sh to generate.
@@ -30,7 +34,26 @@ const CLIENT_CA: &str = "gen/certs/ca.crt";
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     libcli::init_tracing("info", None)?;
 
-    let tls = TlsConfig::new(CERT, KEY).with_client_ca(CLIENT_CA);
+    let certs: Vec<CertificateDer<'static>> =
+        CertificateDer::pem_file_iter(CERT)?.collect::<Result<_, _>>()?;
+    let key = PrivateKeyDer::from_pem_file(KEY)?;
+
+    let mut roots = rustls::RootCertStore::empty();
+    for ca in CertificateDer::pem_file_iter(CLIENT_CA)? {
+        roots.add(ca?)?;
+    }
+
+    let provider = Arc::new(rustls::crypto::aws_lc_rs::default_provider());
+    let verifier = rustls::server::WebPkiClientVerifier::builder_with_provider(
+        Arc::new(roots),
+        Arc::clone(&provider),
+    )
+    .build()?;
+    let tls = rustls::ServerConfig::builder_with_provider(provider)
+        .with_safe_default_protocol_versions()?
+        .with_client_cert_verifier(verifier)
+        .with_single_cert(certs, key)?;
+
     let listener = TcpListener::bind("127.0.0.1:8443").await?;
     let topology = create_mock_topology().await;
 

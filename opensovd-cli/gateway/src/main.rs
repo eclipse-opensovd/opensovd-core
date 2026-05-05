@@ -130,12 +130,7 @@ where
     #[cfg(feature = "tls")]
     {
         if let Some(tls_config) = cli.tls.build()? {
-            let mtls = tls_config.has_client_ca();
-            if mtls {
-                tracing::info!(target: TARGET, "mTLS enabled (client cert required)");
-            } else {
-                tracing::info!(target: TARGET, "TLS enabled");
-            }
+            tracing::info!(target: TARGET, "TLS enabled");
             builder = builder.tls(tls_config);
         }
     }
