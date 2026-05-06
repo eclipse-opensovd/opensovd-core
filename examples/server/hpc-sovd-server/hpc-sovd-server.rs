@@ -346,10 +346,10 @@ fn build_hpc_provider() -> Result<BuiltDataProvider, Box<dyn std::error::Error>>
 
     let cpu_brand = {
         let sys_info = System::new_all();
-        sys_info
-            .cpus()
-            .first()
-            .map_or_else(|| "Unknown Processor".to_string(), |c| c.brand().to_string())
+        sys_info.cpus().first().map_or_else(
+            || "Unknown Processor".to_string(),
+            |c| c.brand().to_string(),
+        )
     };
 
     let sys = Arc::new(Mutex::new(System::new()));
@@ -366,19 +366,79 @@ fn build_hpc_provider() -> Result<BuiltDataProvider, Box<dyn std::error::Error>>
     };
 
     let provider = DataProviderBuilder::new()
-        .read_data("os.version", "OS Version", &DataCategory::IdentData, Constant::new(os_version)?)
-        .read_data("os.name", "OS Name", &DataCategory::IdentData, Constant::new(os_name)?)
-        .read_data("os.pretty_name", "OS Pretty Name", &DataCategory::IdentData, Constant::new(os_pretty)?)
-        .read_data("os.id", "OS Identifier", &DataCategory::IdentData, Constant::new(os_id)?)
+        .read_data(
+            "os.version",
+            "OS Version",
+            &DataCategory::IdentData,
+            Constant::new(os_version)?,
+        )
+        .read_data(
+            "os.name",
+            "OS Name",
+            &DataCategory::IdentData,
+            Constant::new(os_name)?,
+        )
+        .read_data(
+            "os.pretty_name",
+            "OS Pretty Name",
+            &DataCategory::IdentData,
+            Constant::new(os_pretty)?,
+        )
+        .read_data(
+            "os.id",
+            "OS Identifier",
+            &DataCategory::IdentData,
+            Constant::new(os_id)?,
+        )
         .read_data("os.uptime", "System Uptime", &DataCategory::SysInfo, Uptime)
-        .read_data("cpu.usage", "CPU Usage %", &DataCategory::SysInfo, CpuUsage::new(&sys))
-        .read_data("mem.usage", "Memory Usage %", &DataCategory::SysInfo, MemoryUsage::new(&sys))
-        .read_data("hw.processor", "Processor", &DataCategory::IdentData, Constant::new(cpu_brand)?)
-        .read_data("mem.total", "Memory Total MB", &DataCategory::SysInfo, Constant::new(mem_total_mb)?)
-        .read_data("mem.used", "Memory Used MB", &DataCategory::SysInfo, MemoryUsedMb::new(&sys))
-        .read_data("hw.storage.total", "Storage Total MB", &DataCategory::SysInfo, Constant::new(storage_total_mb)?)
-        .read_data("hw.storage.used", "Storage Used MB", &DataCategory::SysInfo, StorageUsedMb)
-        .read_data("hw.temperature", "CPU Temperature °C", &DataCategory::SysInfo, Temperature)
+        .read_data(
+            "cpu.usage",
+            "CPU Usage %",
+            &DataCategory::SysInfo,
+            CpuUsage::new(&sys),
+        )
+        .read_data(
+            "mem.usage",
+            "Memory Usage %",
+            &DataCategory::SysInfo,
+            MemoryUsage::new(&sys),
+        )
+        .read_data(
+            "hw.processor",
+            "Processor",
+            &DataCategory::IdentData,
+            Constant::new(cpu_brand)?,
+        )
+        .read_data(
+            "mem.total",
+            "Memory Total MB",
+            &DataCategory::SysInfo,
+            Constant::new(mem_total_mb)?,
+        )
+        .read_data(
+            "mem.used",
+            "Memory Used MB",
+            &DataCategory::SysInfo,
+            MemoryUsedMb::new(&sys),
+        )
+        .read_data(
+            "hw.storage.total",
+            "Storage Total MB",
+            &DataCategory::SysInfo,
+            Constant::new(storage_total_mb)?,
+        )
+        .read_data(
+            "hw.storage.used",
+            "Storage Used MB",
+            &DataCategory::SysInfo,
+            StorageUsedMb,
+        )
+        .read_data(
+            "hw.temperature",
+            "CPU Temperature °C",
+            &DataCategory::SysInfo,
+            Temperature,
+        )
         .build()?;
 
     Ok(provider)
