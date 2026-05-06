@@ -1,5 +1,3 @@
 *
 !docker/
-!target/
-target/*
-!target/release-small/
+!dist/

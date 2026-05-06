@@ -4,7 +4,7 @@
 FROM gcr.io/distroless/cc-debian13:nonroot
 ARG TARGETARCH
 
-COPY target/release-small/${TARGETARCH}/opensovd-gateway /usr/local/bin/opensovd-gateway
+COPY dist/${TARGETARCH}/opensovd-gateway /usr/local/bin/opensovd-gateway
 
 EXPOSE 7690
 
