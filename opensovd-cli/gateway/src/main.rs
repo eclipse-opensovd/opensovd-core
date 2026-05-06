@@ -251,7 +251,7 @@ async fn configure_topology<Vendor, Authn, Authz, Layer>(
 
 fn notify_readiness() {
     #[cfg(target_os = "linux")]
-    if let Err(e) = sd_notify::notify(false, &[sd_notify::NotifyState::Ready]) {
+    if let Err(e) = sd_notify::notify(&[sd_notify::NotifyState::Ready]) {
         tracing::warn!(target: TARGET, error = %e, "Failed to notify systemd readiness");
     }
 }

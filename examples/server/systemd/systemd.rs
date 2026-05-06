@@ -43,7 +43,7 @@ mod systemd {
             .layer(libcli::trace::trace_layer())
             .build()?;
 
-        sd_notify::notify(false, &[NotifyState::Ready])?;
+        sd_notify::notify(&[NotifyState::Ready])?;
         tracing::info!(addr = %addr, "Server running");
         server.serve().await?;
         Ok(())
