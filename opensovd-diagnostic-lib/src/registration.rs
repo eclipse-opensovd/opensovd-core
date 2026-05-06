@@ -24,25 +24,35 @@ pub struct AppEndpoint {
     pub hosted_on: String,
 }
 
-/// Trait for registering this app with a SOVD server.
+/// Trait for registering and deregistering this app with a SOVD server.
 ///
 /// Any IPC mechanism can back this: REST, D-Bus, iceoryx2, SOME/IP, AUTOSAR COM, etc.
-/// The lib calls [`register`] on startup and retries on failure with exponential backoff.
+/// The lib calls [`register`] on startup with exponential backoff, and [`deregister`]
+/// on clean shutdown.
 #[async_trait]
 pub trait AppRegistrar: Send + Sync {
     /// Announce this app endpoint to the SOVD server.
     ///
     /// Return `Ok(())` on success. Any error will trigger a retry.
     async fn register(&self, endpoint: &AppEndpoint) -> Result<(), String>;
+
+    /// Remove this app from the SOVD server topology on clean shutdown.
+    ///
+    /// Default implementation is a no-op — override for transports that support it.
+    async fn deregister(&self, endpoint: &AppEndpoint) -> Result<(), String> {
+        let _ = endpoint;
+        Ok(())
+    }
 }
 
-/// REST-based registrar — POSTs [`AppEndpoint`] as JSON to a registration URL.
+/// REST-based registrar — POSTs [`AppEndpoint`] as JSON to register, DELETE to deregister.
 pub struct HttpRegistrar {
     url: String,
 }
 
 impl HttpRegistrar {
-    /// Create a registrar that POSTs [`AppEndpoint`] as JSON to `url`.
+    /// Create a registrar that POSTs to `url` on register and sends DELETE to
+    /// `{url}/{app_id}` on deregister.
     pub fn new(url: &str) -> Self {
         Self { url: url.to_string() }
     }
@@ -55,6 +65,22 @@ impl AppRegistrar for HttpRegistrar {
         let resp = client
             .post(&self.url)
             .json(endpoint)
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+
+        if resp.status().is_success() {
+            Ok(())
+        } else {
+            Err(format!("HTTP {}", resp.status()))
+        }
+    }
+
+    async fn deregister(&self, endpoint: &AppEndpoint) -> Result<(), String> {
+        let url = format!("{}/{}", self.url, endpoint.app_id);
+        let client = reqwest::Client::new();
+        let resp = client
+            .delete(&url)
             .send()
             .await
             .map_err(|e| e.to_string())?;

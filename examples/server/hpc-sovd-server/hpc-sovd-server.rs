@@ -1,13 +1,13 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 Contributors to the Eclipse Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-//! Simple example demonstrating a system component with real data.
+//! HPC SOVD server with dynamic app registration.
 //!
-//! Starts a SOVD server on port 7690 with a single "HPC - V1" component that
+//! Starts a SOVD server on port 7690 with a single "HPC" component that
 //! exposes OS identification, hardware specs, and live system metrics.
 //!
-//! Apps self-register via POST http://127.0.0.1:7691/register and are added to the
-//! topology dynamically — no hardcoded port configuration needed.
+//! Apps self-register via POST http://127.0.0.1:7691/register and deregister via
+//! DELETE http://127.0.0.1:7691/register/{app_id}. No server restart needed.
 //!
 //! Run with: `cargo run -p opensovd-examples-server --example hpc-sovd-server`
 
@@ -17,7 +17,7 @@ use async_trait::async_trait;
 use opensovd_core::{App, Component, Data, DataError, DataFilter, DataProvider, Metadata, Topology};
 use opensovd_models::data::DataCategory;
 use opensovd_providers::data::{Constant, DataProviderBuilder, ReadableDataResource, Value};
-use axum::{Json, Router, extract::State, routing::post};
+use axum::{Json, Router, extract::{Path, State}, http::StatusCode, routing::{delete, post}};
 use opensovd_server::Server;
 use sysinfo::{Components, Disks, System};
 use tokio::net::TcpListener;
@@ -264,6 +264,16 @@ async fn handle_registration(
     Json(serde_json::json!({ "status": "registered", "app_id": req.app_id }))
 }
 
+async fn handle_deregistration(
+    State(state): State<RegistrationState>,
+    Path(app_id): Path<String>,
+) -> StatusCode {
+    let mut topo = state.topology.write().await;
+    topo.remove_app(&app_id);
+    tracing::info!("Deregistered app '{}'", app_id);
+    StatusCode::OK
+}
+
 // ---------------------------------------------------------------------------
 
 #[tokio::main(flavor = "current_thread")]
@@ -335,6 +345,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tokio::spawn(async move {
         let app = Router::new()
             .route("/register", post(handle_registration))
+            .route("/register/{app_id}", delete(handle_deregistration))
             .with_state(reg_state);
 
         let Ok(listener) = TcpListener::bind("127.0.0.1:7691").await else {

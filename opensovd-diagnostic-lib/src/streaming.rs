@@ -63,7 +63,7 @@ pub fn create_stream_channel(capacity: usize) -> (StreamSender, StreamReceiver) 
     broadcast::channel(capacity)
 }
 
-/// SSE (Server-Sent Events) stream wrapper
+/// SSE stream wrapper used by `DiagnosticServer` for the `/api/stream` endpoint.
 pub struct SseStream {
     receiver: StreamReceiver,
 }
@@ -103,15 +103,17 @@ impl Stream for SseStream {
     }
 }
 
-/// Trait for data providers that support streaming
+/// Optional trait for data providers that want to push updates themselves.
+///
+/// Not required for the built-in `/api/stream` endpoint — that uses
+/// `create_periodic_stream` to poll `DataProvider::read_data` automatically.
+/// Implement this only if your app needs to drive the stream directly.
 #[async_trait::async_trait]
 pub trait StreamingDataProvider: Send + Sync {
-    /// Start streaming data updates
-    /// 
-    /// Returns a sender that the application can use to push updates
+    /// Start streaming data updates, returning a sender the caller can push events to.
     async fn start_streaming(&self, config: StreamConfig) -> Result<StreamSender, String>;
-    
-    /// Get available streaming data IDs
+
+    /// Return the data IDs this provider can stream.
     async fn streaming_data_ids(&self) -> Vec<String>;
 }
 

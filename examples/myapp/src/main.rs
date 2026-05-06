@@ -5,7 +5,7 @@
 //!
 //! Exposes 4 data items via opensovd-diagnostic-lib and self-registers with hpc-sovd-server.
 //!
-//! Run with: `cargo run --bin myapp`
+//! Run with: `cargo run -p MyApp --bin myapp`
 
 use std::time::{Duration, SystemTime};
 
@@ -111,7 +111,7 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
                 app_id:    "APP01".to_string(),
                 app_name:  "APP01 ECU Monitor".to_string(),
                 port:      8081,
-                hosted_on: "hpc-v1".to_string(),
+                hosted_on: "HPC".to_string(),
             },
         )
         .serve()

@@ -12,6 +12,24 @@ use crate::{DataProvider, DiagnosticError};
 use crate::data::{HealthResponse, ApiInfo, WriteDataRequest};
 use crate::registration::{AppEndpoint, AppRegistrar};
 
+/// Waits for SIGINT or SIGTERM.
+async fn shutdown_signal() {
+    #[cfg(unix)]
+    let sigterm = async {
+        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+            .expect("failed to install SIGTERM handler")
+            .recv()
+            .await;
+    };
+    #[cfg(not(unix))]
+    let sigterm = std::future::pending::<()>();
+
+    tokio::select! {
+        Ok(()) = tokio::signal::ctrl_c() => {},
+        () = sigterm => {},
+    }
+}
+
 /// Diagnostic HTTP server
 ///
 /// Provides a standardized HTTP API for applications to expose their diagnostic data.
@@ -19,7 +37,8 @@ use crate::registration::{AppEndpoint, AppRegistrar};
 pub struct DiagnosticServer<P: DataProvider> {
     provider: Arc<P>,
     port: u16,
-    registration: Option<(Box<dyn AppRegistrar>, AppEndpoint)>,
+    registration: Option<(Arc<dyn AppRegistrar>, AppEndpoint)>,
+    heartbeat_interval: Option<Duration>,
 }
 
 impl<P: DataProvider + 'static> DiagnosticServer<P> {
@@ -33,6 +52,7 @@ impl<P: DataProvider + 'static> DiagnosticServer<P> {
             provider: Arc::new(provider),
             port,
             registration: None,
+            heartbeat_interval: None,
         }
     }
 
@@ -46,40 +66,67 @@ impl<P: DataProvider + 'static> DiagnosticServer<P> {
         registrar: impl AppRegistrar + 'static,
         endpoint: AppEndpoint,
     ) -> Self {
-        self.registration = Some((Box::new(registrar), endpoint));
+        self.registration = Some((Arc::new(registrar), endpoint));
         self
     }
 
-    /// Start the HTTP server
+    /// Send a registration heartbeat to the SOVD server every `interval`.
     ///
-    /// This will block until the server is stopped.
+    /// Requires [`with_registration`](Self::with_registration) to be configured.
+    /// The heartbeat re-sends the registration so the server can detect stale apps via TTL.
+    pub fn with_heartbeat(mut self, interval: Duration) -> Self {
+        self.heartbeat_interval = Some(interval);
+        self
+    }
+
+    /// Start the HTTP server.
+    ///
+    /// Blocks until a shutdown signal (SIGINT or SIGTERM) is received, then
+    /// drains in-flight requests, calls `deregister` if configured, and returns.
     pub async fn serve(self) -> Result<(), Box<dyn std::error::Error>> {
         let provider = self.provider.clone();
 
-        // Spawn self-registration task before the server blocks
+        // Spawn registration, optional heartbeat, and handle graceful shutdown
+        let heartbeat_interval = self.heartbeat_interval;
+        let deregister = self.registration.as_ref().map(|(r, ep)| (Arc::clone(r), ep.clone()));
         if let Some((registrar, endpoint)) = self.registration {
+            // Initial registration with exponential backoff
+            let reg = Arc::clone(&registrar);
+            let ep = endpoint.clone();
             tokio::spawn(async move {
                 let mut delay = Duration::from_millis(500);
                 loop {
-                    match registrar.register(&endpoint).await {
+                    match reg.register(&ep).await {
                         Ok(()) => {
                             info!(
                                 "Registered '{}' with SOVD server (hosted on '{}')",
-                                endpoint.app_id, endpoint.hosted_on
+                                ep.app_id, ep.hosted_on
                             );
                             return;
                         }
                         Err(e) => {
-                            debug!(
-                                "Registration attempt failed ({}), retrying in {:?}",
-                                e, delay
-                            );
+                            debug!("Registration attempt failed ({}), retrying in {:?}", e, delay);
                             tokio::time::sleep(delay).await;
                             delay = (delay * 2).min(Duration::from_secs(30));
                         }
                     }
                 }
             });
+
+            // Heartbeat task — re-registers on the configured interval
+            if let Some(interval) = heartbeat_interval {
+                let reg = Arc::clone(&registrar);
+                let ep = endpoint.clone();
+                tokio::spawn(async move {
+                    loop {
+                        tokio::time::sleep(interval).await;
+                        if let Err(e) = reg.register(&ep).await {
+                            debug!("Heartbeat failed: {}", e);
+                        }
+                    }
+                });
+            }
+
         }
 
         // Health check endpoint
@@ -226,17 +273,27 @@ impl<P: DataProvider + 'static> DiagnosticServer<P> {
             .recover(handle_rejection);
 
         info!("Diagnostic API listening on http://127.0.0.1:{}", self.port);
-        info!("Endpoints:");
-        info!("GET  /health - Health check");
-        info!("GET  /api/info - Application info");
-        info!("GET  /api/data - List all data items");
-        info!("GET  /api/data/{{id}} - Read data item");
-        info!("PUT  /api/data/{{id}} - Write data item");
-        info!("GET  /api/stream?data_ids=id1,id2&interval_ms=100 - Stream data (SSE)");
+        info!("GET  /health");
+        info!("GET  /api/info");
+        info!("GET  /api/data");
+        info!("GET  /api/data/{{id}}");
+        info!("PUT  /api/data/{{id}}");
+        info!("GET  /api/stream?data_ids=id1,id2&interval_ms=100");
 
-        warp::serve(routes)
-            .run(([127, 0, 0, 1], self.port))
-            .await;
+        let (_, server) = warp::serve(routes)
+            .bind_with_graceful_shutdown(([127, 0, 0, 1], self.port), async {
+                shutdown_signal().await;
+            });
+
+        server.await;
+
+        // Deregister after the server has stopped accepting connections
+        if let Some((registrar, endpoint)) = deregister {
+            info!("Shutting down — deregistering '{}'", endpoint.app_id);
+            if let Err(e) = registrar.deregister(&endpoint).await {
+                debug!("Deregistration failed: {}", e);
+            }
+        }
 
         Ok(())
     }

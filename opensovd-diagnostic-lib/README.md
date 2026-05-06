@@ -75,14 +75,30 @@ DiagnosticServer::new(MyProvider, 8081)
             app_id:    "my-app".to_string(),
             app_name:  "My App".to_string(),
             port:      8081,
-            hosted_on: "HPC-v1".to_string(),
+            hosted_on: "HPC".to_string(),
         },
     )
     .serve()
     .await?;
 ```
 
-Need a different transport (D-Bus, iceoryx2, SOME/IP)? Implement `AppRegistrar` — one async method.
+Need a different transport (D-Bus, iceoryx2, SOME/IP)? Implement `AppRegistrar` — two async methods: `register` and `deregister` (default no-op).
+
+## Heartbeat
+
+Add a heartbeat so the SOVD server can detect stale apps:
+
+```rust
+use std::time::Duration;
+
+DiagnosticServer::new(MyProvider, 8081)
+    .with_registration(registrar, endpoint)
+    .with_heartbeat(Duration::from_secs(30))
+    .serve()
+    .await?;
+```
+
+The heartbeat re-sends the registration on the configured interval. On a clean shutdown (SIGINT or SIGTERM) the lib calls `deregister` before exiting, removing the app from the SOVD topology immediately.
 
 ## Endpoints
 
