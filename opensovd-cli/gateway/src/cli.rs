@@ -43,7 +43,7 @@ pub struct Cli {
     /// The host:port is used for TCP binding (ignored when using --unix-socket
     /// or systemd socket activation). The path is used as the base URI for all
     /// API routes.
-    #[arg(long, default_value = DEFAULT_URL)]
+    #[arg(long, env = "SOVD_URL", default_value = DEFAULT_URL)]
     pub url: String,
 
     /// Path to a Unix socket to listen on. Use '@' prefix for abstract sockets.

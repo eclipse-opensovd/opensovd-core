@@ -20,10 +20,19 @@ classDiagram
         -inner: Arc~RwLock~TopologyState~~
         -events: broadcast::Sender~TopologyEvent~
         +new() Topology
-        +read() Result~TopologyReadGuard~
-        +merge(remove, add) Result
-        +merge_unchecked(remove, add) Result
+        +with_event_capacity(capacity) Topology
+        +read() TopologyReadGuard
+        +write() TopologyWriteGuard
         +subscribe() Receiver~TopologyEvent~
+    }
+
+    class TopologyWriteGuard {
+        +add_component(component)
+        +add_app(app)
+        +add_area(area)
+        +remove_component(id)
+        +remove_app(id)
+        +remove_area(id)
     }
 
     class TopologyReadGuard {
@@ -126,6 +135,7 @@ classDiagram
     Server --> Authenticator : uses
     Server --> Authorizer : uses
     Topology --> TopologyReadGuard : produces
+    Topology --> TopologyWriteGuard : produces
     TopologyReadGuard --> Component : queries
     TopologyReadGuard --> App : queries
     TopologyReadGuard --> Area : queries
@@ -151,13 +161,19 @@ The main entry point for the OpenSOVD application. Built using a builder pattern
 
 ### Topology
 
-A thread-safe registry for components, apps, and areas. Wraps an `Arc<RwLock<TopologyState>>` where the state holds three `IndexMap` collections (one per entity kind) plus relationship indexes (`apps_by_component`, `components_by_area`, `apps_by_area`). Reading is done through `read()` which returns a `TopologyReadGuard` holding a single read lock for consistent multi-query access. Mutations use `merge()` (validates no duplicates or missing removals) or `merge_unchecked()` (silently skips missing removals, overwrites duplicates). Both emit `TopologyEvent::Added` / `TopologyEvent::Removed` via a `broadcast` channel. Callers can `subscribe()` to receive these events.
+A thread-safe registry for components, apps, and areas. Wraps an `Arc<RwLock<TopologyState>>` where the state holds three `IndexMap` collections (one per entity kind) plus relationship indexes (`apps_by_component`, `components_by_area`, `apps_by_area`). Reading is done through `read()` which returns a `TopologyReadGuard` holding a single read lock for consistent multi-query access. Mutations are done through `write()` which returns a `TopologyWriteGuard` holding a single write lock; `add_*` overwrites an existing entry with the same ID and `remove_*` silently skips missing IDs. `TopologyEvent::Added` / `TopologyEvent::Removed` events are batched on the guard and flushed via a `broadcast` channel when the guard is dropped. Callers can `subscribe()` to receive these events.
 
 **Crate:** `opensovd-core`
 
 ### TopologyReadGuard
 
 A read guard over the topology state. Holds a `RwLockReadGuard` for its lifetime, ensuring a consistent snapshot across multiple queries. Provides `get_component()`, `get_app()`, `get_area()` for single-entity lookup, `components()`, `apps()`, `areas()` for listing, and relationship queries: `apps_of_component()`, `components_of_area()`, `apps_of_area()`, `component_of_app()`, `area_of_component()`, `area_of_app()`.
+
+**Crate:** `opensovd-core`
+
+### TopologyWriteGuard
+
+A write guard over the topology state. Holds a `RwLockWriteGuard` for its lifetime so a batch of mutations applies atomically. Provides `add_component()`, `add_app()`, `add_area()` (each overwrites an existing entry with the same ID) and `remove_component()`, `remove_app()`, `remove_area()` (each silently skips missing IDs). Topology events are accumulated in the guard and flushed to the broadcast channel when the guard is dropped.
 
 **Crate:** `opensovd-core`
 

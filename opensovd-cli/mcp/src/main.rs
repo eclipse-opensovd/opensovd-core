@@ -96,49 +96,39 @@ impl McpServer {
         description = "Explore the vehicle diagnostic topology by listing components, areas, and apps."
     )]
     async fn explore_topology(&self) -> GetPromptResult {
-        GetPromptResult {
-            description: Some(
-                "Explore the vehicle diagnostic topology exposed by the SOVD server.".into(),
-            ),
-            messages: vec![PromptMessage::new_text(
-                PromptMessageRole::User,
-                "Read the sovd://topology resource, then:\n\
-                     1. List components\n\
-                     2. List areas\n\
-                     3. List apps and their hosting relationships\n\
-                     4. Summarize the vehicle's diagnostic topology",
-            )],
-        }
+        GetPromptResult::new(vec![PromptMessage::new_text(
+            PromptMessageRole::User,
+            "Read the sovd://topology resource, then:\n\
+                 1. List components\n\
+                 2. List areas\n\
+                 3. List apps and their hosting relationships\n\
+                 4. Summarize the vehicle's diagnostic topology",
+        )])
+        .with_description("Explore the vehicle diagnostic topology exposed by the SOVD server.")
     }
 }
 
-#[tool_handler]
-#[prompt_handler]
+#[tool_handler(router = self.tool_router)]
+#[prompt_handler(router = self.prompt_router)]
 impl ServerHandler for McpServer {
     fn get_info(&self) -> ServerInfo {
-        ServerInfo {
-            server_info: Implementation {
-                name: "opensovd-mcp".into(),
-                version: env!("CARGO_PKG_VERSION").into(),
-                description: Some(env!("CARGO_PKG_DESCRIPTION").into()),
-                ..Default::default()
-            },
-            instructions: Some(
+        let capabilities = ServerCapabilities::builder()
+            .enable_tools()
+            .enable_resources()
+            .enable_prompts()
+            .build();
+        let server_info = Implementation::new("opensovd-mcp", env!("CARGO_PKG_VERSION"))
+            .with_description(env!("CARGO_PKG_DESCRIPTION"));
+        ServerInfo::new(capabilities)
+            .with_server_info(server_info)
+            .with_instructions(
                 "OpenSOVD MCP server for vehicle diagnostics. \
                  Base URI: /sovd/v1. \
                  Entity hierarchy: Areas > Components > Apps > Functions. \
                  Each entity may expose: data, faults, operations, configurations, \
                  bulk-data, locks, and modes. \
-                 Use the topology resource to explore the vehicle."
-                    .into(),
-            ),
-            capabilities: ServerCapabilities::builder()
-                .enable_tools()
-                .enable_resources()
-                .enable_prompts()
-                .build(),
-            ..Default::default()
-        }
+                 Use the topology resource to explore the vehicle.",
+            )
     }
 
     async fn list_resources(
@@ -233,9 +223,10 @@ impl ServerHandler for McpServer {
             let _ = writeln!(text, "- {name} (id: {id})", name = app.name, id = app.id);
         }
 
-        Ok(ReadResourceResult {
-            contents: vec![ResourceContents::text(text, TOPOLOGY_URI)],
-        })
+        Ok(ReadResourceResult::new(vec![ResourceContents::text(
+            text,
+            TOPOLOGY_URI,
+        )]))
     }
 }
 
@@ -370,10 +361,7 @@ mod tests {
         let client = setup(mock_client(builder.build())).await;
 
         let result = client
-            .read_resource(ReadResourceRequestParams {
-                meta: None,
-                uri: TOPOLOGY_URI.into(),
-            })
+            .read_resource(ReadResourceRequestParams::new(TOPOLOGY_URI))
             .await?;
 
         let text = match &result.contents[0] {
@@ -415,11 +403,7 @@ mod tests {
         let client = setup(mock_client(connector)).await;
 
         let result = client
-            .get_prompt(GetPromptRequestParams {
-                meta: None,
-                name: "explore-topology".into(),
-                arguments: None,
-            })
+            .get_prompt(GetPromptRequestParams::new("explore-topology"))
             .await?;
 
         assert!(!result.messages.is_empty(), "expected at least one message");
@@ -454,12 +438,7 @@ mod tests {
         let client = setup(mock_client(builder.build())).await;
 
         let result = client
-            .call_tool(CallToolRequestParams {
-                meta: None,
-                name: "list_components".into(),
-                arguments: None,
-                task: None,
-            })
+            .call_tool(CallToolRequestParams::new("list_components"))
             .await?;
 
         let structured = result
@@ -488,12 +467,7 @@ mod tests {
         let client = setup(mock_client(builder.build())).await;
 
         let result = client
-            .call_tool(CallToolRequestParams {
-                meta: None,
-                name: "list_areas".into(),
-                arguments: None,
-                task: None,
-            })
+            .call_tool(CallToolRequestParams::new("list_areas"))
             .await?;
 
         let structured = result
@@ -522,12 +496,7 @@ mod tests {
         let client = setup(mock_client(builder.build())).await;
 
         let result = client
-            .call_tool(CallToolRequestParams {
-                meta: None,
-                name: "list_apps".into(),
-                arguments: None,
-                task: None,
-            })
+            .call_tool(CallToolRequestParams::new("list_apps"))
             .await?;
 
         let structured = result
