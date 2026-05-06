@@ -20,7 +20,7 @@ pub struct AppEndpoint {
     pub app_name: String,
     /// Port on which the diagnostic HTTP server is listening
     pub port: u16,
-    /// Component that hosts this app (e.g. `"HPC01"`)
+    /// Component that hosts this app (e.g. `"HPC"`)
     pub hosted_on: String,
 }
 

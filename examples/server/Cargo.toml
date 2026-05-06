@@ -27,8 +27,8 @@ path = "mtls/mtls.rs"
 required-features = ["tls"]
 
 [[example]]
-name = "HPC01-sovd-server"
-path = "HPC01-sovd-server/HPC01-sovd-server.rs"
+name = "hpc-sovd-server"
+path = "hpc-sovd-server/hpc-sovd-server.rs"
 
 [features]
 tls = ["opensovd-server/tls"]

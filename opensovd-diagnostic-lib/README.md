@@ -75,7 +75,7 @@ DiagnosticServer::new(MyProvider, 8081)
             app_id:    "my-app".to_string(),
             app_name:  "My App".to_string(),
             port:      8081,
-            hosted_on: "HPC01-v2x".to_string(),
+            hosted_on: "HPC-v1".to_string(),
         },
     )
     .serve()

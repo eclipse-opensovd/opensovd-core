@@ -227,12 +227,12 @@ impl<P: DataProvider + 'static> DiagnosticServer<P> {
 
         info!("Diagnostic API listening on http://127.0.0.1:{}", self.port);
         info!("Endpoints:");
-        info!("   GET  /health - Health check");
-        info!("   GET  /api/info - Application info");
-        info!("   GET  /api/data - List all data items");
-        info!("   GET  /api/data/{{id}} - Read data item");
-        info!("   PUT  /api/data/{{id}} - Write data item");
-        info!("   GET  /api/stream?data_ids=id1,id2&interval_ms=100 - Stream data (SSE)");
+        info!("GET  /health - Health check");
+        info!("GET  /api/info - Application info");
+        info!("GET  /api/data - List all data items");
+        info!("GET  /api/data/{{id}} - Read data item");
+        info!("PUT  /api/data/{{id}} - Write data item");
+        info!("GET  /api/stream?data_ids=id1,id2&interval_ms=100 - Stream data (SSE)");
 
         warp::serve(routes)
             .run(([127, 0, 0, 1], self.port))

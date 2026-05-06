@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 [workspace]
-members = ["benches", "examples/client", "examples/server", "examples/APP01", "opensovd-mocks", "opensovd-client", "opensovd-core", "opensovd-extra", "opensovd-models", "opensovd-providers", "opensovd-server", "opensovd-diagnostic-lib","opensovd-cli/lib", "opensovd-cli/gateway", "opensovd-cli/mcp"]
+members = ["benches", "examples/client", "examples/server", "examples/myapp", "opensovd-mocks", "opensovd-client", "opensovd-core", "opensovd-extra", "opensovd-models", "opensovd-providers", "opensovd-server", "opensovd-diagnostic-lib","opensovd-cli/lib", "opensovd-cli/gateway", "opensovd-cli/mcp"]
 resolver = "2"
 
 [workspace.package]

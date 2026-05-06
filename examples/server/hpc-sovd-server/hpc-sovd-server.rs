@@ -3,13 +3,13 @@
 
 //! Simple example demonstrating a system component with real data.
 //!
-//! Starts a SOVD server on port 7690 with a single "HPC01 - V2X" component that
+//! Starts a SOVD server on port 7690 with a single "HPC - V1" component that
 //! exposes OS identification, hardware specs, and live system metrics.
 //!
 //! Apps self-register via POST http://127.0.0.1:7691/register and are added to the
 //! topology dynamically — no hardcoded port configuration needed.
 //!
-//! Run with: `cargo run -p opensovd-examples-server --example HPC01-sovd-server`
+//! Run with: `cargo run -p opensovd-examples-server --example hpc-sovd-server`
 
 use std::sync::{Arc, Mutex};
 
@@ -319,7 +319,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let provider = builder.build()?;
 
-    let component = Component::new("HPC01", "HPC01 - v1").with_data_provider(provider);
+    let component = Component::new("HPC", "HPC - v1").with_data_provider(provider);
 
     let topology = Topology::new();
     {

@@ -1,10 +1,10 @@
-# APP01 — ECU Battery Voltage Monitor
+# MyApp — ECU Battery Voltage Monitor
 
 A minimal example application demonstrating how to integrate `opensovd-diagnostic-lib` into a Rust ECU application and make it diagnosable via a SOVD server.
 
 ## Overview
 
-APP01 simulates an ECU that monitors battery voltage. It exposes 4 diagnostic data items and self-registers with `HPC01-sovd-server` at startup — no manual server configuration needed.
+MyApp simulates an ECU that monitors battery voltage. It exposes 4 diagnostic data items and self-registers with `hpc-sovd-server` at startup — no manual server configuration needed.
 
 ## Data Items
 
@@ -19,14 +19,14 @@ APP01 simulates an ECU that monitors battery voltage. It exposes 4 diagnostic da
 
 ## Running
 
-Start `HPC01-sovd-server` first, then APP01:
+Start `hpc-sovd-server` first, then MyApp:
 
 ```bash
-cargo run --example HPC01-sovd-server -p opensovd-examples-server
-cargo run --bin APP01
+cargo run --example hpc-sovd-server -p opensovd-examples-server
+cargo run --bin myapp
 ```
 
-APP01 starts its diagnostic HTTP server on port 8081 and automatically registers with the SOVD server at `http://127.0.0.1:7691/register`.
+MyApp starts its diagnostic HTTP server on port 8081 and automatically registers with the SOVD server at `http://127.0.0.1:7691/register`.
 
 ## Diagnostic API
 
@@ -48,8 +48,8 @@ curl http://localhost:8081/api/data/battery.voltage
 After registration, data is also accessible through the SOVD server:
 
 ```bash
-curl http://localhost:7690/sovd/v1/apps/APP01/data
-curl http://localhost:7690/sovd/v1/apps/APP01/data/battery.voltage
+curl http://localhost:7690/sovd/v1/apps/myapp/data
+curl http://localhost:7690/sovd/v1/apps/myapp/data/battery.voltage
 ```
 
 ## Ports
@@ -58,7 +58,7 @@ curl http://localhost:7690/sovd/v1/apps/APP01/data/battery.voltage
 |------|---------|
 | 7690 | SOVD server |
 | 7691 | App registration endpoint |
-| 8081 | APP01 diagnostic HTTP server |
+| 8081 | MyApp diagnostic HTTP server |
 
 ## License
 

@@ -1,16 +1,16 @@
 [package]
-name = "APP01"
+name = "MyApp"
 version = "0.1.0"
 edition = "2021"
 authors = ["OpenSOVD Contributors"]
-description = "Minimal ECU battery voltage monitor example"
+description = "ECU battery voltage monitor example"
 license = "Apache-2.0"
 repository = "https://github.com/eclipse-opensovd/opensovd-core"
 keywords = ["sovd", "diagnostic"]
 categories = ["embedded"]
 
 [[bin]]
-name = "APP01"
+name = "myapp"
 path = "src/main.rs"
 
 [dependencies]
