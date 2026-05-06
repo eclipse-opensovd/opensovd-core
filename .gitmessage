@@ -7,7 +7,7 @@
 #   |      |
 #   |      Scope: client|server|sovd
 #   |
-#   Type: feat|fix|doc|perf|refactor|style|test|ci|build|revert|chore
+#   Type: feat|fix|docs|perf|refactor|style|test|ci|build|revert|chore
 #
 # An optional footer may contain a GitHub Issue/PR.
 #
@@ -20,7 +20,7 @@
 #
 ### Example: Documentation change
 #
-# doc: add more rustdoc
+# docs: add more rustdoc
 #
 ### Example: Fix issue
 #

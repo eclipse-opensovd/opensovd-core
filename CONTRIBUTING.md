@@ -53,7 +53,12 @@ This project follows these conventions:
 
   * Reference the related issue in the footer
   * See git commit message [template](.gitmessage)
-* Run [prek](https://prek.j178.dev/) before submitting a PR
+* Run [prek](https://prek.j178.dev/) before submitting a PR. Install
+  the git hooks once so they run automatically on every commit:
+
+  ```bash
+  uv run prek install --hook-type pre-commit --hook-type commit-msg
+  ```
 
 ## Legal considerations
 
