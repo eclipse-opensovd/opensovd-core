@@ -46,3 +46,14 @@ updates:
           - "*"
     commit-message:
       prefix: "chore(deps)"
+
+  - package-ecosystem: pre-commit
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      pre-commit:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: "chore(deps)"
