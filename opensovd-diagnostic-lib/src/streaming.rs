@@ -6,11 +6,12 @@
 //! This module provides Server-Sent Events (SSE) streaming capabilities
 //! for applications that need to push real-time data updates to clients.
 
-use futures::Stream;
-use serde::{Deserialize, Serialize};
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::time::Duration;
+
+use futures::Stream;
+use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
 use tokio::time::interval;
 
@@ -19,13 +20,13 @@ use tokio::time::interval;
 pub struct StreamEvent {
     /// Data item ID
     pub data_id: String,
-    
+
     /// Updated value
     pub value: serde_json::Value,
-    
+
     /// Timestamp (Unix epoch in milliseconds)
     pub timestamp: u64,
-    
+
     /// Optional event type (update, error, etc.)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub event_type: Option<String>,
@@ -36,10 +37,10 @@ pub struct StreamEvent {
 pub struct StreamConfig {
     /// Update interval in milliseconds
     pub interval_ms: u64,
-    
+
     /// Data IDs to stream
     pub data_ids: Vec<String>,
-    
+
     /// Maximum number of concurrent subscribers
     pub max_subscribers: usize,
 }
@@ -129,13 +130,13 @@ where
 {
     let (tx, _rx) = create_stream_channel(1000);
     let tx_clone = tx.clone();
-    
+
     tokio::spawn(async move {
         let mut interval = interval(Duration::from_millis(interval_ms));
-        
+
         loop {
             interval.tick().await;
-            
+
             for data_id in &data_ids {
                 match fetch_fn(data_id.clone()).await {
                     Ok(value) => {
@@ -148,7 +149,7 @@ where
                                 .as_millis() as u64,
                             event_type: Some("update".to_string()),
                         };
-                        
+
                         // Ignore send errors (no subscribers)
                         let _ = tx_clone.send(event);
                     }
@@ -159,7 +160,7 @@ where
             }
         }
     });
-    
+
     tx
 }
 
@@ -182,7 +183,7 @@ mod tests {
             timestamp: 1234567890,
             event_type: Some("update".to_string()),
         };
-        
+
         let json = serde_json::to_string(&event).unwrap();
         assert!(json.contains("test.data"));
         assert!(json.contains("25.5"));
@@ -191,14 +192,14 @@ mod tests {
     #[tokio::test]
     async fn test_create_stream_channel() {
         let (tx, mut rx) = create_stream_channel(10);
-        
+
         let event = StreamEvent {
             data_id: "test".to_string(),
             value: serde_json::json!(42),
             timestamp: 0,
             event_type: None,
         };
-        
+
         tx.send(event.clone()).unwrap();
         let received = rx.recv().await.unwrap();
         assert_eq!(received.data_id, "test");

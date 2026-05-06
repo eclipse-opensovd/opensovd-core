@@ -14,12 +14,12 @@ pub mod registration;
 mod server;
 pub mod streaming;
 
-pub use data::{DataCategory, DataItem, DataValue, HealthResponse, ApiInfo, WriteDataRequest};
+pub use data::{ApiInfo, DataCategory, DataItem, DataValue, HealthResponse, WriteDataRequest};
 pub use error::DiagnosticError;
-pub use provider::{DataProvider, AppInfo};
+pub use provider::{AppInfo, DataProvider};
 pub use registration::{AppEndpoint, AppRegistrar, HttpRegistrar};
 pub use server::DiagnosticServer;
-pub use streaming::{StreamConfig, StreamEvent, StreamingDataProvider, SseStream};
+pub use streaming::{SseStream, StreamConfig, StreamEvent, StreamingDataProvider};
 
 /// Result type for diagnostic operations
 pub type Result<T> = std::result::Result<T, DiagnosticError>;

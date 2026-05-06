@@ -42,32 +42,32 @@ impl DataCategory {
 pub struct DataItem {
     /// Unique identifier for the data item
     pub id: String,
-    
+
     /// Human-readable name
     pub name: String,
-    
+
     /// Data category
     pub category: DataCategory,
-    
+
     /// Optional translation ID for i18n
     #[serde(skip_serializing_if = "Option::is_none")]
     pub translation_id: Option<String>,
-    
+
     /// Groups this data belongs to
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub groups: Vec<String>,
-    
+
     /// Tags for filtering and organization
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tags: Vec<String>,
-    
+
     /// JSON schema for the data value
     #[serde(skip_serializing_if = "Option::is_none")]
     pub schema: Option<serde_json::Value>,
-    
+
     /// Whether the data can be read
     pub is_readable: bool,
-    
+
     /// Whether the data can be written
     pub is_writable: bool,
 }
@@ -77,7 +77,7 @@ pub struct DataItem {
 pub struct DataValue {
     /// The actual data value
     pub value: serde_json::Value,
-    
+
     /// Optional JSON schema for validation
     #[serde(skip_serializing_if = "Option::is_none")]
     pub schema: Option<serde_json::Value>,

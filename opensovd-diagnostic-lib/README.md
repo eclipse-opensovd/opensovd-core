@@ -6,7 +6,7 @@ A Rust library for embedding diagnostic data exposure into HPC applications. You
 
 You implement `DataProvider` — three async methods: list your data items, read a value, write a value. The library runs an HTTP server on whatever port you choose and handles all routing, serialization and error mapping.
 
-```
+```text
 Your app
   └─ implements DataProvider
        └─ DiagnosticServer exposes /api/data/* on a local port

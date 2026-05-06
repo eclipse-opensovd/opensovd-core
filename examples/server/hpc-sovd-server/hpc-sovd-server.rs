@@ -14,10 +14,19 @@
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
-use opensovd_core::{App, Component, Data, DataError, DataFilter, DataProvider, Metadata, Topology};
+use axum::{
+    Json, Router,
+    extract::{Path, State},
+    http::StatusCode,
+    routing::{delete, post},
+};
+use opensovd_core::{
+    App, Component, Data, DataError, DataFilter, DataProvider, Metadata, Topology,
+};
 use opensovd_models::data::DataCategory;
-use opensovd_providers::data::{Constant, DataProviderBuilder, ReadableDataResource, Value};
-use axum::{Json, Router, extract::{Path, State}, http::StatusCode, routing::{delete, post}};
+use opensovd_providers::data::{
+    BuiltDataProvider, Constant, DataProviderBuilder, ReadableDataResource, Value,
+};
 use opensovd_server::Server;
 use sysinfo::{Components, Disks, System};
 use tokio::net::TcpListener;
@@ -39,14 +48,19 @@ impl ReadableDataResource for Uptime {
 
 struct CpuUsage(Arc<Mutex<System>>);
 impl CpuUsage {
-    fn new(sys: &Arc<Mutex<System>>) -> Self { Self(Arc::clone(sys)) }
+    fn new(sys: &Arc<Mutex<System>>) -> Self {
+        Self(Arc::clone(sys))
+    }
 }
 #[async_trait]
 impl ReadableDataResource for CpuUsage {
     type Value = Value<f64>;
     async fn read(&self) -> Result<Self::Value, opensovd_core::DataError> {
         let cpu: f64 = {
-            let mut sys = self.0.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+            let mut sys = self
+                .0
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             sys.refresh_cpu_usage();
             sys.global_cpu_usage().into()
         };
@@ -56,7 +70,9 @@ impl ReadableDataResource for CpuUsage {
 
 struct MemoryUsage(Arc<Mutex<System>>);
 impl MemoryUsage {
-    fn new(sys: &Arc<Mutex<System>>) -> Self { Self(Arc::clone(sys)) }
+    fn new(sys: &Arc<Mutex<System>>) -> Self {
+        Self(Arc::clone(sys))
+    }
 }
 #[async_trait]
 impl ReadableDataResource for MemoryUsage {
@@ -64,11 +80,18 @@ impl ReadableDataResource for MemoryUsage {
     #[allow(clippy::cast_precision_loss)]
     async fn read(&self) -> Result<Self::Value, opensovd_core::DataError> {
         let pct: f64 = {
-            let mut sys = self.0.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+            let mut sys = self
+                .0
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             sys.refresh_memory();
             let total = sys.total_memory() as f64;
             let used = sys.used_memory() as f64;
-            if total > 0.0 { used / total * 100.0 } else { 0.0 }
+            if total > 0.0 {
+                used / total * 100.0
+            } else {
+                0.0
+            }
         };
         Ok(Value::new(pct))
     }
@@ -76,7 +99,9 @@ impl ReadableDataResource for MemoryUsage {
 
 struct MemoryUsedMb(Arc<Mutex<System>>);
 impl MemoryUsedMb {
-    fn new(sys: &Arc<Mutex<System>>) -> Self { Self(Arc::clone(sys)) }
+    fn new(sys: &Arc<Mutex<System>>) -> Self {
+        Self(Arc::clone(sys))
+    }
 }
 #[async_trait]
 impl ReadableDataResource for MemoryUsedMb {
@@ -84,7 +109,10 @@ impl ReadableDataResource for MemoryUsedMb {
     #[allow(clippy::cast_precision_loss)]
     async fn read(&self) -> Result<Self::Value, opensovd_core::DataError> {
         let mb: f64 = {
-            let mut sys = self.0.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+            let mut sys = self
+                .0
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             sys.refresh_memory();
             sys.used_memory() as f64 / 1_048_576.0
         };
@@ -99,9 +127,11 @@ impl ReadableDataResource for StorageUsedMb {
     #[allow(clippy::cast_precision_loss)]
     async fn read(&self) -> Result<Self::Value, opensovd_core::DataError> {
         let disks = Disks::new_with_refreshed_list();
-        let used_mb: f64 = disks.iter()
+        let used_mb: f64 = disks
+            .iter()
             .map(|d| d.total_space().saturating_sub(d.available_space()) as f64)
-            .sum::<f64>() / 1_048_576.0;
+            .sum::<f64>()
+            / 1_048_576.0;
         Ok(Value::new(used_mb))
     }
 }
@@ -112,7 +142,8 @@ impl ReadableDataResource for Temperature {
     type Value = Value<f64>;
     async fn read(&self) -> Result<Self::Value, opensovd_core::DataError> {
         let components = Components::new_with_refreshed_list();
-        let temp = components.iter()
+        let temp = components
+            .iter()
             .find(|c| {
                 let label = c.label().to_lowercase();
                 label.contains("cpu") || label.contains("core") || label.contains("temp")
@@ -154,7 +185,9 @@ impl GenericHttpProxy {
 impl DataProvider for GenericHttpProxy {
     async fn list(&self, _filter: DataFilter) -> Result<Vec<Metadata>, DataError> {
         let url = format!("{}/data", self.base_url);
-        let response = self.client.get(&url)
+        let response = self
+            .client
+            .get(&url)
             .send()
             .await
             .map_err(|e| DataError::Internal(e.to_string()))?;
@@ -163,42 +196,61 @@ impl DataProvider for GenericHttpProxy {
             return Err(DataError::Internal(format!("HTTP {}", response.status())));
         }
 
-        let items: Vec<serde_json::Value> = response.json()
+        let items: Vec<serde_json::Value> = response
+            .json()
             .await
             .map_err(|e| DataError::Internal(e.to_string()))?;
 
-        let data_list = items.into_iter().map(|item| {
-            let id = item.get("id").and_then(|v| v.as_str()).unwrap_or("unknown").to_string();
-            let name = item.get("name").and_then(|v| v.as_str()).unwrap_or(&id).to_string();
-            let category_str = item.get("category").and_then(|v| v.as_str()).unwrap_or("CurrentData");
-            let category = match category_str {
-                "IdentData" | "identData" => "IdentData",
-                "SysInfo" | "sysInfo" => "SysInfo",
-                "ConfigData" | "configData" => "ConfigData",
-                _ => "CurrentData",
-            };
+        let data_list = items
+            .into_iter()
+            .map(|item| {
+                let id = item
+                    .get("id")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("unknown")
+                    .to_string();
+                let name = item
+                    .get("name")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or(&id)
+                    .to_string();
+                let category_str = item
+                    .get("category")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("CurrentData");
+                let category = match category_str {
+                    "IdentData" | "identData" => "IdentData",
+                    "SysInfo" | "sysInfo" => "SysInfo",
+                    "ConfigData" | "configData" => "ConfigData",
+                    _ => "CurrentData",
+                };
 
-            Metadata {
-                id,
-                name,
-                category: category.to_string(),
-                translation_id: None,
-                groups: vec![],
-                tags: vec![],
-                schema: None,
-                is_readable: true,
-                is_writable: item.get("is_writable").and_then(serde_json::Value::as_bool)
-                    .or_else(|| item.get("writable").and_then(serde_json::Value::as_bool))
-                    .unwrap_or(false),
-            }
-        }).collect();
+                Metadata {
+                    id,
+                    name,
+                    category: category.to_string(),
+                    translation_id: None,
+                    groups: vec![],
+                    tags: vec![],
+                    schema: None,
+                    is_readable: true,
+                    is_writable: item
+                        .get("is_writable")
+                        .and_then(serde_json::Value::as_bool)
+                        .or_else(|| item.get("writable").and_then(serde_json::Value::as_bool))
+                        .unwrap_or(false),
+                }
+            })
+            .collect();
 
         Ok(data_list)
     }
 
     async fn read(&self, id: &str, _include_schema: bool) -> Result<Data, DataError> {
         let url = format!("{}/data/{}", self.base_url, id);
-        let response = self.client.get(&url)
+        let response = self
+            .client
+            .get(&url)
             .send()
             .await
             .map_err(|e| DataError::Internal(e.to_string()))?;
@@ -207,19 +259,25 @@ impl DataProvider for GenericHttpProxy {
             return Err(DataError::NotFound(id.to_string()));
         }
 
-        let data: serde_json::Value = response.json()
+        let data: serde_json::Value = response
+            .json()
             .await
             .map_err(|e| DataError::Internal(e.to_string()))?;
 
         Ok(Data {
-            data: data.get("value").cloned().unwrap_or(serde_json::Value::Null),
+            data: data
+                .get("value")
+                .cloned()
+                .unwrap_or(serde_json::Value::Null),
             schema: None,
         })
     }
 
     async fn write(&self, id: &str, value: serde_json::Value) -> Result<(), DataError> {
         let url = format!("{}/data/{}", self.base_url, id);
-        let response = self.client.put(&url)
+        let response = self
+            .client
+            .put(&url)
             .json(&serde_json::json!({"value": value}))
             .send()
             .await
@@ -248,8 +306,7 @@ async fn handle_registration(
     Json(req): Json<AppRegistrationRequest>,
 ) -> Json<serde_json::Value> {
     let proxy = GenericHttpProxy::new(format!("http://127.0.0.1:{}/api", req.port), state.client);
-    let app = App::new(&req.app_id, &req.app_name, &req.hosted_on)
-        .with_data_provider(proxy);
+    let app = App::new(&req.app_id, &req.app_name, &req.hosted_on).with_data_provider(proxy);
 
     {
         let mut topo = state.topology.write().await;
@@ -258,7 +315,10 @@ async fn handle_registration(
 
     tracing::info!(
         "Registered app '{}' ('{}') hosted on '{}' at port {}",
-        req.app_id, req.app_name, req.hosted_on, req.port
+        req.app_id,
+        req.app_name,
+        req.hosted_on,
+        req.port
     );
 
     Json(serde_json::json!({ "status": "registered", "app_id": req.app_id }))
@@ -276,58 +336,59 @@ async fn handle_deregistration(
 
 // ---------------------------------------------------------------------------
 
-#[tokio::main(flavor = "current_thread")]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    libcli::init_tracing("info", None)?;
-
-    // OS identification via sysinfo (cross-platform)
+/// Build the HPC component data provider from live system information.
+#[allow(clippy::cast_precision_loss)]
+fn build_hpc_provider() -> Result<BuiltDataProvider, Box<dyn std::error::Error>> {
     let os_name = System::name().unwrap_or_else(|| "Unknown".to_string());
     let os_version = System::os_version().unwrap_or_default();
     let os_pretty = System::long_os_version().unwrap_or_else(|| os_name.clone());
     let os_id = System::distribution_id();
 
-    // CPU brand via sysinfo (cross-platform)
     let cpu_brand = {
         let sys_info = System::new_all();
-        sys_info.cpus().first()
+        sys_info
+            .cpus()
+            .first()
             .map_or_else(|| "Unknown Processor".to_string(), |c| c.brand().to_string())
     };
 
     let sys = Arc::new(Mutex::new(System::new()));
 
-    #[allow(clippy::cast_precision_loss)]
     let mem_total_mb: f64 = {
         let mut s = System::new();
         s.refresh_memory();
         s.total_memory() as f64 / 1_048_576.0
     };
 
-    #[allow(clippy::cast_precision_loss)]
     let storage_total_mb: f64 = {
         let disks = Disks::new_with_refreshed_list();
         disks.iter().map(|d| d.total_space() as f64).sum::<f64>() / 1_048_576.0
     };
 
-    let builder = DataProviderBuilder::new()
-        // OS
+    let provider = DataProviderBuilder::new()
         .read_data("os.version", "OS Version", &DataCategory::IdentData, Constant::new(os_version)?)
         .read_data("os.name", "OS Name", &DataCategory::IdentData, Constant::new(os_name)?)
         .read_data("os.pretty_name", "OS Pretty Name", &DataCategory::IdentData, Constant::new(os_pretty)?)
         .read_data("os.id", "OS Identifier", &DataCategory::IdentData, Constant::new(os_id)?)
         .read_data("os.uptime", "System Uptime", &DataCategory::SysInfo, Uptime)
-        // CPU / Memory
         .read_data("cpu.usage", "CPU Usage %", &DataCategory::SysInfo, CpuUsage::new(&sys))
         .read_data("mem.usage", "Memory Usage %", &DataCategory::SysInfo, MemoryUsage::new(&sys))
         .read_data("hw.processor", "Processor", &DataCategory::IdentData, Constant::new(cpu_brand)?)
         .read_data("mem.total", "Memory Total MB", &DataCategory::SysInfo, Constant::new(mem_total_mb)?)
         .read_data("mem.used", "Memory Used MB", &DataCategory::SysInfo, MemoryUsedMb::new(&sys))
-        // Storage
         .read_data("hw.storage.total", "Storage Total MB", &DataCategory::SysInfo, Constant::new(storage_total_mb)?)
         .read_data("hw.storage.used", "Storage Used MB", &DataCategory::SysInfo, StorageUsedMb)
-        // Temperature
-        .read_data("hw.temperature", "CPU Temperature °C", &DataCategory::SysInfo, Temperature);
+        .read_data("hw.temperature", "CPU Temperature °C", &DataCategory::SysInfo, Temperature)
+        .build()?;
 
-    let provider = builder.build()?;
+    Ok(provider)
+}
+
+#[tokio::main(flavor = "current_thread")]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    libcli::init_tracing("info", None)?;
+
+    let provider = build_hpc_provider()?;
 
     let component = Component::new("HPC", "HPC - v1").with_data_provider(provider);
 
@@ -341,7 +402,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let http_client = Arc::new(reqwest::Client::new());
 
     // Spawn dynamic app registration endpoint on port 7691
-    let reg_state = RegistrationState { topology: topology.clone(), client: Arc::clone(&http_client) };
+    let reg_state = RegistrationState {
+        topology: topology.clone(),
+        client: Arc::clone(&http_client),
+    };
     tokio::spawn(async move {
         let app = Router::new()
             .route("/register", post(handle_registration))

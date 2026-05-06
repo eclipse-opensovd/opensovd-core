@@ -5,12 +5,13 @@
 
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use warp::Filter;
-use tracing::{debug, error, info};
 
-use crate::{DataProvider, DiagnosticError};
-use crate::data::{HealthResponse, ApiInfo, WriteDataRequest};
+use tracing::{debug, error, info};
+use warp::Filter;
+
+use crate::data::{ApiInfo, HealthResponse, WriteDataRequest};
 use crate::registration::{AppEndpoint, AppRegistrar};
+use crate::{DataProvider, DiagnosticError};
 
 /// Waits for SIGINT or SIGTERM.
 async fn shutdown_signal() {
@@ -43,7 +44,7 @@ pub struct DiagnosticServer<P: DataProvider> {
 
 impl<P: DataProvider + 'static> DiagnosticServer<P> {
     /// Create a new diagnostic server
-    /// 
+    ///
     /// # Arguments
     /// * `provider` - The data provider implementation
     /// * `port` - The port to listen on
@@ -88,7 +89,10 @@ impl<P: DataProvider + 'static> DiagnosticServer<P> {
 
         // Spawn registration, optional heartbeat, and handle graceful shutdown
         let heartbeat_interval = self.heartbeat_interval;
-        let deregister = self.registration.as_ref().map(|(r, ep)| (Arc::clone(r), ep.clone()));
+        let deregister = self
+            .registration
+            .as_ref()
+            .map(|(r, ep)| (Arc::clone(r), ep.clone()));
         if let Some((registrar, endpoint)) = self.registration {
             // Initial registration with exponential backoff
             let reg = Arc::clone(&registrar);
@@ -105,7 +109,10 @@ impl<P: DataProvider + 'static> DiagnosticServer<P> {
                             return;
                         }
                         Err(e) => {
-                            debug!("Registration attempt failed ({}), retrying in {:?}", e, delay);
+                            debug!(
+                                "Registration attempt failed ({}), retrying in {:?}",
+                                e, delay
+                            );
                             tokio::time::sleep(delay).await;
                             delay = (delay * 2).min(Duration::from_secs(30));
                         }
@@ -126,22 +133,19 @@ impl<P: DataProvider + 'static> DiagnosticServer<P> {
                     }
                 });
             }
-
         }
 
         // Health check endpoint
-        let health = warp::path!("health")
-            .and(warp::get())
-            .map(|| {
-                let timestamp = SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs();
-                warp::reply::json(&HealthResponse {
-                    status: "healthy".to_string(),
-                    timestamp,
-                })
-            });
+        let health = warp::path!("health").and(warp::get()).map(|| {
+            let timestamp = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs();
+            warp::reply::json(&HealthResponse {
+                status: "healthy".to_string(),
+                timestamp,
+            })
+        });
 
         // API info endpoint
         let provider_info = provider.clone();
@@ -182,7 +186,9 @@ impl<P: DataProvider + 'static> DiagnosticServer<P> {
                         Ok(value) => Ok(warp::reply::json(&value)),
                         Err(e) => {
                             match &e {
-                                crate::DiagnosticError::NotFound(_) => debug!("Data not found: {}", data_id),
+                                crate::DiagnosticError::NotFound(_) => {
+                                    debug!("Data not found: {}", data_id)
+                                }
                                 _ => error!("Error reading data {}: {}", data_id, e),
                             }
                             Err(warp::reject::custom(e))
@@ -209,7 +215,10 @@ impl<P: DataProvider + 'static> DiagnosticServer<P> {
                         }
                         Err(e) => {
                             match &e {
-                                crate::DiagnosticError::NotFound(_) | crate::DiagnosticError::ReadOnly(_) => debug!("Write rejected for {}: {}", data_id, e),
+                                crate::DiagnosticError::NotFound(_)
+                                | crate::DiagnosticError::ReadOnly(_) => {
+                                    debug!("Write rejected for {}: {}", data_id, e)
+                                }
                                 _ => error!("Error writing data to {}: {}", data_id, e),
                             }
                             Err(warp::reject::custom(e))
@@ -232,7 +241,8 @@ impl<P: DataProvider + 'static> DiagnosticServer<P> {
             .and_then(move |query: StreamQuery| {
                 let provider = provider_stream.clone();
                 async move {
-                    let data_ids: Vec<String> = query.data_ids
+                    let data_ids: Vec<String> = query
+                        .data_ids
                         .split(',')
                         .map(|s| s.trim().to_string())
                         .filter(|s| !s.is_empty())
@@ -246,19 +256,21 @@ impl<P: DataProvider + 'static> DiagnosticServer<P> {
                         move |data_id| {
                             let provider = provider.clone();
                             async move {
-                                provider.read_data(&data_id)
+                                provider
+                                    .read_data(&data_id)
                                     .await
                                     .map(|v| v.value)
                                     .map_err(|e| e.to_string())
                             }
                         },
-                    ).await;
+                    )
+                    .await;
 
                     let rx = tx.subscribe();
                     let sse_stream = crate::streaming::SseStream::new(rx);
 
                     Ok::<_, warp::Rejection>(warp::sse::reply(
-                        warp::sse::keep_alive().stream(sse_stream)
+                        warp::sse::keep_alive().stream(sse_stream),
                     ))
                 }
             });
@@ -280,8 +292,8 @@ impl<P: DataProvider + 'static> DiagnosticServer<P> {
         info!("PUT  /api/data/{{id}}");
         info!("GET  /api/stream?data_ids=id1,id2&interval_ms=100");
 
-        let (_, server) = warp::serve(routes)
-            .bind_with_graceful_shutdown(([127, 0, 0, 1], self.port), async {
+        let (_, server) =
+            warp::serve(routes).bind_with_graceful_shutdown(([127, 0, 0, 1], self.port), async {
                 shutdown_signal().await;
             });
 
@@ -316,7 +328,10 @@ async fn handle_rejection(err: warp::Rejection) -> Result<impl warp::Reply, warp
             "code": code
         }));
 
-        Ok(warp::reply::with_status(json, warp::http::StatusCode::from_u16(code).unwrap()))
+        Ok(warp::reply::with_status(
+            json,
+            warp::http::StatusCode::from_u16(code).unwrap(),
+        ))
     } else {
         Err(err)
     }

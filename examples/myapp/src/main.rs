@@ -10,10 +10,10 @@
 use std::time::{Duration, SystemTime};
 
 use async_trait::async_trait;
+use opensovd_diagnostic_lib::registration::{AppEndpoint, HttpRegistrar};
 use opensovd_diagnostic_lib::{
     DataCategory, DataItem, DataProvider, DataValue, DiagnosticError, DiagnosticServer, Result,
 };
-use opensovd_diagnostic_lib::registration::{AppEndpoint, HttpRegistrar};
 
 struct EcuMonitor {
     start_time: SystemTime,
@@ -21,7 +21,10 @@ struct EcuMonitor {
 
 impl EcuMonitor {
     fn uptime_secs(&self) -> u64 {
-        self.start_time.elapsed().unwrap_or(Duration::ZERO).as_secs()
+        self.start_time
+            .elapsed()
+            .unwrap_or(Duration::ZERO)
+            .as_secs()
     }
 
     /// Simulates battery voltage oscillating between 11.8 V and 14.4 V.
@@ -84,13 +87,16 @@ impl DataProvider for EcuMonitor {
 
     async fn read_data(&self, id: &str) -> Result<DataValue> {
         let value = match id {
-            "ecu.id"          => serde_json::json!("APP01-ECU-001"),
-            "ecu.version"     => serde_json::json!("1.0.0"),
+            "ecu.id" => serde_json::json!("APP01-ECU-001"),
+            "ecu.version" => serde_json::json!("1.0.0"),
             "battery.voltage" => serde_json::json!(self.voltage()),
-            "battery.uptime"  => serde_json::json!(self.uptime_secs()),
-            _                 => return Err(DiagnosticError::NotFound(id.to_string())),
+            "battery.uptime" => serde_json::json!(self.uptime_secs()),
+            _ => return Err(DiagnosticError::NotFound(id.to_string())),
         };
-        Ok(DataValue { value, schema: None })
+        Ok(DataValue {
+            value,
+            schema: None,
+        })
     }
 
     async fn write_data(&self, id: &str, _value: serde_json::Value) -> Result<()> {
@@ -104,18 +110,23 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 
     tracing::info!("Starting APP01 ECU battery monitor");
 
-    DiagnosticServer::new(EcuMonitor { start_time: SystemTime::now() }, 8081)
-        .with_registration(
-            HttpRegistrar::new("http://127.0.0.1:7691/register"),
-            AppEndpoint {
-                app_id:    "APP01".to_string(),
-                app_name:  "APP01 ECU Monitor".to_string(),
-                port:      8081,
-                hosted_on: "HPC".to_string(),
-            },
-        )
-        .serve()
-        .await?;
+    DiagnosticServer::new(
+        EcuMonitor {
+            start_time: SystemTime::now(),
+        },
+        8081,
+    )
+    .with_registration(
+        HttpRegistrar::new("http://127.0.0.1:7691/register"),
+        AppEndpoint {
+            app_id: "APP01".to_string(),
+            app_name: "APP01 ECU Monitor".to_string(),
+            port: 8081,
+            hosted_on: "HPC".to_string(),
+        },
+    )
+    .serve()
+    .await?;
 
     Ok(())
 }

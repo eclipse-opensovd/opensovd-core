@@ -54,7 +54,9 @@ impl HttpRegistrar {
     /// Create a registrar that POSTs to `url` on register and sends DELETE to
     /// `{url}/{app_id}` on deregister.
     pub fn new(url: &str) -> Self {
-        Self { url: url.to_string() }
+        Self {
+            url: url.to_string(),
+        }
     }
 }
 
