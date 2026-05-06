@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 [workspace]
-members = ["benches", "examples/client", "examples/server", "opensovd-mocks", "opensovd-client", "opensovd-core", "opensovd-extra", "opensovd-models", "opensovd-providers", "opensovd-server", "opensovd-cli/lib", "opensovd-cli/gateway", "opensovd-cli/mcp"]
+members = ["benches", "examples/client", "examples/server", "examples/APP01", "opensovd-mocks", "opensovd-client", "opensovd-core", "opensovd-extra", "opensovd-models", "opensovd-providers", "opensovd-server", "opensovd-diagnostic-lib","opensovd-cli/lib", "opensovd-cli/gateway", "opensovd-cli/mcp"]
 resolver = "2"
 
 [workspace.package]
@@ -17,6 +17,7 @@ categories = ["embedded"]
 
 [workspace.dependencies]
 opensovd-core = { path = "opensovd-core" }
+opensovd-diagnostic-lib = { path = "opensovd-diagnostic-lib" }
 opensovd-extra = { path = "opensovd-extra" }
 opensovd-models = { path = "opensovd-models" }
 opensovd-providers = { path = "opensovd-providers" }

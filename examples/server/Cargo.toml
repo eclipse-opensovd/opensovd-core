@@ -26,11 +26,16 @@ name = "mtls"
 path = "mtls/mtls.rs"
 required-features = ["tls"]
 
+[[example]]
+name = "HPC01-sovd-server"
+path = "HPC01-sovd-server/HPC01-sovd-server.rs"
+
 [features]
 tls = ["opensovd-server/tls"]
 
 [dependencies]
 async-trait = { workspace = true }
+axum = { workspace = true, features = ["json", "tokio", "http1"] }
 jsonwebtoken = { workspace = true }
 libcli = { workspace = true }
 opensovd-core = { workspace = true }
@@ -39,7 +44,10 @@ opensovd-mocks = { workspace = true }
 opensovd-models = { workspace = true }
 opensovd-providers = { workspace = true }
 opensovd-server = { workspace = true }
-sysinfo = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true, features = ["std"] }
+sysinfo = { workspace = true, features = ["component", "disk"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 tokio = { workspace = true, features = ["net", "rt-multi-thread", "macros", "fs"] }
 tracing = { workspace = true }
 

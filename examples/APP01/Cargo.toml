@@ -1,0 +1,22 @@
+[package]
+name = "APP01"
+version = "0.1.0"
+edition = "2021"
+authors = ["OpenSOVD Contributors"]
+description = "Minimal ECU battery voltage monitor example"
+license = "Apache-2.0"
+repository = "https://github.com/eclipse-opensovd/opensovd-core"
+keywords = ["sovd", "diagnostic"]
+categories = ["embedded"]
+
+[[bin]]
+name = "APP01"
+path = "src/main.rs"
+
+[dependencies]
+tokio = { workspace = true, features = ["full"] }
+serde_json = { workspace = true, features = ["std"] }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["fmt", "env-filter"] }
+async-trait = { workspace = true }
+opensovd-diagnostic-lib = { workspace = true }
