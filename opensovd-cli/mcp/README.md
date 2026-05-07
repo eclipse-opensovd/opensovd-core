@@ -25,6 +25,15 @@ This binary is designed to be invoked by AI agents that support the MCP protocol
 
 - `explore-topology` - Guided exploration of the vehicle topology
 
+## Container image
+
+Published as `ghcr.io/eclipse-opensovd/opensovd-mcp` (tags: `latest`, `nightly`, `vX.Y.Z`).
+
+```bash
+docker run -i --rm ghcr.io/eclipse-opensovd/opensovd-mcp \
+    --url http://host.docker.internal:7690/sovd/v1
+```
+
 ## Integration
 
 All agents use the same command: `opensovd-mcp --url http://localhost:7690/sovd/v1`

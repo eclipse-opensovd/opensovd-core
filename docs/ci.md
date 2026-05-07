@@ -12,7 +12,7 @@ This document describes the GitHub Actions CI/CD pipeline for opensovd.
 | **advisories** | When `should_run=true` | Checks security advisories; uploads SARIF on main/nightly                             |
 | **lint**       | When `should_run=true` | Runs rustfmt, clippy, and pre-commit hooks (prek)                                     |
 | **coverage**   | When `should_run=true` | Generates coverage report, deploys to GitHub Pages on main                            |
-| **docker**     | main/tags/schedule     | Builds and pushes Docker image to GHCR                                                |
+| **docker**     | main/tags/schedule     | Builds and pushes Docker images (gateway, mcp) to GHCR                                |
 | **release**    | main/tags/schedule     | Creates GitHub release with artifacts and changelog                                   |
 | **gate**       | Always                 | Final check that all jobs passed (use for branch protection)                          |
 

@@ -126,6 +126,11 @@ jobs:
           name: opensovd-gateway-${{ matrix.target }}
           path: target/${{ matrix.target }}/${{ matrix.profile }}/opensovd-gateway${{ runner.os == 'Windows' && '.exe' || '' }}
 
+      - uses: actions/upload-artifact@v7
+        with:
+          name: opensovd-mcp-${{ matrix.target }}
+          path: target/${{ matrix.target }}/${{ matrix.profile }}/opensovd-mcp${{ runner.os == 'Windows' && '.exe' || '' }}
+
   licenses:
     needs: prepare
     if: needs.prepare.outputs.should_run == 'true'
@@ -286,18 +291,25 @@ jobs:
     env:
       DOCKER_BUILD_SUMMARY: false
       DOCKER_BUILD_RECORD_UPLOAD: false
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - {binary: opensovd-gateway, dockerfile: docker/Dockerfile.gateway, smoke: 'uv run pytest tests/test_version.py --opensovd-docker opensovd-gateway:test'}
+          - {binary: opensovd-mcp, dockerfile: docker/Dockerfile.mcp, smoke: ''}
     steps:
       - uses: actions/checkout@v6
       - uses: actions/download-artifact@v8
         with:
           path: dist
+          pattern: ${{ matrix.image.binary }}-*
       - uses: astral-sh/setup-uv@v7
       - uses: ./.github/actions/docker-publish
         with:
-          binary: opensovd-gateway
-          dockerfile: docker/Dockerfile.gateway
+          binary: ${{ matrix.image.binary }}
+          dockerfile: ${{ matrix.image.dockerfile }}
           release-tag: ${{ needs.prepare.outputs.release }}
-          smoke-test-cmd: uv run pytest tests/test_version.py --opensovd-docker opensovd-gateway:test
+          smoke-test-cmd: ${{ matrix.image.smoke }}
 
   release:
     needs: [prepare, build]
@@ -327,7 +339,7 @@ jobs:
             git cliff --current -o CHANGELOG.md
           fi
           mkdir -p artifacts/release
-          for binary in opensovd-gateway; do
+          for binary in opensovd-gateway opensovd-mcp; do
             for dir in artifacts/"${binary}-"*; do
               [ -d "$dir" ] || continue
               target=$(basename "$dir" | sed "s/${binary}-//")
