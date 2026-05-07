@@ -100,7 +100,8 @@ runs:
       shell: bash
       run: ${{ inputs.smoke-test-cmd }}
 
-    - uses: docker/build-push-action@v7
+    - id: push
+      uses: docker/build-push-action@v7
       with:
         context: .
         file: ${{ inputs.dockerfile }}
@@ -112,3 +113,11 @@ runs:
         cache-from: |
           type=gha,scope=${{ github.event.repository.name }}-${{ inputs.binary }}-${{ github.ref_name }}
           type=gha,scope=${{ github.event.repository.name }}-${{ inputs.binary }}-main
+        cache-to: type=gha,mode=max,scope=${{ github.event.repository.name }}-${{ inputs.binary }}-${{ github.ref_name }}
+
+    - if: github.repository_owner == 'eclipse-opensovd'
+      uses: actions/attest-build-provenance@v4
+      with:
+        subject-name: ghcr.io/${{ github.repository_owner }}/${{ inputs.binary }}
+        subject-digest: ${{ steps.push.outputs.digest }}
+        push-to-registry: true
