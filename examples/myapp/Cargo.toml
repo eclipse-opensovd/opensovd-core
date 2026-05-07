@@ -1,7 +1,7 @@
 [package]
 name = "MyApp"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 authors = ["OpenSOVD Contributors"]
 description = "ECU battery voltage monitor example"
 license = "Apache-2.0"
