@@ -153,7 +153,7 @@ pub struct ServerBuilder<Vendor = VendorInfo, Authn = NoAuth, Authz = AllowAll, 
     layer: Layer,
     services: Vec<(String, Service)>,
     #[cfg(feature = "tls")]
-    tls_config: Option<crate::tls::TlsConfig>,
+    tls_config: Option<rustls::ServerConfig>,
 }
 
 pub struct Server<Vendor = VendorInfo, Authn = NoAuth, Authz = AllowAll, Layer = Identity> {
@@ -168,7 +168,7 @@ pub struct Server<Vendor = VendorInfo, Authn = NoAuth, Authz = AllowAll, Layer =
     layer: Layer,
     services: Vec<(String, Service)>,
     #[cfg(feature = "tls")]
-    tls_config: Option<crate::tls::TlsConfig>,
+    tls_config: Option<rustls::ServerConfig>,
 }
 
 #[allow(clippy::expect_used)] // Panic on signal handler failure is intentional
@@ -370,7 +370,7 @@ impl<Vendor, Authn, Authz, Layer> ServerBuilder<Vendor, Authn, Authz, Layer> {
 
     // wrap the TCP listener with TLS.
     #[cfg(feature = "tls")]
-    pub fn tls(mut self, config: crate::tls::TlsConfig) -> Self {
+    pub fn tls(mut self, config: rustls::ServerConfig) -> Self {
         self.tls_config = Some(config);
         self
     }
@@ -503,10 +503,10 @@ where
 
         // if TLS is configured, override the transport label for logging
         #[cfg(feature = "tls")]
-        let transport = match &self.tls_config {
-            Some(cfg) if cfg.has_client_ca() => "mtls",
-            Some(_) => "tls",
-            None => transport,
+        let transport = if self.tls_config.is_some() {
+            "tls"
+        } else {
+            transport
         };
 
         tracing::info!(target: "srv", addr = %addr, r#type = %transport, base = %base.as_deref().unwrap_or("/"), "Listening");
@@ -516,7 +516,7 @@ where
         if let Some(tls_cfg) = self.tls_config {
             return match self.listener {
                 Listener::Tcp(l) => {
-                    let tls_listener = tls_cfg.build(l).map_err(std::io::Error::other)?;
+                    let tls_listener = crate::tls::TlsListener::wrap(l, tls_cfg);
                     axum::serve(
                         tls_listener,
                         router.into_make_service_with_connect_info::<ConnectInfo>(),

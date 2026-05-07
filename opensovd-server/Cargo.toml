@@ -17,7 +17,7 @@ default = ["jsonschema"]
 jsonschema = ["dep:schemars", "opensovd-models/jsonschema"]
 json-preserve-order = ["serde_json/preserve_order"]
 http2 = ["axum/http2"]
-tls = ["dep:rustls", "dep:tokio-rustls", "dep:rustls-pemfile"]
+tls = ["dep:rustls", "dep:tokio-rustls"]
 
 [dependencies]
 opensovd-core = { workspace = true }
@@ -37,7 +37,6 @@ percent-encoding = { workspace = true }
 tower = { workspace = true, features = ["util"] }
 tracing = { workspace = true }
 rustls = { workspace = true, optional = true }
-rustls-pemfile = { workspace = true, optional = true }
 tokio-rustls = { workspace = true, optional = true }
 
 [dev-dependencies]

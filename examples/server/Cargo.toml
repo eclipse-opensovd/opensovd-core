@@ -31,7 +31,7 @@ name = "hpc-sovd-server"
 path = "hpc-sovd-server/hpc-sovd-server.rs"
 
 [features]
-tls = ["opensovd-server/tls"]
+tls = ["opensovd-server/tls", "dep:rustls"]
 
 [dependencies]
 async-trait = { workspace = true }
@@ -44,10 +44,8 @@ opensovd-mocks = { workspace = true }
 opensovd-models = { workspace = true }
 opensovd-providers = { workspace = true }
 opensovd-server = { workspace = true }
-serde = { workspace = true, features = ["derive"] }
-serde_json = { workspace = true, features = ["std"] }
-sysinfo = { workspace = true, features = ["component", "disk"] }
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+rustls = { workspace = true, optional = true }
+sysinfo = { workspace = true }
 tokio = { workspace = true, features = ["net", "rt-multi-thread", "macros", "fs"] }
 tracing = { workspace = true }
 
