@@ -23,15 +23,15 @@ repos:
       - id: clippy
         args: ['--all-targets', '--all-features', '--', '-D', 'warnings', '-A', 'clippy::doc_markdown']
   - repo: https://github.com/bnjbvr/cargo-machete
-    rev: v0.9.1
+    rev: v0.9.2
     hooks:
       - id: cargo-machete
   - repo: https://github.com/igorshubovych/markdownlint-cli
-    rev: v0.47.0
+    rev: v0.48.0
     hooks:
       - id: markdownlint-docker
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.1
+    rev: v0.15.12
     hooks:
       - id: ruff-check
       - id: ruff-format
@@ -44,7 +44,7 @@ repos:
         types: [python]
         pass_filenames: false
   - repo: https://github.com/gitleaks/gitleaks
-    rev: v8.30.0
+    rev: v8.30.1
     hooks:
       - id: gitleaks
   - repo: https://github.com/koalaman/shellcheck-precommit
@@ -52,7 +52,7 @@ repos:
     hooks:
       - id: shellcheck
   - repo: https://github.com/compilerla/conventional-pre-commit
-    rev: v4.3.0
+    rev: v4.4.0
     hooks:
       - id: conventional-pre-commit
         stages: [commit-msg]
