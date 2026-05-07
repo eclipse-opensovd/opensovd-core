@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #![doc = include_str!("../README.md")]
-#![cfg_attr(coverage_nightly, feature(coverage_attribute))]
+#![cfg_attr(all(test, coverage_nightly), feature(coverage_attribute))]
 
 mod auth;
 mod body;

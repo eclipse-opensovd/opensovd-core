@@ -3,7 +3,7 @@
 
 //! Core types for SOVD topology and data access.
 
-#![cfg_attr(coverage_nightly, feature(coverage_attribute))]
+#![cfg_attr(all(test, coverage_nightly), feature(coverage_attribute))]
 
 mod data;
 mod discovery;
