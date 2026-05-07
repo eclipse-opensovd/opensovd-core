@@ -1,0 +1,114 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 Contributors to the Eclipse Foundation
+# SPDX-License-Identifier: Apache-2.0
+
+name: Docker publish
+description: Build a multi-arch Docker image from prebuilt artifacts, smoke-test it, and push to GHCR.
+
+inputs:
+  binary:
+    description: Cargo package name; also used as the image suffix and the local test tag.
+    required: true
+  dockerfile:
+    description: Path to the Dockerfile.
+    required: true
+  release-tag:
+    description: Release tag (nightly | latest | vX.Y.Z).
+    required: true
+  smoke-test-cmd:
+    description: Optional shell command to run against the loaded test image (tagged ${binary}:test). When empty, the load build and smoke step are skipped.
+    required: false
+    default: ''
+  dist-path:
+    description: Directory holding the downloaded build artifacts.
+    required: false
+    default: dist
+
+runs:
+  using: composite
+  steps:
+    - name: Prepare platforms
+      id: prepare
+      shell: bash
+      run: |
+        shopt -s nullglob
+        PLATFORMS=""
+        for src in ${{ inputs.dist-path }}/${{ inputs.binary }}-*; do
+          [ -d "$src" ] || continue
+          target=$(basename "$src")
+          target=${target#${{ inputs.binary }}-}
+          case "$target" in
+            x86_64-*-linux-*)  arch=amd64 ;;
+            aarch64-*-linux-*) arch=arm64 ;;
+            *) continue ;;
+          esac
+          ln -sfn "${{ inputs.binary }}-${target}" "${{ inputs.dist-path }}/${arch}"
+          chmod +x "${{ inputs.dist-path }}/${arch}/${{ inputs.binary }}"
+          [ -n "$PLATFORMS" ] && PLATFORMS="$PLATFORMS,"
+          PLATFORMS="${PLATFORMS}linux/${arch}"
+        done
+        echo "platforms=$PLATFORMS" >> "$GITHUB_OUTPUT"
+
+    - uses: docker/setup-qemu-action@v4
+    - uses: docker/setup-buildx-action@v4
+    - uses: docker/login-action@v4
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ github.token }}
+
+    - name: Extract metadata from Cargo.toml
+      id: cargo
+      shell: bash
+      run: |
+        PKG=$(cargo metadata --format-version 1 --no-deps | jq --arg name "${{ inputs.binary }}" '.packages[] | select(.name == $name)')
+        echo "version=$(echo "$PKG" | jq -r '.version')" >> "$GITHUB_OUTPUT"
+        echo "description=$(echo "$PKG" | jq -r '.description')" >> "$GITHUB_OUTPUT"
+        echo "license=$(echo "$PKG" | jq -r '.license')" >> "$GITHUB_OUTPUT"
+        echo "repository=$(echo "$PKG" | jq -r '.repository')" >> "$GITHUB_OUTPUT"
+
+    - id: meta
+      uses: docker/metadata-action@v6
+      with:
+        images: ghcr.io/${{ github.repository_owner }}/${{ inputs.binary }}
+        tags: |
+          type=raw,value=${{ inputs.release-tag }}
+          type=raw,value=nightly-{{date 'YYYY-MM-DD'}},enable=${{ inputs.release-tag == 'nightly' }}
+          type=raw,value=latest,enable=${{ inputs.release-tag == 'latest' || startsWith(inputs.release-tag, 'v') }}
+        labels: |
+          org.opencontainers.image.title=${{ inputs.binary }}
+          org.opencontainers.image.description=${{ steps.cargo.outputs.description }}
+          org.opencontainers.image.version=${{ steps.cargo.outputs.version }}
+          org.opencontainers.image.licenses=${{ steps.cargo.outputs.license }}
+          org.opencontainers.image.source=${{ steps.cargo.outputs.repository }}
+
+    - if: inputs.smoke-test-cmd != ''
+      uses: docker/build-push-action@v7
+      with:
+        context: .
+        file: ${{ inputs.dockerfile }}
+        load: true
+        tags: ${{ inputs.binary }}:test
+        labels: ${{ steps.meta.outputs.labels }}
+        build-args: TARGETARCH=amd64
+        cache-from: |
+          type=gha,scope=${{ github.event.repository.name }}-${{ inputs.binary }}-${{ github.ref_name }}
+          type=gha,scope=${{ github.event.repository.name }}-${{ inputs.binary }}-main
+        cache-to: type=gha,mode=max,scope=${{ github.event.repository.name }}-${{ inputs.binary }}-${{ github.ref_name }}
+
+    - if: inputs.smoke-test-cmd != ''
+      name: Smoke test
+      shell: bash
+      run: ${{ inputs.smoke-test-cmd }}
+
+    - uses: docker/build-push-action@v7
+      with:
+        context: .
+        file: ${{ inputs.dockerfile }}
+        push: true
+        platforms: ${{ steps.prepare.outputs.platforms }}
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        annotations: ${{ steps.meta.outputs.annotations }}
+        cache-from: |
+          type=gha,scope=${{ github.event.repository.name }}-${{ inputs.binary }}-${{ github.ref_name }}
+          type=gha,scope=${{ github.event.repository.name }}-${{ inputs.binary }}-main
