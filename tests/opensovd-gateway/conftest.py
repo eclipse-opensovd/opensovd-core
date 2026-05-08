@@ -34,9 +34,7 @@ class SovdClient:
         self.http = http
 
     @classmethod
-    def from_process(
-        cls, gateway: ProcessUnderTest, *, ssl_context=None
-    ) -> Self:
+    def from_process(cls, gateway: ProcessUnderTest, *, ssl_context=None) -> Self:
         """Build a SovdClient by interpreting `gateway.match` groups.
 
         Args:

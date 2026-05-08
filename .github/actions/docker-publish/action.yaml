@@ -60,11 +60,12 @@ runs:
       id: cargo
       shell: bash
       run: |
-        PKG=$(cargo metadata --format-version 1 --no-deps | jq --arg name "${{ inputs.binary }}" '.packages[] | select(.name == $name)')
-        echo "version=$(echo "$PKG" | jq -r '.version')" >> "$GITHUB_OUTPUT"
-        echo "description=$(echo "$PKG" | jq -r '.description')" >> "$GITHUB_OUTPUT"
-        echo "license=$(echo "$PKG" | jq -r '.license')" >> "$GITHUB_OUTPUT"
-        echo "repository=$(echo "$PKG" | jq -r '.repository')" >> "$GITHUB_OUTPUT"
+        PKG=$(cargo metadata --format-version 1 --no-deps \
+          | jq --arg name "${{ inputs.binary }}" '.packages[] | select(.name == $name)')
+        echo "version=$(jq -r '.version' <<<"$PKG")"           >> "$GITHUB_OUTPUT"
+        echo "description=$(jq -r '.description' <<<"$PKG")"   >> "$GITHUB_OUTPUT"
+        echo "license=$(jq -r '.license' <<<"$PKG")"           >> "$GITHUB_OUTPUT"
+        echo "repository=$(jq -r '.repository' <<<"$PKG")"     >> "$GITHUB_OUTPUT"
 
     - id: meta
       uses: docker/metadata-action@v6
@@ -80,6 +81,8 @@ runs:
           org.opencontainers.image.version=${{ steps.cargo.outputs.version }}
           org.opencontainers.image.licenses=${{ steps.cargo.outputs.license }}
           org.opencontainers.image.source=${{ steps.cargo.outputs.repository }}
+        annotations: |
+          index:org.opencontainers.image.description=${{ steps.cargo.outputs.description }}
 
     - if: inputs.smoke-test-cmd != ''
       uses: docker/build-push-action@v7

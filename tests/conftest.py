@@ -9,7 +9,6 @@ from pathlib import Path
 import pytest
 from fixtures import default_binary_args
 
-
 # --- Session metadata (shown in HTML report header) ---
 
 # Module-level variable to store config for later access
@@ -21,7 +20,7 @@ def pytest_configure(config):
     global _config
     _config = config
     if config.getoption("--opensovd-run"):
-        for flag in ("--opensovd-release", "--opensovd-features"):
+        for flag in ("--opensovd-profile", "--opensovd-target", "--opensovd-features"):
             if config.getoption(flag):
                 raise pytest.UsageError(f"{flag} has no effect when --opensovd-run is set")
 
@@ -95,7 +94,14 @@ def pytest_addoption(parser):
         help="Additional arguments to pass to the binary",
     )
     parser.addoption(
-        "--opensovd-release", action="store_true", default=False, help="Build in release mode"
+        "--opensovd-profile",
+        default=None,
+        help="Cargo profile to build (default: dev; e.g. release, release-small)",
+    )
+    parser.addoption(
+        "--opensovd-target",
+        default=None,
+        help="Cargo --target triple; needed when artifacts live under target/<triple>/...",
     )
     parser.addoption(
         "--opensovd-features", default="", help="Cargo features to enable (comma-separated)"
@@ -137,7 +143,7 @@ def pytest_runtest_makereport(item, call):
 
     # Capture process output on failure
     if report.failed and hasattr(item, "funcargs"):
-        proc = item.funcargs.get("gateway")
+        proc = item.funcargs.get("gateway") or item.funcargs.get("mcp")
         if proc is None:
             client = item.funcargs.get("client")
             proc = client.gateway if client is not None else None

@@ -20,9 +20,7 @@ PROCESS_SPAWN_TIMEOUT = 30.0
 PROCESS_WAIT_TIMEOUT = 1.0
 PROCESS_TERMINATE_TIMEOUT = 5.0
 
-LISTENING_PATTERN = re.compile(
-    r"Listening addr=(\S+) type=(tcp|unix|abstract|tls) base=(\S+)"
-)
+LISTENING_PATTERN = re.compile(r"Listening addr=(\S+) type=(tcp|unix|abstract|tls) base=(\S+)")
 
 
 def _build_crate_binary(config: pytest.Config, crate: str) -> Path:
@@ -35,18 +33,17 @@ def _build_crate_binary(config: pytest.Config, crate: str) -> Path:
     Returns:
         Path to the opensovd binary, resolved via `cargo metadata`
     """
-    release_mode = config.getoption("--opensovd-release")
-    configured = config.getoption("--opensovd-features") or ""
-    features: set[str] = {f for f in configured.split(",") if f}
+    profile = config.getoption("--opensovd-profile") or "dev"
+    target = config.getoption("--opensovd-target")
 
     project_root = Path(__file__).parent.parent
     target_dir, bin_name = _resolve_bin(project_root, crate)
 
-    cargo_cmd = ["cargo", "build", "-p", crate]
-    if release_mode:
-        cargo_cmd.append("--release")
-    if features:
-        cargo_cmd.extend(["--features", ",".join(sorted(features))])
+    cargo_cmd = ["cargo", "build", "-p", crate, "--profile", profile]
+    if target:
+        cargo_cmd.extend(["--target", target])
+    if features := config.getoption("--opensovd-features"):
+        cargo_cmd.extend(["--features", features])
 
     subprocess.run(
         cargo_cmd,
@@ -56,8 +53,11 @@ def _build_crate_binary(config: pytest.Config, crate: str) -> Path:
         check=True,
     )
 
-    profile = "release" if release_mode else "debug"
-    return target_dir / profile / bin_name
+    # cargo writes the dev profile to target/[<triple>/]debug/, every other
+    # profile to a directory matching its name.
+    artifact_dir = "debug" if profile == "dev" else profile
+    base = target_dir / target if target else target_dir
+    return base / artifact_dir / bin_name
 
 
 @functools.cache
@@ -235,9 +235,7 @@ def default_binary_args(config: pytest.Config, *extra: str) -> list[str]:
     supplied one. Detects both `--url X` and `--url=X` forms.
     """
     extra_args = shlex.split(config.getoption("--opensovd-args"))
-    has_url = any(
-        a == "--url" or a.startswith("--url=") for a in (*extra, *extra_args)
-    )
+    has_url = any(a == "--url" or a.startswith("--url=") for a in (*extra, *extra_args))
     if has_url:
         return [*extra, *extra_args]
     return ["--url", "http://127.0.0.1:0/sovd", *extra, *extra_args]

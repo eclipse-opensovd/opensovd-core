@@ -25,6 +25,9 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["tests"]
+# importlib mode lets per-crate dirs (opensovd-gateway/cli/, opensovd-mcp/cli/)
+# share filenames like test_version.py without basename collisions.
+addopts = "--import-mode=importlib"
 markers = [
     "conformance: Conformance tests (require bru CLI)",
     "schema: Tests that validate response schema",

@@ -106,7 +106,8 @@ jobs:
       - if: contains(matrix.tests, 'pytest')
         run: |
           uv run pytest tests/ \
-            --opensovd-run=target/${{ matrix.target }}/${{ matrix.profile }}/opensovd-gateway${{ runner.os == 'Windows' && '.exe' || '' }} \
+            --opensovd-target=${{ matrix.target }} \
+            --opensovd-profile=${{ matrix.profile }} \
             --html=pytest-report.html \
             --self-contained-html \
             --metadata "Branch" "${{ github.ref_name }}" \
@@ -297,8 +298,8 @@ jobs:
       fail-fast: false
       matrix:
         image:
-          - {binary: opensovd-gateway, dockerfile: docker/Dockerfile.gateway, smoke: 'uv run pytest tests/opensovd-gateway/ --opensovd-run="docker run --rm --network=host opensovd-gateway:test"'}
-          - {binary: opensovd-mcp, dockerfile: docker/Dockerfile.mcp, smoke: ''}
+          - {binary: opensovd-gateway, dockerfile: docker/Dockerfile.gateway, smoke: 'uv run pytest tests/opensovd-gateway/cli/test_version.py --opensovd-run="docker run --rm opensovd-gateway:test"'}
+          - {binary: opensovd-mcp, dockerfile: docker/Dockerfile.mcp, smoke: 'uv run pytest tests/opensovd-mcp/cli/test_version.py --opensovd-run="docker run --rm opensovd-mcp:test"'}
     steps:
       - uses: actions/checkout@v6
       - uses: actions/download-artifact@v8

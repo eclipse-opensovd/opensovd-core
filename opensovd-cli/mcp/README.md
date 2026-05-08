@@ -7,6 +7,8 @@ SPDX-License-Identifier: Apache-2.0
 
 > MCP server for AI-assisted OpenSOVD vehicle diagnostics.
 
+[![GHCR](https://img.shields.io/badge/ghcr.io-opensovd--mcp-blue?logo=github)](https://ghcr.io/eclipse-opensovd/opensovd-mcp)
+
 Enables AI assistants to interact with [OpenSOVD](https://github.com/eclipse-opensovd/opensovd-core) diagnostic servers via the [Model Context Protocol](https://modelcontextprotocol.io).
 
 This binary is designed to be invoked by AI agents that support the MCP protocol, not for direct manual use.
@@ -30,19 +32,21 @@ This binary is designed to be invoked by AI agents that support the MCP protocol
 Published as `ghcr.io/eclipse-opensovd/opensovd-mcp` (tags: `latest`, `nightly`, `vX.Y.Z`).
 
 ```bash
-docker run -i --rm ghcr.io/eclipse-opensovd/opensovd-mcp \
-    --url http://host.docker.internal:7690/sovd/v1
+docker run -i --rm --network=host ghcr.io/eclipse-opensovd/opensovd-mcp \
+    --url http://localhost:7690/sovd/v1
 ```
 
 ## Integration
 
-All agents use the same command: `opensovd-mcp --url http://localhost:7690/sovd/v1`
+All agents run the published container image: `docker run -i --rm --network=host ghcr.io/eclipse-opensovd/opensovd-mcp --url http://localhost:7690/sovd/v1`
 
 <details>
 <summary>Claude Code</summary>
 
 ```bash
-claude mcp add --transport stdio --scope project sovd -- opensovd-mcp --url http://localhost:7690/sovd/v1
+claude mcp add --transport stdio --scope project sovd -- \
+    docker run -i --rm --network=host ghcr.io/eclipse-opensovd/opensovd-mcp \
+    --url http://localhost:7690/sovd/v1
 ```
 
 </details>
@@ -57,7 +61,11 @@ Run `opencode mcp add` for an interactive setup, or add to `opencode.json`:
   "mcp": {
     "sovd": {
       "type": "local",
-      "command": ["opensovd-mcp", "--url", "http://localhost:7690/sovd/v1"]
+      "command": [
+        "docker", "run", "-i", "--rm", "--network=host",
+        "ghcr.io/eclipse-opensovd/opensovd-mcp",
+        "--url", "http://localhost:7690/sovd/v1"
+      ]
     }
   }
 }
@@ -72,8 +80,12 @@ Run `opencode mcp add` for an interactive setup, or add to `opencode.json`:
 {
   "servers": {
     "sovd": {
-      "command": "opensovd-mcp",
-      "args": ["--url", "http://localhost:7690/sovd/v1"]
+      "command": "docker",
+      "args": [
+        "run", "-i", "--rm", "--network=host",
+        "ghcr.io/eclipse-opensovd/opensovd-mcp",
+        "--url", "http://localhost:7690/sovd/v1"
+      ]
     }
   }
 }

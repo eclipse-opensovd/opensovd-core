@@ -4,7 +4,7 @@
 [package]
 name = "opensovd-gateway"
 version.workspace = true
-description.workspace = true
+description = "OpenSOVD diagnostics gateway"
 edition.workspace = true
 license.workspace = true
 readme.workspace = true
