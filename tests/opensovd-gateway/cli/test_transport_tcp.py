@@ -7,21 +7,21 @@ import pytest
 
 
 @pytest.fixture(scope="module")
-def gateway_args():
+def binary_args():
     """Use TCP transport."""
     return ["--url", "http://127.0.0.1:0/sovd"]
 
 
-def test_tcp_transport(gateway):
-    """Verify the gateway listens on TCP when given --url.
+def test_tcp_transport(client):
+    """Verify the gateway is reachable over TCP when given --url.
 
     Ensures the gateway binds to the specified TCP address and responds
     to HTTP requests on that transport.
     """
-    assert gateway.transport == "tcp"
-    assert gateway.addr.startswith("127.0.0.1:")
+    assert client.transport == "tcp"
+    assert client.addr.startswith("127.0.0.1:")
 
-    response = gateway.get("/version-info")
+    response = client.get("/version-info")
     assert response.status_code == 200
     data = response.json()
     assert "sovd_info" in data

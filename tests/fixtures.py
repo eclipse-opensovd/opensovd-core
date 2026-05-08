@@ -1,10 +1,10 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 Contributors to the Eclipse Foundation
 # SPDX-License-Identifier: Apache-2.0
 
-"""Shared test fixtures and utilities for gateway tests."""
+"""Shared test fixtures and utilities for the process under test."""
 
-from __future__ import annotations
-
+import functools
+import json
 import re
 import shlex
 import subprocess
@@ -13,7 +13,6 @@ import time
 from pathlib import Path
 from typing import Self
 
-import httpx
 import pytest
 
 # Timeout constants (seconds)
@@ -26,28 +25,28 @@ LISTENING_PATTERN = re.compile(
 )
 
 
-def _build_gateway(config: pytest.Config, extra_features: list[str] | None = None) -> Path:
-    """Build or locate the gateway binary.
+def _build_crate_binary(config: pytest.Config, crate: str) -> Path:
+    """Build or locate the opensovd binary for the given crate.
 
     Args:
         config: pytest configuration object
-        extra_features: Additional cargo features to enable on top of --opensovd-features
+        crate: cargo workspace package name to build
 
     Returns:
-        Path to the gateway binary
+        Path to the opensovd binary, resolved via `cargo metadata`
     """
     binary = config.getoption("--opensovd-binary")
-    if binary and not extra_features:
+    if binary:
         return Path(binary)
 
     release_mode = config.getoption("--opensovd-release")
     configured = config.getoption("--opensovd-features") or ""
     features: set[str] = {f for f in configured.split(",") if f}
-    if extra_features:
-        features.update(extra_features)
 
     project_root = Path(__file__).parent.parent
-    cargo_cmd = ["cargo", "build", "-p", "opensovd-gateway"]
+    target_dir, bin_name = _resolve_bin(project_root, crate)
+
+    cargo_cmd = ["cargo", "build", "-p", crate]
     if release_mode:
         cargo_cmd.append("--release")
     if features:
@@ -63,28 +62,39 @@ def _build_gateway(config: pytest.Config, extra_features: list[str] | None = Non
         raise subprocess.CalledProcessError(result.returncode, cargo_cmd, result.stdout)
 
     profile = "release" if release_mode else "debug"
-    return project_root / "target" / profile / "opensovd-gateway"
+    return target_dir / profile / bin_name
 
 
-def get_gateway_binary(config: pytest.Config) -> Path:
-    """Build or locate the gateway binary based on pytest options."""
-    return _build_gateway(config)
+@functools.cache
+def _resolve_bin(project_root: Path, crate: str) -> tuple[Path, str]:
+    """Return (target_directory, bin_name) for `crate` via `cargo metadata`."""
+    cmd = ["cargo", "metadata", "--format-version=1", "--no-deps"]
+    result = subprocess.run(cmd, cwd=project_root, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if result.returncode != 0:
+        raise subprocess.CalledProcessError(result.returncode, cmd, result.stdout, result.stderr)
+
+    metadata = json.loads(result.stdout)
+    target_dir = Path(metadata["target_directory"])
+    for pkg in metadata.get("packages", []):
+        if pkg.get("name") != crate:
+            continue
+        bins = [t for t in pkg.get("targets", []) if "bin" in (t.get("kind") or [])]
+        if not bins:
+            raise RuntimeError(f"crate {crate!r} has no bin targets")
+        for t in bins:
+            if t.get("name") == crate:
+                return target_dir, t["name"]
+        if len(bins) == 1:
+            return target_dir, bins[0]["name"]
+        names = ", ".join(sorted(t.get("name", "") for t in bins))
+        raise RuntimeError(
+            f"crate {crate!r} has multiple bins ({names}); none matched the crate name"
+        )
+    raise RuntimeError(f"crate {crate!r} not found in workspace metadata")
 
 
-def get_tls_gateway_binary(config: pytest.Config) -> Path:
-    """Build or locate the gateway binary with the tls feature enabled."""
-    return _build_gateway(config, extra_features=["tls"])
-
-
-class Gateway:
-    def __init__(
-        self,
-        process: subprocess.Popen | None = None,
-        *,
-        base_url: str | None = None,
-        addr: str | None = None,
-        transport: str | None = None,
-    ):
+class ProcessUnderTest:
+    def __init__(self, process: subprocess.Popen | None = None):
         self.process = process
         self._output: list[str] = []
         self._line_event = threading.Event()
@@ -95,10 +105,7 @@ class Gateway:
         if process and process.stdout:
             self._reader_thread = threading.Thread(target=self._read_output, daemon=True)
             self._reader_thread.start()
-        self.base_url = base_url
-        self.addr = addr
-        self.transport = transport
-        self.client = httpx.Client(base_url=base_url) if base_url else None
+        self.match: re.Match | None = None
         self._output_printed = False
 
     @classmethod
@@ -107,73 +114,59 @@ class Gateway:
         cmd: list[str],
         timeout_seconds: float = GATEWAY_SPAWN_TIMEOUT,
         env: dict | None = None,
-        banner: str | re.Pattern | None = None,
+        ready_banner: re.Pattern | None = None,
         docker_container: str | None = None,
-        ssl_context=None,
     ) -> Self:
-        """Spawn process, wait for listening, return ready Gateway.
+        """Spawn process, wait for banner, return ready ProcessUnderTest.
 
         Args:
             cmd: Command to execute
             timeout_seconds: Maximum seconds to wait for banner
             env: Environment variables for the process
-            banner: Pattern to wait for before considering ready
-            docker_container: If provided, use `docker port` to resolve the host address
+            ready_banner: Pattern to wait for before considering ready (None
+                to skip). The `re.Match` is stored on `.match` for consumers.
+            docker_container: If set, resolve host port via `docker port` and
+                synthesize a listening line so `ready_banner` can match it.
         """
         process = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             env=env,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
         )
 
-        gw = cls(process)
-        if banner is None:
-            return gw
+        proc = cls(process)
+        if ready_banner is None:
+            return proc
 
         try:
-            gw.wait_for(banner, timeout_seconds)
-
-            # Docker mode: resolve mapped port via `docker port`
             if docker_container:
+                proc.wait_for(ready_banner, timeout_seconds)
                 port_result = subprocess.run(
                     ["docker", "port", docker_container, "7690"],
                     stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
                 )
+                port_result.check_returncode()
                 host_port = port_result.stdout.decode().strip().split(":")[-1]
-
-                gw.addr = f"127.0.0.1:{host_port}"
-                gw.transport = "tcp"
-                gw.base_url = f"http://127.0.0.1:{host_port}/sovd"
-                gw.client = httpx.Client(base_url=gw.base_url)
+                if not host_port.isdigit():
+                    raise RuntimeError(
+                        f"docker port returned unexpected output: "
+                        f"{port_result.stdout.decode()!r}"
+                    )
+                synthetic = f"Listening addr=127.0.0.1:{host_port} type=tcp base=/sovd"
+                proc.match = ready_banner.search(synthetic)
             else:
-                # Standard mode: parse address from process output
-                match = LISTENING_PATTERN.search(gw.stdout)
-                if match:
-                    gw.addr, gw.transport, base = match.group(1), match.group(2), match.group(3)
-                    if gw.transport == "tcp":
-                        gw.base_url = f"http://{gw.addr}{base}"
-                        gw.client = httpx.Client(base_url=gw.base_url)
-                    elif gw.transport in ("tls", "mtls"):
-                        gw.base_url = f"https://{gw.addr}{base}"
-                        gw.client = httpx.Client(
-                            base_url=gw.base_url,
-                            verify=ssl_context if ssl_context is not None else True,
-                        )
-                    else:
-                        gw.base_url = f"http://localhost{base}"
-                        uds_addr = "\0" + gw.addr if gw.transport == "abstract" else gw.addr
-                        gw.client = httpx.Client(
-                            base_url=gw.base_url,
-                            transport=httpx.HTTPTransport(uds=uds_addr),
-                        )
-
-            return gw
+                proc.match = proc.wait_for(ready_banner, timeout_seconds)
+            return proc
         except Exception as e:
-            output = gw.stdout
-            gw.close()
+            output = proc.stdout
+            proc.close()
             if output:
-                raise RuntimeError(f"{e}\n\nGateway Output:\n{output}") from e
+                raise RuntimeError(f"{e}\n\nProcess Output:\n{output}") from e
             raise
 
     @property
@@ -188,22 +181,6 @@ class Gateway:
             self._reader_thread.join(timeout=1.0)
         with self._lock:
             return "".join(self._output)
-
-    def get(self, path: str, **kwargs) -> httpx.Response:
-        assert self.client is not None
-        return self.client.get(path, **kwargs)
-
-    def post(self, path: str, **kwargs) -> httpx.Response:
-        assert self.client is not None
-        return self.client.post(path, **kwargs)
-
-    def put(self, path: str, **kwargs) -> httpx.Response:
-        assert self.client is not None
-        return self.client.put(path, **kwargs)
-
-    def delete(self, path: str, **kwargs) -> httpx.Response:
-        assert self.client is not None
-        return self.client.delete(path, **kwargs)
 
     def wait_for(
         self,
@@ -228,7 +205,9 @@ class Gateway:
 
         deadline = time.monotonic() + timeout_seconds
         while True:
-            # Check existing lines
+            # Clear before checking so a set() that races with the drain
+            # below still wakes the next wait().
+            self._line_event.clear()
             with self._lock:
                 while self._read_pos < len(self._output):
                     line = self._output[self._read_pos]
@@ -242,12 +221,9 @@ class Gateway:
                 raise TimeoutError(
                     f"Pattern {pattern.pattern!r} not found within {timeout_seconds}s"
                 )
-            self._line_event.clear()
             self._line_event.wait(timeout=remaining)
 
     def close(self):
-        if self.client:
-            self.client.close()
         if self.process and self.process.returncode is None:
             self.process.terminate()
             try:
@@ -269,15 +245,15 @@ class Gateway:
             assert self.process.stdout is not None
             for line in self.process.stdout:
                 with self._lock:
-                    self._output.append(line.decode())
+                    self._output.append(line)
                 self._line_event.set()
         finally:
             self._closed = True
             self._line_event.set()
 
 
-def default_gateway_args(config: pytest.Config, *extra: str) -> list[str]:
-    """Build gateway args with Docker-vs-local URL detection and extra CLI options."""
+def default_binary_args(config: pytest.Config, *extra: str) -> list[str]:
+    """Build binary args with Docker-vs-local URL detection and extra CLI options."""
     extra_args = shlex.split(config.getoption("--opensovd-args"))
     if config.getoption("--opensovd-docker"):
         url = "http://0.0.0.0:7690/sovd"
@@ -286,27 +262,27 @@ def default_gateway_args(config: pytest.Config, *extra: str) -> list[str]:
     return ["--url", url, *extra, *extra_args]
 
 
-def spawn_gateway(
+def spawn_process(
     config: pytest.Config,
     args: list[str],
-    banner: str | re.Pattern | None = "Listening addr=",
-    extra_features: list[str] | None = None,
-    ssl_context=None,
-) -> Gateway:
-    """Spawn a gateway process with the given arguments.
+    ready_banner: re.Pattern | None = None,
+    crate: str = "opensovd-gateway",
+) -> ProcessUnderTest:
+    """Spawn the process under test with the given arguments.
 
-    This is a helper for tests that need custom gateway configurations.
-    For standard tests, use the session-scoped `gateway` fixture instead.
+    This is a helper for tests that need custom configurations.
+    For standard tests, use the module-scoped `gateway` fixture instead.
 
     Args:
         config: pytest configuration object
-        args: Command-line arguments for the gateway
-        banner: Pattern to wait for before considering ready (None to skip)
-        extra_features: Additional cargo features to enable (e.g. ["tls"])
-        ssl_context: ssl.SSLContext for HTTPS gateways; passed to httpx.Client
+        args: Command-line arguments for the binary
+        ready_banner: Pattern to wait for before considering ready (None to
+            skip). The match (groups: addr, transport, base) is stored on
+            ProcessUnderTest.match for SovdClient to interpret.
+        crate: cargo workspace package name to build when no prebuilt path is set
 
     Returns:
-        A running Gateway instance (caller must call close())
+        A running ProcessUnderTest instance (caller must call close())
     """
     docker_image = config.getoption("--opensovd-docker")
 
@@ -337,8 +313,27 @@ def spawn_gateway(
         cmd += [docker_image, *args]
 
         docker_container = container_name if socket_type == "tcp" else None
-        return Gateway.spawn(cmd, banner=banner, docker_container=docker_container)
+        return ProcessUnderTest.spawn(
+            cmd,
+            ready_banner=ready_banner,
+            docker_container=docker_container,
+        )
     else:
-        bin_path = _build_gateway(config, extra_features=extra_features)
+        bin_path = _build_crate_binary(config, crate)
         cmd = [str(bin_path), *args]
-        return Gateway.spawn(cmd, banner=banner, ssl_context=ssl_context)
+        return ProcessUnderTest.spawn(cmd, ready_banner=ready_banner)
+
+
+def listening_url(match: re.Match) -> str:
+    """Build a base URL string from a LISTENING_PATTERN match.
+
+    The match is expected to capture (addr, transport, base) in groups 1-3.
+    Useful for consumers (e.g. Bruno) that only need the URL and not a full
+    SovdClient with an httpx connection pool.
+    """
+    addr, transport, base = match.group(1), match.group(2), match.group(3)
+    if transport == "tcp":
+        return f"http://{addr}{base}"
+    if transport in ("tls", "mtls"):
+        return f"https://{addr}{base}"
+    return f"http://localhost{base}"

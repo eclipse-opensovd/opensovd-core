@@ -5,13 +5,13 @@
 
 import jsonschema
 import pytest
-from fixtures import default_gateway_args
+from fixtures import default_binary_args
 
 
 @pytest.fixture(scope="module")
-def gateway_args(request):
+def binary_args(request):
     """Enable mock entities for all tests in this module."""
-    return default_gateway_args(request.config, "--mock")
+    return default_binary_args(request.config, "--mock")
 
 
 def validate_schema(data, is_data_item=False):
@@ -36,12 +36,12 @@ def validate_schema(data, is_data_item=False):
 
 
 @pytest.mark.parametrize("include_schema", [False, True], ids=["without-schema", "with-schema"])
-def test_traverse_api(gateway, include_schema):
+def test_traverse_api(client, include_schema):
     """Traverse all API endpoints, optionally validating schemas."""
     params = {"include-schema": "true"} if include_schema else None
 
     # GET /version-info
-    response = gateway.get("/version-info", params=params)
+    response = client.get("/version-info", params=params)
     assert response.status_code == 200
     version_info = response.json()
     assert "sovd_info" in version_info
@@ -49,7 +49,7 @@ def test_traverse_api(gateway, include_schema):
         validate_schema(version_info)
 
     # 1. GET /v1 root
-    response = gateway.get("/v1", params=params)
+    response = client.get("/v1", params=params)
     assert response.status_code == 200
     root = response.json()
     assert "components" in root
@@ -57,7 +57,7 @@ def test_traverse_api(gateway, include_schema):
         validate_schema(root)
 
     # 2. GET /v1/components list
-    response = gateway.get("/v1/components", params=params)
+    response = client.get("/v1/components", params=params)
     assert response.status_code == 200
     components_list = response.json()
     assert "items" in components_list
@@ -70,7 +70,7 @@ def test_traverse_api(gateway, include_schema):
         component_id = component_item["id"]
 
         # GET component capabilities
-        response = gateway.get(f"/v1/components/{component_id}", params=params)
+        response = client.get(f"/v1/components/{component_id}", params=params)
         assert response.status_code == 200
         component = response.json()
         assert component["id"] == component_id
@@ -78,7 +78,7 @@ def test_traverse_api(gateway, include_schema):
             validate_schema(component)
 
         # GET data-categories
-        response = gateway.get(f"/v1/components/{component_id}/data-categories", params=params)
+        response = client.get(f"/v1/components/{component_id}/data-categories", params=params)
         assert response.status_code == 200
         categories = response.json()
         assert "items" in categories
@@ -86,7 +86,7 @@ def test_traverse_api(gateway, include_schema):
             validate_schema(categories)
 
         # GET data-groups
-        response = gateway.get(f"/v1/components/{component_id}/data-groups", params=params)
+        response = client.get(f"/v1/components/{component_id}/data-groups", params=params)
         assert response.status_code == 200
         groups = response.json()
         assert "items" in groups
@@ -94,7 +94,7 @@ def test_traverse_api(gateway, include_schema):
             validate_schema(groups)
 
         # GET data list
-        response = gateway.get(f"/v1/components/{component_id}/data", params=params)
+        response = client.get(f"/v1/components/{component_id}/data", params=params)
         assert response.status_code == 200
         data_list = response.json()
         assert "items" in data_list
@@ -104,7 +104,7 @@ def test_traverse_api(gateway, include_schema):
         # GET each individual data item
         for data_item in data_list["items"]:
             data_id = data_item["id"]
-            response = gateway.get(f"/v1/components/{component_id}/data/{data_id}", params=params)
+            response = client.get(f"/v1/components/{component_id}/data/{data_id}", params=params)
             assert response.status_code == 200
             data_value = response.json()
             assert "data" in data_value
@@ -113,7 +113,7 @@ def test_traverse_api(gateway, include_schema):
                 validate_schema(data_value, is_data_item=True)
 
     # 4. GET /v1/areas list
-    response = gateway.get("/v1/areas", params=params)
+    response = client.get("/v1/areas", params=params)
     assert response.status_code == 200
     areas_list = response.json()
     assert "items" in areas_list
@@ -127,7 +127,7 @@ def test_traverse_api(gateway, include_schema):
         area_id = area_item["id"]
 
         # GET area capabilities
-        response = gateway.get(f"/v1/areas/{area_id}", params=params)
+        response = client.get(f"/v1/areas/{area_id}", params=params)
         assert response.status_code == 200
         area = response.json()
         assert area["id"] == area_id
@@ -136,7 +136,7 @@ def test_traverse_api(gateway, include_schema):
             validate_schema(area)
 
         # GET area contains
-        response = gateway.get(f"/v1/areas/{area_id}/contains", params=params)
+        response = client.get(f"/v1/areas/{area_id}/contains", params=params)
         assert response.status_code == 200
         contains = response.json()
         assert "items" in contains
@@ -147,7 +147,7 @@ def test_traverse_api(gateway, include_schema):
         area_contains[area_id] = [item["id"] for item in contains["items"]]
 
     # 6. GET /v1/apps list
-    response = gateway.get("/v1/apps", params=params)
+    response = client.get("/v1/apps", params=params)
     assert response.status_code == 200
     apps_list = response.json()
     assert "items" in apps_list
@@ -162,7 +162,7 @@ def test_traverse_api(gateway, include_schema):
         app_id = app_item["id"]
 
         # GET app capabilities
-        response = gateway.get(f"/v1/apps/{app_id}", params=params)
+        response = client.get(f"/v1/apps/{app_id}", params=params)
         assert response.status_code == 200
         app = response.json()
         assert app["id"] == app_id
@@ -171,7 +171,7 @@ def test_traverse_api(gateway, include_schema):
             validate_schema(app)
 
         # GET app is-located-on
-        response = gateway.get(f"/v1/apps/{app_id}/is-located-on", params=params)
+        response = client.get(f"/v1/apps/{app_id}/is-located-on", params=params)
         assert response.status_code == 200
         located_on = response.json()
         assert "items" in located_on
@@ -181,7 +181,7 @@ def test_traverse_api(gateway, include_schema):
             validate_schema(located_on)
 
         # GET app belongs-to (optional)
-        response = gateway.get(f"/v1/apps/{app_id}/belongs-to", params=params)
+        response = client.get(f"/v1/apps/{app_id}/belongs-to", params=params)
         assert response.status_code == 200
         belongs_to = response.json()
         assert "items" in belongs_to
@@ -192,7 +192,7 @@ def test_traverse_api(gateway, include_schema):
         # Verify data link in app capabilities (if app has data provider)
         if "data" in app:
             # GET app data-categories
-            response = gateway.get(f"/v1/apps/{app_id}/data-categories", params=params)
+            response = client.get(f"/v1/apps/{app_id}/data-categories", params=params)
             assert response.status_code == 200
             app_categories = response.json()
             assert "items" in app_categories
@@ -200,7 +200,7 @@ def test_traverse_api(gateway, include_schema):
                 validate_schema(app_categories)
 
             # GET app data-groups
-            response = gateway.get(f"/v1/apps/{app_id}/data-groups", params=params)
+            response = client.get(f"/v1/apps/{app_id}/data-groups", params=params)
             assert response.status_code == 200
             app_groups = response.json()
             assert "items" in app_groups
@@ -208,7 +208,7 @@ def test_traverse_api(gateway, include_schema):
                 validate_schema(app_groups)
 
             # GET app data list
-            response = gateway.get(f"/v1/apps/{app_id}/data", params=params)
+            response = client.get(f"/v1/apps/{app_id}/data", params=params)
             assert response.status_code == 200
             app_data_list = response.json()
             assert "items" in app_data_list
@@ -218,7 +218,7 @@ def test_traverse_api(gateway, include_schema):
             # GET each individual app data item
             for data_item in app_data_list["items"]:
                 data_id = data_item["id"]
-                response = gateway.get(f"/v1/apps/{app_id}/data/{data_id}", params=params)
+                response = client.get(f"/v1/apps/{app_id}/data/{data_id}", params=params)
                 assert response.status_code == 200
                 data_value = response.json()
                 assert "data" in data_value
@@ -238,7 +238,7 @@ def test_traverse_api(gateway, include_schema):
         component_id = component_item["id"]
 
         # GET component hosts
-        response = gateway.get(f"/v1/components/{component_id}/hosts", params=params)
+        response = client.get(f"/v1/components/{component_id}/hosts", params=params)
         assert response.status_code == 200
         hosts = response.json()
         assert "items" in hosts
@@ -248,7 +248,7 @@ def test_traverse_api(gateway, include_schema):
         component_hosts[component_id] = [item["id"] for item in hosts["items"]]
 
         # GET component belongs-to
-        response = gateway.get(f"/v1/components/{component_id}/belongs-to", params=params)
+        response = client.get(f"/v1/components/{component_id}/belongs-to", params=params)
         assert response.status_code == 200
         belongs_to = response.json()
         assert "items" in belongs_to
@@ -286,9 +286,9 @@ def test_traverse_api(gateway, include_schema):
                 assert app_areas[entity_id] == area_id
 
 
-def test_root_capabilities_areas_link(gateway):
+def test_root_capabilities_areas_link(client):
     """Verify root capabilities include areas link."""
-    response = gateway.get("/v1")
+    response = client.get("/v1")
     assert response.status_code == 200
     root = response.json()
     assert "areas" in root

@@ -23,13 +23,13 @@ import pytest
         ),
     ],
 )
-def gateway_args(request):
+def binary_args(request):
     """Invalid CORS config (exits with error)."""
     return request.param
 
 
 @pytest.fixture(scope="module")
-def gateway_banner():
+def ready_banner():
     """Skip waiting for server ready pattern since the gateway exits with error."""
     return None
 

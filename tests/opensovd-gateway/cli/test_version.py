@@ -14,13 +14,13 @@ VERSION_PATTERN = re.compile(
 
 
 @pytest.fixture(scope="module")
-def gateway_args():
+def binary_args():
     """Run --version command."""
     return ["--version"]
 
 
 @pytest.fixture(scope="module")
-def gateway_banner():
+def ready_banner():
     """Skip waiting for server ready pattern since --version exits immediately."""
     return None
 

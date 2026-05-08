@@ -6,9 +6,9 @@
 import jsonschema
 
 
-def test_version_info(gateway):
+def test_version_info(client):
     """Test that /version-info returns SOVD info without schema."""
-    response = gateway.get("/version-info")
+    response = client.get("/version-info")
     assert response.status_code == 200
     data = response.json()
     assert "sovd_info" in data
@@ -19,9 +19,9 @@ def test_version_info(gateway):
     assert "base_uri" in info
 
 
-def test_version_info_with_schema(gateway):
+def test_version_info_with_schema(client):
     """Test that /version-info returns valid schema when requested."""
-    response = gateway.get("/version-info", params={"include-schema": "true"})
+    response = client.get("/version-info", params={"include-schema": "true"})
     assert response.status_code == 200
     data = response.json()
     assert "sovd_info" in data

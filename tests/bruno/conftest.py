@@ -8,7 +8,7 @@ import shutil
 import subprocess
 
 import pytest
-from fixtures import default_gateway_args, spawn_gateway
+from fixtures import LISTENING_PATTERN, default_binary_args, listening_url, spawn_process
 
 
 def pytest_collect_file(parent, file_path):
@@ -21,10 +21,10 @@ def pytest_collect_file(parent, file_path):
         return BrunoFile.from_parent(parent, path=file_path)
 
 
-def _get_gateway_args(config) -> list[str]:
-    """Return gateway args (matches tests/conftest.py gateway_args fixture)."""
+def _get_binary_args(config) -> list[str]:
+    """Return binary args (matches tests/conftest.py binary_args fixture)."""
     args = shlex.split(config.getoption("--opensovd-args"))
-    return args or default_gateway_args(config)
+    return args or default_binary_args(config)
 
 
 @pytest.hookimpl(tryfirst=True)
@@ -36,20 +36,18 @@ def pytest_runtest_setup(item):
     if shutil.which("bru") is None:
         pytest.skip("bru CLI not installed")
 
-    if not hasattr(item.config, "_bruno_gateway"):
-        gw = spawn_gateway(item.config, _get_gateway_args(item.config))
-        item.config._bruno_gateway = gw
-
-    gw = item.config._bruno_gateway
-    if gw.base_url:
-        item.config._gateway_base_url = gw.base_url
+    if not hasattr(item.config, "_bruno_process"):
+        proc = spawn_process(item.config, _get_binary_args(item.config), LISTENING_PATTERN)
+        item.config._bruno_process = proc
+        if proc.match is not None:
+            item.config._gateway_base_url = listening_url(proc.match)
 
 
 @pytest.hookimpl(trylast=True)
 def pytest_sessionfinish(session, exitstatus):
     """Clean up gateway."""
-    if hasattr(session.config, "_bruno_gateway"):
-        session.config._bruno_gateway.close()
+    if hasattr(session.config, "_bruno_process"):
+        session.config._bruno_process.close()
 
 
 class BrunoFile(pytest.File):

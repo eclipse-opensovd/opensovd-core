@@ -18,8 +18,7 @@ pytestmark = pytest.mark.skipif(
 @pytest.fixture(scope="module")
 def socket_path():
     """Create a unique socket path and clean up after tests."""
-    # Use short path to stay under macOS 104-byte SUN_LEN limit
-    # Path must be in /tmp for Docker volume mount compatibility
+    # Short path to stay under macOS 104-byte SUN_LEN limit.
     path = f"/tmp/sovd-{uuid.uuid4().hex[:8]}.sock"
     yield path
     with contextlib.suppress(OSError):
@@ -27,15 +26,15 @@ def socket_path():
 
 
 @pytest.fixture(scope="module")
-def gateway_args(socket_path):
+def binary_args(socket_path):
     """Use Unix socket transport."""
     return ["--unix-socket", socket_path]
 
 
-def test_unix_socket_transport(gateway):
+def test_unix_socket_transport(client):
     """Verify the gateway listens on a filesystem socket when given --unix-socket /path."""
-    assert gateway.transport == "unix"
-    response = gateway.get("/version-info")
+    assert client.transport == "unix"
+    response = client.get("/version-info")
     assert response.status_code == 200
     data = response.json()
     assert "sovd_info" in data

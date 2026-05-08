@@ -5,13 +5,13 @@
 
 import jsonschema
 import pytest
-from fixtures import default_gateway_args
+from fixtures import default_binary_args
 
 
 @pytest.fixture(scope="module")
-def gateway_args(request):
+def binary_args(request):
     """Enable mock entities for all tests in this module."""
-    return default_gateway_args(request.config, "--mock")
+    return default_binary_args(request.config, "--mock")
 
 
 def find_component(items, component_id):
@@ -21,9 +21,9 @@ def find_component(items, component_id):
     return component
 
 
-def test_root_capabilities(gateway):
+def test_root_capabilities(client):
     """Test that /v1 returns entity capabilities with components link."""
-    response = gateway.get("/v1")
+    response = client.get("/v1")
     assert response.status_code == 200
     data = response.json()
     assert "id" in data
@@ -32,9 +32,9 @@ def test_root_capabilities(gateway):
     assert data["components"].endswith("/v1/components")
 
 
-def test_root_capabilities_with_schema(gateway):
+def test_root_capabilities_with_schema(client):
     """Test that /v1 returns valid schema when requested."""
-    response = gateway.get("/v1", params={"include-schema": "true"})
+    response = client.get("/v1", params={"include-schema": "true"})
     assert response.status_code == 200
     data = response.json()
     assert "schema" in data
@@ -42,18 +42,18 @@ def test_root_capabilities_with_schema(gateway):
     jsonschema.validate(instance=data, schema=data["schema"])
 
 
-def test_list_components(gateway):
+def test_list_components(client):
     """Test that /v1/components returns a list of component items."""
-    response = gateway.get("/v1/components")
+    response = client.get("/v1/components")
     assert response.status_code == 200
     data = response.json()
     assert "items" in data
     assert isinstance(data["items"], list)
 
 
-def test_list_components_with_schema(gateway):
+def test_list_components_with_schema(client):
     """Test that /v1/components returns valid schema when requested."""
-    response = gateway.get("/v1/components", params={"include-schema": "true"})
+    response = client.get("/v1/components", params={"include-schema": "true"})
     assert response.status_code == 200
     data = response.json()
     assert "items" in data
@@ -62,9 +62,9 @@ def test_list_components_with_schema(gateway):
     jsonschema.validate(instance=data, schema=data["schema"])
 
 
-def test_list_components_have_tags(gateway):
+def test_list_components_have_tags(client):
     """Test that components include their configured tags."""
-    response = gateway.get("/v1/components")
+    response = client.get("/v1/components")
     assert response.status_code == 200
     data = response.json()
     items = data["items"]
@@ -80,10 +80,10 @@ def test_list_components_have_tags(gateway):
     assert "network" in gateway_item["tags"]
 
 
-def test_list_components_filter_by_single_tag(gateway):
+def test_list_components_filter_by_single_tag(client):
     """Test filtering components by a single tag."""
     # Filter by powertrain tag - should return only ECU
-    response = gateway.get("/v1/components", params={"tags": "powertrain"})
+    response = client.get("/v1/components", params={"tags": "powertrain"})
     assert response.status_code == 200
     data = response.json()
     items = data["items"]
@@ -91,7 +91,7 @@ def test_list_components_filter_by_single_tag(gateway):
     assert items[0]["id"] == "ecu"
 
     # Filter by network tag - should return only Gateway
-    response = gateway.get("/v1/components", params={"tags": "network"})
+    response = client.get("/v1/components", params={"tags": "network"})
     assert response.status_code == 200
     data = response.json()
     items = data["items"]
@@ -99,10 +99,10 @@ def test_list_components_filter_by_single_tag(gateway):
     assert items[0]["id"] == "gateway"
 
 
-def test_list_components_filter_by_multiple_tags(gateway):
+def test_list_components_filter_by_multiple_tags(client):
     """Test filtering components by multiple tags uses OR logic."""
     # Filter by multiple tags (OR logic) - should return both
-    response = gateway.get("/v1/components", params=[("tags", "powertrain"), ("tags", "network")])
+    response = client.get("/v1/components", params=[("tags", "powertrain"), ("tags", "network")])
     assert response.status_code == 200
     data = response.json()
     items = data["items"]
@@ -112,18 +112,18 @@ def test_list_components_filter_by_multiple_tags(gateway):
     assert "gateway" in ids
 
 
-def test_list_components_filter_by_nonexistent_tag(gateway):
+def test_list_components_filter_by_nonexistent_tag(client):
     """Test that filtering by nonexistent tag returns empty list."""
-    response = gateway.get("/v1/components", params={"tags": "nonexistent"})
+    response = client.get("/v1/components", params={"tags": "nonexistent"})
     assert response.status_code == 200
     data = response.json()
     items = data["items"]
     assert len(items) == 0
 
 
-def test_component_capabilities_has_variant(gateway):
+def test_component_capabilities_has_variant(client):
     """Test that component capabilities include variant information."""
-    response = gateway.get("/v1/components/ecu")
+    response = client.get("/v1/components/ecu")
     assert response.status_code == 200
     data = response.json()
     assert data["id"] == "ecu"
@@ -131,18 +131,18 @@ def test_component_capabilities_has_variant(gateway):
     assert data["variant"] == {"variant": "v2", "manufacturer": "ACME"}
 
 
-def test_component_unknown(gateway):
+def test_component_unknown(client):
     """Test that unknown component returns 404 with error details."""
-    response = gateway.get("/v1/components/unknown")
+    response = client.get("/v1/components/unknown")
     assert response.status_code == 404
     data = response.json()
     assert data["vendor_code"] == "entity-not-found"
     assert "unknown" in data["message"]
 
 
-def test_list_components_has_translation_id(gateway):
+def test_list_components_has_translation_id(client):
     """Test that components with translation_id return it in list response."""
-    response = gateway.get("/v1/components")
+    response = client.get("/v1/components")
     assert response.status_code == 200
     data = response.json()
     items = data["items"]
@@ -156,17 +156,17 @@ def test_list_components_has_translation_id(gateway):
     assert "translation_id" not in gateway_item
 
 
-def test_component_capabilities_has_translation_id(gateway):
+def test_component_capabilities_has_translation_id(client):
     """Test that component capabilities endpoint returns translation_id."""
-    response = gateway.get("/v1/components/ecu")
+    response = client.get("/v1/components/ecu")
     assert response.status_code == 200
     data = response.json()
     assert data["translation_id"] == "ecu.name"
 
 
-def test_component_capabilities_without_translation_id(gateway):
+def test_component_capabilities_without_translation_id(client):
     """Test that components without translation_id omit the field."""
-    response = gateway.get("/v1/components/gateway")
+    response = client.get("/v1/components/gateway")
     assert response.status_code == 200
     data = response.json()
     assert "translation_id" not in data

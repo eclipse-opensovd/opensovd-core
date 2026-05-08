@@ -14,17 +14,17 @@ pytestmark = pytest.mark.skipif(
 
 
 @pytest.fixture(scope="module")
-def gateway_args():
+def binary_args():
     """Use abstract socket transport."""
     # Abstract sockets work with Docker via --network=host
     name = f"opensovd-test-{uuid.uuid4().hex[:8]}"
     return ["--unix-socket", f"@{name}"]
 
 
-def test_abstract_socket_transport(gateway):
+def test_abstract_socket_transport(client):
     """Verify the gateway listens on an abstract socket when given --unix-socket @name."""
-    assert gateway.transport == "abstract"
-    response = gateway.get("/version-info")
+    assert client.transport == "abstract"
+    response = client.get("/version-info")
     assert response.status_code == 200
     data = response.json()
     assert "sovd_info" in data
