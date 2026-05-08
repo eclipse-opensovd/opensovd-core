@@ -25,11 +25,13 @@ uv run pytest
 # Build and run the gateway (default)
 uv run pytest
 
-# Use pre-built binary
-uv run pytest --opensovd-binary target/release/opensovd-gateway
+# Use a pre-built binary (scope to one crate's tests; --opensovd-run applies to every selected test)
+uv run pytest tests/opensovd-gateway/ --opensovd-run=target/release/opensovd-gateway
 
-# Test Docker image
-uv run pytest --opensovd-docker ghcr.io/eclipse-opensovd/opensovd-gateway:latest
+# Run via Docker (--network=host lets the binary use the harness's
+# ephemeral-port URL, so multiple sessions can run in parallel; Linux only)
+uv run pytest tests/opensovd-gateway/ \
+  --opensovd-run="docker run --rm --network=host ghcr.io/eclipse-opensovd/opensovd-gateway:latest"
 ```
 
 ### Example Test

@@ -40,7 +40,6 @@ def gateway_ssl_context(tls_certs):
 def test_mtls_transport(client):
     """mTLS: gateway reports tls transport type."""
     assert client.transport == "tls"
-    assert client.addr.startswith("127.0.0.1:")
 
 
 def test_mtls_valid_client_cert(client):

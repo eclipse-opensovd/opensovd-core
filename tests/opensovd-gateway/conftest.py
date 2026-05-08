@@ -41,7 +41,7 @@ class SovdClient:
 
         Args:
             gateway: ProcessUnderTest with `.match` populated by ready_banner.
-            ssl_context: ssl.SSLContext for tls/mtls transports. None falls
+            ssl_context: ssl.SSLContext for the tls transport. None falls
                 through to httpx's default `verify=True` (system CAs); a
                 context overrides verification (and supplies client certs
                 for mTLS).
@@ -53,25 +53,32 @@ class SovdClient:
             raise RuntimeError("ready_banner did not match; cannot build SovdClient")
         addr = gateway.match.group(1)
         transport = gateway.match.group(2)
-        if ssl_context is not None and transport not in ("tls", "mtls"):
+        if ssl_context is not None and transport != "tls":
             raise ValueError(
                 f"ssl_context provided but transport is {transport!r}; "
-                "ssl_context only applies to tls/mtls"
+                "ssl_context only applies to tls"
             )
         base_url = listening_url(gateway.match)
-        if transport == "tcp":
-            http = httpx.Client(base_url=base_url)
-        elif transport in ("tls", "mtls"):
-            http = httpx.Client(
-                base_url=base_url,
-                verify=ssl_context if ssl_context is not None else True,
-            )
-        else:
-            uds_addr = "\0" + addr if transport == "abstract" else addr
-            http = httpx.Client(
-                base_url=base_url,
-                transport=httpx.HTTPTransport(uds=uds_addr),
-            )
+        match transport:
+            case "tcp":
+                http = httpx.Client(base_url=base_url)
+            case "tls":
+                http = httpx.Client(
+                    base_url=base_url,
+                    verify=ssl_context if ssl_context is not None else True,
+                )
+            case "abstract":
+                http = httpx.Client(
+                    base_url=base_url,
+                    transport=httpx.HTTPTransport(uds="\0" + addr),
+                )
+            case "unix":
+                http = httpx.Client(
+                    base_url=base_url,
+                    transport=httpx.HTTPTransport(uds=addr),
+                )
+            case _:
+                raise ValueError(f"unknown transport: {transport!r}")
         return cls(gateway, addr=addr, transport=transport, base_url=base_url, http=http)
 
     def get(self, path: str, **kwargs) -> httpx.Response:

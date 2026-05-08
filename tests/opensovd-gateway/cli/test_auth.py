@@ -17,7 +17,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from fixtures import default_binary_args
 
-PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
+PROJECT_ROOT = Path(__file__).parents[3]
 POLICY_FILE = PROJECT_ROOT / "examples" / "server" / "auth" / "sovd_authz.rego"
 POLICY_DATA = PROJECT_ROOT / "examples" / "server" / "auth" / "sovd_data.json"
 

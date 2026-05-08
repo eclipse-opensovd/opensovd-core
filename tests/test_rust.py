@@ -3,7 +3,7 @@
 
 """Run Rust unit tests via pytest.
 
-Tests are skipped when --opensovd-binary or --opensovd-docker is specified.
+Tests are skipped when --opensovd-run is specified.
 """
 
 import re
@@ -55,10 +55,8 @@ def list_rust_tests() -> list[tuple[str, str]]:
 
 def pytest_generate_tests(metafunc):
     if "rust_test" in metafunc.fixturenames:
-        # Skip Rust tests when running against a pre-built binary or docker image
-        binary = metafunc.config.getoption("--opensovd-binary", default=None)
-        docker = metafunc.config.getoption("--opensovd-docker", default=None)
-        if binary or docker:
+        # Skip Rust tests when running against an external command
+        if metafunc.config.getoption("--opensovd-run", default=None):
             # Don't parametrize - test will be skipped via marker below
             return
         tests = list_rust_tests()
@@ -67,9 +65,9 @@ def pytest_generate_tests(metafunc):
 
 @pytest.fixture
 def rust_test(request):
-    """Fixture that skips when no parametrization (external binary/docker mode)."""
+    """Fixture that skips when no parametrization (--opensovd-run mode)."""
     if not hasattr(request, "param"):
-        pytest.skip("Rust tests skipped when using --opensovd-binary or --opensovd-docker")
+        pytest.skip("Rust tests skipped when using --opensovd-run")
     return request.param
 
 

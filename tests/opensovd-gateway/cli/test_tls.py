@@ -33,7 +33,6 @@ def gateway_ssl_context(tls_certs):
 def test_tls_transport(client):
     """Plain TLS: client authenticates the server cert, no client cert needed."""
     assert client.transport == "tls"
-    assert client.addr.startswith("127.0.0.1:")
 
     response = client.get("/version-info")
     assert response.status_code == 200

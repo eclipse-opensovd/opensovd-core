@@ -3,7 +3,6 @@
 
 """Pytest integration for Bruno test files."""
 
-import shlex
 import shutil
 import subprocess
 
@@ -21,12 +20,6 @@ def pytest_collect_file(parent, file_path):
         return BrunoFile.from_parent(parent, path=file_path)
 
 
-def _get_binary_args(config) -> list[str]:
-    """Return binary args (matches tests/conftest.py binary_args fixture)."""
-    args = shlex.split(config.getoption("--opensovd-args"))
-    return args or default_binary_args(config)
-
-
 @pytest.hookimpl(tryfirst=True)
 def pytest_runtest_setup(item):
     """Spawn gateway for Bruno tests."""
@@ -37,7 +30,7 @@ def pytest_runtest_setup(item):
         pytest.skip("bru CLI not installed")
 
     if not hasattr(item.config, "_bruno_process"):
-        proc = spawn_process(item.config, _get_binary_args(item.config), LISTENING_PATTERN)
+        proc = spawn_process(item.config, default_binary_args(item.config), LISTENING_PATTERN)
         item.config._bruno_process = proc
         if proc.match is not None:
             item.config._gateway_base_url = listening_url(proc.match)

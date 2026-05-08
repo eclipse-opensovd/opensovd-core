@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-_MKCERTS = Path(__file__).parent.parent.parent.parent / "scripts" / "mkcerts.sh"
+_MKCERTS = Path(__file__).parents[3] / "scripts" / "mkcerts.sh"
 
 
 @pytest.fixture(scope="session")

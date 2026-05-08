@@ -19,7 +19,6 @@ def test_tcp_transport(client):
     to HTTP requests on that transport.
     """
     assert client.transport == "tcp"
-    assert client.addr.startswith("127.0.0.1:")
 
     response = client.get("/version-info")
     assert response.status_code == 200

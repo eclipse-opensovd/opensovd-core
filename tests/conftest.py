@@ -4,7 +4,6 @@
 """Pytest configuration and fixtures for end2end tests."""
 
 import re
-import shlex
 from pathlib import Path
 
 import pytest
@@ -21,6 +20,10 @@ def pytest_configure(config):
     """Store config for later access in other hooks."""
     global _config
     _config = config
+    if config.getoption("--opensovd-run"):
+        for flag in ("--opensovd-release", "--opensovd-features"):
+            if config.getoption(flag):
+                raise pytest.UsageError(f"{flag} has no effect when --opensovd-run is set")
 
 
 @pytest.hookimpl(optionalhook=True)
@@ -82,10 +85,9 @@ def pytest_sessionfinish(session, exitstatus):
 
 def pytest_addoption(parser):
     parser.addoption(
-        "--opensovd-binary", default=None, help="Path to pre-built opensovd binary"
-    )
-    parser.addoption(
-        "--opensovd-docker", default=None, help="Docker image:tag to run instead of local binary"
+        "--opensovd-run",
+        default=None,
+        help="Command prefix to run instead of building from source; test args are appended",
     )
     parser.addoption(
         "--opensovd-args",
@@ -112,8 +114,7 @@ def crate_bin() -> str:
 
 @pytest.fixture(scope="module")
 def binary_args(request) -> list[str]:
-    args = shlex.split(request.config.getoption("--opensovd-args"))
-    return args or default_binary_args(request.config)
+    return default_binary_args(request.config)
 
 
 @pytest.fixture(scope="module")

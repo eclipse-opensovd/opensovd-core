@@ -16,17 +16,17 @@ from typing import Self
 import pytest
 
 # Timeout constants (seconds)
-GATEWAY_SPAWN_TIMEOUT = 30.0
-GATEWAY_WAIT_TIMEOUT = 1.0
-GATEWAY_TERMINATE_TIMEOUT = 5.0
+PROCESS_SPAWN_TIMEOUT = 30.0
+PROCESS_WAIT_TIMEOUT = 1.0
+PROCESS_TERMINATE_TIMEOUT = 5.0
 
 LISTENING_PATTERN = re.compile(
-    r"Listening addr=([^\s]+) type=(tcp|unix|abstract|tls|mtls) base=([^\s]+)"
+    r"Listening addr=(\S+) type=(tcp|unix|abstract|tls) base=(\S+)"
 )
 
 
 def _build_crate_binary(config: pytest.Config, crate: str) -> Path:
-    """Build or locate the opensovd binary for the given crate.
+    """Build the opensovd binary for the given crate via cargo.
 
     Args:
         config: pytest configuration object
@@ -35,10 +35,6 @@ def _build_crate_binary(config: pytest.Config, crate: str) -> Path:
     Returns:
         Path to the opensovd binary, resolved via `cargo metadata`
     """
-    binary = config.getoption("--opensovd-binary")
-    if binary:
-        return Path(binary)
-
     release_mode = config.getoption("--opensovd-release")
     configured = config.getoption("--opensovd-features") or ""
     features: set[str] = {f for f in configured.split(",") if f}
@@ -52,14 +48,13 @@ def _build_crate_binary(config: pytest.Config, crate: str) -> Path:
     if features:
         cargo_cmd.extend(["--features", ",".join(sorted(features))])
 
-    result = subprocess.run(
+    subprocess.run(
         cargo_cmd,
         cwd=project_root,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
+        check=True,
     )
-    if result.returncode != 0:
-        raise subprocess.CalledProcessError(result.returncode, cargo_cmd, result.stdout)
 
     profile = "release" if release_mode else "debug"
     return target_dir / profile / bin_name
@@ -69,9 +64,7 @@ def _build_crate_binary(config: pytest.Config, crate: str) -> Path:
 def _resolve_bin(project_root: Path, crate: str) -> tuple[Path, str]:
     """Return (target_directory, bin_name) for `crate` via `cargo metadata`."""
     cmd = ["cargo", "metadata", "--format-version=1", "--no-deps"]
-    result = subprocess.run(cmd, cwd=project_root, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    if result.returncode != 0:
-        raise subprocess.CalledProcessError(result.returncode, cmd, result.stdout, result.stderr)
+    result = subprocess.run(cmd, cwd=project_root, capture_output=True, check=True)
 
     metadata = json.loads(result.stdout)
     target_dir = Path(metadata["target_directory"])
@@ -112,10 +105,9 @@ class ProcessUnderTest:
     def spawn(
         cls,
         cmd: list[str],
-        timeout_seconds: float = GATEWAY_SPAWN_TIMEOUT,
+        timeout_seconds: float = PROCESS_SPAWN_TIMEOUT,
         env: dict | None = None,
         ready_banner: re.Pattern | None = None,
-        docker_container: str | None = None,
     ) -> Self:
         """Spawn process, wait for banner, return ready ProcessUnderTest.
 
@@ -125,8 +117,6 @@ class ProcessUnderTest:
             env: Environment variables for the process
             ready_banner: Pattern to wait for before considering ready (None
                 to skip). The `re.Match` is stored on `.match` for consumers.
-            docker_container: If set, resolve host port via `docker port` and
-                synthesize a listening line so `ready_banner` can match it.
         """
         process = subprocess.Popen(
             cmd,
@@ -143,30 +133,13 @@ class ProcessUnderTest:
             return proc
 
         try:
-            if docker_container:
-                proc.wait_for(ready_banner, timeout_seconds)
-                port_result = subprocess.run(
-                    ["docker", "port", docker_container, "7690"],
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                )
-                port_result.check_returncode()
-                host_port = port_result.stdout.decode().strip().split(":")[-1]
-                if not host_port.isdigit():
-                    raise RuntimeError(
-                        f"docker port returned unexpected output: "
-                        f"{port_result.stdout.decode()!r}"
-                    )
-                synthetic = f"Listening addr=127.0.0.1:{host_port} type=tcp base=/sovd"
-                proc.match = ready_banner.search(synthetic)
-            else:
-                proc.match = proc.wait_for(ready_banner, timeout_seconds)
+            proc.match = proc.wait_for(ready_banner, timeout_seconds)
             return proc
-        except Exception as e:
+        except (TimeoutError, RuntimeError) as e:
             output = proc.stdout
             proc.close()
             if output:
-                raise RuntimeError(f"{e}\n\nProcess Output:\n{output}") from e
+                e.add_note(f"Process Output:\n{output}")
             raise
 
     @property
@@ -185,7 +158,7 @@ class ProcessUnderTest:
     def wait_for(
         self,
         pattern: str | re.Pattern,
-        timeout_seconds: float = GATEWAY_WAIT_TIMEOUT,
+        timeout_seconds: float = PROCESS_WAIT_TIMEOUT,
     ) -> re.Match[str]:
         """Wait for a line matching pattern in stdout.
 
@@ -227,10 +200,10 @@ class ProcessUnderTest:
         if self.process and self.process.returncode is None:
             self.process.terminate()
             try:
-                self.process.wait(timeout=GATEWAY_TERMINATE_TIMEOUT)
+                self.process.wait(timeout=PROCESS_TERMINATE_TIMEOUT)
             except subprocess.TimeoutExpired:
                 self.process.kill()
-                self.process.wait(timeout=GATEWAY_TERMINATE_TIMEOUT)
+                self.process.wait(timeout=PROCESS_TERMINATE_TIMEOUT)
 
     def __enter__(self):
         return self
@@ -240,10 +213,13 @@ class ProcessUnderTest:
 
     def _read_output(self):
         """Read stdout in background thread."""
+        stdout = self.process.stdout if self.process else None
+        if stdout is None:
+            self._closed = True
+            self._line_event.set()
+            return
         try:
-            assert self.process is not None
-            assert self.process.stdout is not None
-            for line in self.process.stdout:
+            for line in stdout:
                 with self._lock:
                     self._output.append(line)
                 self._line_event.set()
@@ -253,13 +229,18 @@ class ProcessUnderTest:
 
 
 def default_binary_args(config: pytest.Config, *extra: str) -> list[str]:
-    """Build binary args with Docker-vs-local URL detection and extra CLI options."""
+    """Build binary args: ephemeral-port URL plus extras and any --opensovd-args.
+
+    Skips the auto-injected --url if the caller (or --opensovd-args) already
+    supplied one. Detects both `--url X` and `--url=X` forms.
+    """
     extra_args = shlex.split(config.getoption("--opensovd-args"))
-    if config.getoption("--opensovd-docker"):
-        url = "http://0.0.0.0:7690/sovd"
-    else:
-        url = "http://127.0.0.1:0/sovd"
-    return ["--url", url, *extra, *extra_args]
+    has_url = any(
+        a == "--url" or a.startswith("--url=") for a in (*extra, *extra_args)
+    )
+    if has_url:
+        return [*extra, *extra_args]
+    return ["--url", "http://127.0.0.1:0/sovd", *extra, *extra_args]
 
 
 def spawn_process(
@@ -275,53 +256,22 @@ def spawn_process(
 
     Args:
         config: pytest configuration object
-        args: Command-line arguments for the binary
+        args: Command-line arguments to pass after the run command / binary
         ready_banner: Pattern to wait for before considering ready (None to
             skip). The match (groups: addr, transport, base) is stored on
             ProcessUnderTest.match for SovdClient to interpret.
-        crate: cargo workspace package name to build when no prebuilt path is set
+        crate: cargo workspace package name to build when --opensovd-run is unset
 
     Returns:
         A running ProcessUnderTest instance (caller must call close())
     """
-    docker_image = config.getoption("--opensovd-docker")
-
-    if docker_image:
-        import uuid
-
-        container_name = f"sovd-test-{uuid.uuid4().hex[:8]}"
-
-        socket_type = "tcp"
-        socket_path = None
-        for i, arg in enumerate(args):
-            if arg == "--unix-socket" and i + 1 < len(args):
-                socket_path = args[i + 1]
-                socket_type = "abstract" if socket_path.startswith("@") else "unix"
-                break
-
-        cmd = ["docker", "run", "--rm", "-i", "--name", container_name]
-
-        if socket_type == "unix":
-            assert socket_path is not None
-            socket_dir = str(Path(socket_path).parent)
-            cmd += ["-v", f"{socket_dir}:{socket_dir}"]
-        elif socket_type == "abstract":
-            cmd += ["--network=host"]
-        else:
-            cmd += ["-P"]
-
-        cmd += [docker_image, *args]
-
-        docker_container = container_name if socket_type == "tcp" else None
-        return ProcessUnderTest.spawn(
-            cmd,
-            ready_banner=ready_banner,
-            docker_container=docker_container,
-        )
+    run_cmd = config.getoption("--opensovd-run")
+    if run_cmd:
+        cmd = [*shlex.split(run_cmd), *args]
     else:
         bin_path = _build_crate_binary(config, crate)
         cmd = [str(bin_path), *args]
-        return ProcessUnderTest.spawn(cmd, ready_banner=ready_banner)
+    return ProcessUnderTest.spawn(cmd, ready_banner=ready_banner)
 
 
 def listening_url(match: re.Match) -> str:
@@ -334,6 +284,6 @@ def listening_url(match: re.Match) -> str:
     addr, transport, base = match.group(1), match.group(2), match.group(3)
     if transport == "tcp":
         return f"http://{addr}{base}"
-    if transport in ("tls", "mtls"):
+    if transport == "tls":
         return f"https://{addr}{base}"
     return f"http://localhost{base}"
