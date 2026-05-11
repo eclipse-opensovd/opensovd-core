@@ -8,6 +8,7 @@ import json
 import re
 import shlex
 import subprocess
+import sysconfig
 import threading
 import time
 from pathlib import Path
@@ -57,7 +58,8 @@ def _build_crate_binary(config: pytest.Config, crate: str) -> Path:
     # profile to a directory matching its name.
     artifact_dir = "debug" if profile == "dev" else profile
     base = target_dir / target if target else target_dir
-    return base / artifact_dir / bin_name
+    exe_suffix = sysconfig.get_config_var("EXE") or ""
+    return base / artifact_dir / f"{bin_name}{exe_suffix}"
 
 
 @functools.cache
