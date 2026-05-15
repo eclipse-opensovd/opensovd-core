@@ -76,8 +76,7 @@ async fn with_layer_builds_client() {
 async fn timeout_layer_times_out() {
     use std::time::Duration;
 
-    use tokio::io::AsyncWriteExt;
-    use tokio::net::TcpListener;
+    use tokio::{io::AsyncWriteExt, net::TcpListener};
     use tower::timeout::TimeoutLayer;
 
     // Spawn a slow server that delays 2s before responding

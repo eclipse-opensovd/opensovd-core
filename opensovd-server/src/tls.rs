@@ -1,15 +1,11 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 Contributors to the Eclipse Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use std::io;
-use std::net::SocketAddr;
-use std::sync::Arc;
-use std::time::Duration;
+use std::{io, net::SocketAddr, sync::Arc, time::Duration};
 
 use rustls::ServerConfig;
 use tokio::net::TcpListener;
-use tokio_rustls::TlsAcceptor;
-use tokio_rustls::server::TlsStream;
+use tokio_rustls::{TlsAcceptor, server::TlsStream};
 
 // max number of TLS handshakes that can be made at the same time;
 const MAX_PENDING_HANDSHAKES: usize = 256;
@@ -81,7 +77,7 @@ impl axum::serve::Listener for TlsListener {
                                     });
                                 }
                                 Err(_) => {
-                                    // handshake queue full — drop the stream, TCP RST sent to client
+                                    // handshake queue full -- drop the stream, TCP RST sent to client
                                     tracing::warn!(peer = %addr, "handshake queue full, dropping connection");
                                 }
                             }

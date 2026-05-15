@@ -6,8 +6,10 @@
 use std::time::Duration;
 
 use http::{Request, Response};
-use tower_http::classify::ServerErrorsFailureClass;
-use tower_http::trace::{MakeSpan, OnFailure, OnRequest, OnResponse, TraceLayer};
+use tower_http::{
+    classify::ServerErrorsFailureClass,
+    trace::{MakeSpan, OnFailure, OnRequest, OnResponse, TraceLayer},
+};
 use tracing::Span;
 
 const TARGET: &str = "srv";

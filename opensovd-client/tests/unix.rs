@@ -4,8 +4,10 @@
 #![cfg(unix)]
 #![allow(clippy::unwrap_used)]
 
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::UnixListener;
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    net::UnixListener,
+};
 
 /// Accept one connection, read HTTP headers, then write a canned 200 response.
 async fn serve_one(listener: &UnixListener, body: &str) {

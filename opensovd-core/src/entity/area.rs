@@ -6,11 +6,9 @@
 //! Areas represent logical views of vehicle architecture and can be used to describe
 //! various vehicle topologies (e.g., domain architectures, zone architectures).
 
-use std::collections::HashMap;
-use std::fmt;
+use std::{collections::HashMap, fmt};
 
-use crate::data::DataProvider;
-use crate::entity::EntityRef;
+use crate::{data::DataProvider, entity::EntityRef};
 
 /// Area entity representing a logical view of vehicle architecture
 pub struct Area {

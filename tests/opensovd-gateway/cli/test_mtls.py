@@ -43,7 +43,7 @@ def test_mtls_transport(client):
 
 
 def test_mtls_valid_client_cert(client):
-    """mTLS: client presents a valid cert — request should succeed."""
+    """mTLS: client presents a valid cert -- request should succeed."""
     response = client.get("/version-info")
     assert response.status_code == 200
     data = response.json()
@@ -51,7 +51,7 @@ def test_mtls_valid_client_cert(client):
 
 
 def test_mtls_rejects_missing_client_cert(client, tls_certs):
-    """mTLS: client sends no cert — TLS handshake must be rejected by the server."""
+    """mTLS: client sends no cert -- TLS handshake must be rejected by the server."""
     ca_path = tls_certs["ca_crt"]
     ssl_ctx = ssl.create_default_context(cafile=str(ca_path))
     no_cert = httpx.Client(base_url=client.base_url, verify=ssl_ctx)

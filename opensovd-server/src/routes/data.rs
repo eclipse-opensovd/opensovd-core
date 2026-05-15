@@ -23,16 +23,19 @@ use axum::{
     routing::get,
 };
 use axum_extra::extract::WithRejection;
-use opensovd_core::DataFilter;
-use opensovd_core::Topology;
-use opensovd_models::Response;
-use opensovd_models::data::{
-    DataCategories, DataCategoryInformation, DataGroups, DataGroupsQuery, DataList, DataQuery,
-    Group, Metadata, ReadDataQuery, ReadResponse, WriteRequest,
+use opensovd_core::{DataFilter, Topology};
+use opensovd_models::{
+    Response,
+    data::{
+        DataCategories, DataCategoryInformation, DataGroups, DataGroupsQuery, DataList, DataQuery,
+        Group, Metadata, ReadDataQuery, ReadResponse, WriteRequest,
+    },
 };
 
-use super::AppState;
-use super::error::{Error, Result};
+use super::{
+    AppState,
+    error::{Error, Result},
+};
 use crate::schema::JsonSchema;
 
 pub fn routes<V>() -> Router<AppState<V>>

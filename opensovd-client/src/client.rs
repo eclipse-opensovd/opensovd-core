@@ -16,9 +16,11 @@ use tower::{
     util::{BoxCloneSyncService, MapErrLayer, MapResponseLayer},
 };
 
-use crate::entities::{App, Area, Component};
-use crate::error::{Error, Result};
-use crate::list::ListEntitiesRequest;
+use crate::{
+    entities::{App, Area, Component},
+    error::{Error, Result},
+    list::ListEntitiesRequest,
+};
 
 /// Boxed error type for HTTP service flexibility with layers.
 pub(crate) type BoxError = Box<dyn std::error::Error + Send + Sync>;

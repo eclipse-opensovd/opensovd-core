@@ -7,8 +7,10 @@
 # This program and the accompanying materials are made available under the
 # terms of the Apache License Version 2.0 which is available at
 # https://www.apache.org/licenses/LICENSE-2.0
-style_edition = "2024"
-max_width = 100
-newline_style = "Unix"
-group_imports = "StdExternalCrate"
-imports_granularity = "Crate"
+
+version = 1
+
+[[annotations]]
+path = ["LICENSE", "NOTICE", "CONTRIBUTORS", "LICENSES/**.txt"]
+SPDX-FileCopyrightText = "The Contributors to Eclipse OpenSOVD (see CONTRIBUTORS)"
+SPDX-License-Identifier = "Apache-2.0"

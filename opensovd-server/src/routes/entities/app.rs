@@ -10,14 +10,20 @@ use axum::{
 };
 use axum_extra::extract::WithRejection;
 use opensovd_core::Topology;
-use opensovd_models::Response;
-use opensovd_models::discovery::{
-    Entities, EntitiesQuery, EntityCapabilities, EntityCapabilitiesQuery, EntityReference,
+use opensovd_models::{
+    Response,
+    discovery::{
+        Entities, EntitiesQuery, EntityCapabilities, EntityCapabilitiesQuery, EntityReference,
+    },
 };
 
-use super::super::AppState;
-use super::super::error::{Error, Result};
-use super::encode_path_segment;
+use super::{
+    super::{
+        AppState,
+        error::{Error, Result},
+    },
+    encode_path_segment,
+};
 use crate::schema::JsonSchema;
 
 pub(super) fn routes<V>() -> Router<AppState<V>>

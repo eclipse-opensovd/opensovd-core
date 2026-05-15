@@ -5,11 +5,9 @@
 
 use http_body_util::BodyExt;
 use hyper::Request;
-use hyper_util::client::legacy::Client;
-use hyper_util::rt::TokioExecutor;
+use hyper_util::{client::legacy::Client, rt::TokioExecutor};
 use opensovd_server::{AuthError, Authenticator, Authorizer, Parts, Server};
-use tokio::net::TcpListener;
-use tokio::sync::oneshot;
+use tokio::{net::TcpListener, sync::oneshot};
 
 #[derive(Clone, Debug)]
 struct Claims {

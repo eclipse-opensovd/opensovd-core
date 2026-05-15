@@ -12,9 +12,9 @@
 # OUTPUT_DIR defaults to gen/certs relative to the workspace root.
 #
 # Files created:
-#   ca.key / ca.crt         — self-signed CA (10-year validity)
-#   server.key / server.crt — server cert signed by the CA (SAN: 127.0.0.1, localhost)
-#   client.key / client.crt — client cert signed by the CA (clientAuth EKU)
+#   ca.key / ca.crt         -- self-signed CA (10-year validity)
+#   server.key / server.crt -- server cert signed by the CA (SAN: 127.0.0.1, localhost)
+#   client.key / client.crt -- client cert signed by the CA (clientAuth EKU)
 
 set -euo pipefail
 
@@ -55,11 +55,11 @@ rm -f "$OUT/server.csr" "$OUT/client.csr" "$OUT/ca.srl"
 
 echo ""
 echo "==> Generated certificates in $OUT:"
-echo "      ca.crt      — CA certificate (trust anchor)"
-echo "      server.crt  — server certificate"
-echo "      server.key  — server private key"
-echo "      client.crt  — client certificate"
-echo "      client.key  — client private key"
+echo "      ca.crt      -- CA certificate (trust anchor)"
+echo "      server.crt  -- server certificate"
+echo "      server.key  -- server private key"
+echo "      client.crt  -- client certificate"
+echo "      client.key  -- client private key"
 echo ""
 echo "==> Gateway usage:"
 echo ""

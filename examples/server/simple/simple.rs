@@ -10,9 +10,11 @@
 //!
 //! Run with: `cargo run -p opensovd-examples-server --example simple`
 
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
-use std::time::Instant;
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+    time::Instant,
+};
 
 use async_trait::async_trait;
 use opensovd_core::Component;

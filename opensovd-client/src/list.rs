@@ -1,11 +1,12 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 Contributors to the Eclipse Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use opensovd_models::Response;
-use opensovd_models::discovery::Entities;
+use opensovd_models::{Response, discovery::Entities};
 
-use crate::client::{Client, schema_query};
-use crate::error::Result;
+use crate::{
+    client::{Client, schema_query},
+    error::Result,
+};
 
 /// Request builder for listing entities in a collection.
 pub struct ListEntitiesRequest<'a> {

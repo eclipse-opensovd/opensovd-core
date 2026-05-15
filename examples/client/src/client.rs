@@ -29,8 +29,7 @@ use clap::Parser;
 use http::{HeaderMap, Request, Response};
 use http_body_util::Full;
 use opensovd_client::Client;
-use tower_http::classify::ServerErrorsFailureClass;
-use tower_http::trace::TraceLayer;
+use tower_http::{classify::ServerErrorsFailureClass, trace::TraceLayer};
 use tracing::Span;
 
 #[derive(Parser)]
@@ -39,13 +38,14 @@ use tracing::Span;
 #[command(after_help = "\
 Examples:
   # Connect over TCP (default)
-  client --url http://localhost:7690/sovd/v1
-
-  # Connect over a Unix socket (filesystem path)
-  client --unix-socket /tmp/opensovd.sock --url http://localhost/sovd/v1
+  client --url http://localhost:7690/sovd/v1# \
+                        Connect over a Unix socket (filesystem path)
+  client --unix-socket /tmp/opensovd.sock \
+                        --url http://localhost/sovd/v1
 
   # Connect over an abstract Unix socket
-  client --unix-socket @opensovd --url http://localhost/sovd/v1
+  client \
+                        --unix-socket @opensovd --url http://localhost/sovd/v1
 ")]
 struct Cli {
     /// Base URL of the SOVD server (including version prefix).

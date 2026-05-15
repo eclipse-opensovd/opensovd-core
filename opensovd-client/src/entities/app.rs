@@ -1,12 +1,16 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 Contributors to the Eclipse Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use opensovd_models::data::{DataCategories, DataGroups};
-use opensovd_models::discovery::Entities;
+use opensovd_models::{
+    data::{DataCategories, DataGroups},
+    discovery::Entities,
+};
 
-use crate::client::{Client, encode};
-use crate::data::{DataRequest, ListDataRequest};
-use crate::error::Result;
+use crate::{
+    client::{Client, encode},
+    data::{DataRequest, ListDataRequest},
+    error::Result,
+};
 
 /// A reference to a specific app.
 pub struct App<'a> {

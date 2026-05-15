@@ -3,9 +3,11 @@
 
 //! Rego policy-based authorization using regorus.
 
-use std::io::Read;
-use std::path::Path;
-use std::sync::{Arc, RwLock};
+use std::{
+    io::Read,
+    path::Path,
+    sync::{Arc, RwLock},
+};
 
 use opensovd_server::{AuthError, Authorizer};
 use regorus::Engine;

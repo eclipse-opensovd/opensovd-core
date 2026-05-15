@@ -28,12 +28,12 @@ const VERSION_STRING: &str = concat!(
 #[command(after_help = "\
 Examples:
   # Listen on all interfaces on port 8080
-  opensovd-gateway --url http://0.0.0.0:8080/sovd
+  opensovd-gateway --url \
+                        http://0.0.0.0:8080/sovd
 
   # Custom base URI path
-  opensovd-gateway --url http://localhost:7690/api/sovd
-
-  # Listen on a Unix socket (filesystem path)
+  opensovd-gateway --url http://localhost:7690/api/sovd# \
+                        Listen on a Unix socket (filesystem path)
   opensovd-gateway --unix-socket /tmp/opensovd.sock
 
   # Listen on an abstract Unix socket
@@ -127,8 +127,7 @@ impl TlsArgs {
     pub fn build(self) -> anyhow::Result<Option<rustls::ServerConfig>> {
         use std::sync::Arc;
 
-        use rustls::pki_types::pem::PemObject;
-        use rustls::pki_types::{CertificateDer, PrivateKeyDer};
+        use rustls::pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject};
 
         let (cert_path, key_path) = match (self.cert, self.key) {
             (Some(c), Some(k)) => (c, k),

@@ -1,10 +1,12 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 Contributors to the Eclipse Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use std::future::Future;
-use std::path::{Path, PathBuf};
-use std::pin::Pin;
-use std::task::{Context, Poll};
+use std::{
+    future::Future,
+    path::{Path, PathBuf},
+    pin::Pin,
+    task::{Context, Poll},
+};
 
 use hyper::Uri;
 use hyper_util::rt::TokioIo;

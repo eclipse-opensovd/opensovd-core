@@ -58,5 +58,5 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 #[cfg(not(target_os = "linux"))]
 fn main() {
-    eprintln!("This example is only available on Linux");
+    panic!("This example is only available on Linux");
 }

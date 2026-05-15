@@ -21,8 +21,7 @@ use std::sync::Arc;
 
 use opensovd_mocks::create_mock_topology;
 use opensovd_server::Server;
-use rustls::pki_types::pem::PemObject;
-use rustls::pki_types::{CertificateDer, PrivateKeyDer};
+use rustls::pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject};
 use tokio::net::TcpListener;
 
 // paths relative to workspace root; run scripts/mkcerts.sh to generate.
@@ -66,7 +65,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .build()?;
 
     tracing::info!("mTLS server on https://127.0.0.1:8443/sovd");
-    tracing::info!("Client cert required — run mkcerts.sh to generate test certs");
+    tracing::info!("Client cert required -- run mkcerts.sh to generate test certs");
 
     server.serve().await?;
     Ok(())

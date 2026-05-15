@@ -5,8 +5,7 @@
 
 use std::net::SocketAddr;
 
-use axum::extract::connect_info::Connected;
-use axum::serve::IncomingStream;
+use axum::{extract::connect_info::Connected, serve::IncomingStream};
 use tokio::net::TcpListener;
 #[cfg(unix)]
 use tokio::net::UnixListener;

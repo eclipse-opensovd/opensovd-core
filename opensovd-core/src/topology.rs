@@ -3,13 +3,9 @@
 
 //! Entity topology management.
 
-use std::collections::HashMap;
-use std::ops::Deref;
-use std::sync::Arc;
+use std::{collections::HashMap, ops::Deref, sync::Arc};
 
-use indexmap::IndexMap;
-use indexmap::IndexSet;
-use indexmap::map::Values;
+use indexmap::{IndexMap, IndexSet, map::Values};
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard, broadcast};
 
 use crate::entity::{App, Area, Component, EntityRef};

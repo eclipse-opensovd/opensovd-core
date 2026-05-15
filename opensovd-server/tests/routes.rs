@@ -4,9 +4,7 @@
 #![cfg_attr(coverage_nightly, feature(coverage_attribute))]
 #![allow(unsafe_code)]
 
-use axum::Router;
-use axum::extract::ConnectInfo as AxumConnectInfo;
-use axum::routing::get;
+use axum::{Router, extract::ConnectInfo as AxumConnectInfo, routing::get};
 use opensovd_server::ConnectInfo;
 use tokio::net::TcpListener;
 #[cfg(target_os = "linux")]

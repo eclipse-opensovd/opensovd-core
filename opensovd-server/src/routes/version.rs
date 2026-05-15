@@ -14,12 +14,13 @@ use axum::{
     routing::get,
 };
 use axum_extra::extract::WithRejection;
-use opensovd_models::Response;
-use opensovd_models::version::{SovdInfo, VersionInfo, VersionInfoQuery};
+use opensovd_models::{
+    Response,
+    version::{SovdInfo, VersionInfo, VersionInfoQuery},
+};
 use serde::Serialize;
 
-use super::AppState;
-use super::error::Error;
+use super::{AppState, error::Error};
 use crate::schema::JsonSchema;
 
 pub fn routes<V>() -> Router<AppState<V>>

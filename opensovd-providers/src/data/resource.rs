@@ -6,8 +6,7 @@
 use async_trait::async_trait;
 use opensovd_core::DataError;
 use schemars::Schema;
-use serde::Serialize;
-use serde::de::DeserializeOwned;
+use serde::{Serialize, de::DeserializeOwned};
 
 /// Read-only data resource.
 ///

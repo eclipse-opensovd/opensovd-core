@@ -5,12 +5,10 @@
 
 use std::collections::HashMap;
 
-use hyper_util::client::legacy::Client;
-use hyper_util::rt::TokioExecutor;
+use hyper_util::{client::legacy::Client, rt::TokioExecutor};
 use opensovd_core::{Component, DiscoveryProvider, Topology};
 use opensovd_server::Server;
-use tokio::net::TcpListener;
-use tokio::sync::oneshot;
+use tokio::{net::TcpListener, sync::oneshot};
 
 pub struct TestEntity;
 

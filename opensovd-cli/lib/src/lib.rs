@@ -5,14 +5,15 @@
 
 pub mod trace;
 
-use std::fmt;
-use std::path::Path;
+use std::{fmt, path::Path};
 
-use tracing_subscriber::fmt::{
-    FmtContext, FormattedFields,
-    format::{self, FormatEvent, FormatFields},
+use tracing_subscriber::{
+    fmt::{
+        FmtContext, FormattedFields,
+        format::{self, FormatEvent, FormatFields},
+    },
+    registry::LookupSpan,
 };
-use tracing_subscriber::registry::LookupSpan;
 
 struct CompactFormat;
 

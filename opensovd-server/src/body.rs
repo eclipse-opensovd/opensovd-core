@@ -8,8 +8,10 @@
 //! we introduce this newtype and bridge with `.map_request()` /
 //! `.map_response()` inside [`crate::ServerBuilder::service`].
 
-use std::pin::Pin;
-use std::task::{Context, Poll};
+use std::{
+    pin::Pin,
+    task::{Context, Poll},
+};
 
 /// An opaque HTTP body type used by [`crate::ServerBuilder::service`].
 ///

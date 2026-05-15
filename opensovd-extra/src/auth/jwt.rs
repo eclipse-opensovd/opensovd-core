@@ -3,9 +3,7 @@
 
 //! JWT authentication supporting HS512 and RS512 algorithms.
 
-use std::fmt;
-use std::str::FromStr;
-use std::sync::Arc;
+use std::{fmt, str::FromStr, sync::Arc};
 
 use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode};
 use opensovd_server::{AuthError, Authenticator};
@@ -250,9 +248,11 @@ mod tests {
         );
     }
 
-    use aws_lc_rs::encoding::AsDer;
-    use aws_lc_rs::rsa::KeySize;
-    use aws_lc_rs::signature::{KeyPair, RsaKeyPair};
+    use aws_lc_rs::{
+        encoding::AsDer,
+        rsa::KeySize,
+        signature::{KeyPair, RsaKeyPair},
+    };
 
     struct RsaTestKeys {
         private_pem: Vec<u8>,

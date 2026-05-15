@@ -30,12 +30,16 @@ use axum::{
 };
 use axum_extra::extract::WithRejection;
 use opensovd_core::Topology;
-use opensovd_models::Response;
-use opensovd_models::discovery::{EntityCapabilities, EntityCapabilitiesQuery};
+use opensovd_models::{
+    Response,
+    discovery::{EntityCapabilities, EntityCapabilitiesQuery},
+};
 use percent_encoding::{AsciiSet, CONTROLS, utf8_percent_encode};
 
-use super::AppState;
-use super::error::{Error, Result};
+use super::{
+    AppState,
+    error::{Error, Result},
+};
 use crate::schema::JsonSchema;
 
 pub fn routes<V>() -> Router<AppState<V>>

@@ -9,8 +9,7 @@ use std::sync::LazyLock;
 use axum::{Router, body::Body, http::Request, routing::get};
 use criterion::{Criterion, criterion_group, criterion_main};
 use jsonwebtoken::{Algorithm, EncodingKey, Header, encode};
-use opensovd_extra::auth::jwt::Claims;
-use opensovd_extra::{JwtAlgorithm, JwtAuthenticator, RegorusAuthorizer};
+use opensovd_extra::{JwtAlgorithm, JwtAuthenticator, RegorusAuthorizer, auth::jwt::Claims};
 use opensovd_server::{AllowAll, AuthenticationLayer, AuthorizationLayer, NoAuth};
 use tower::ServiceExt;
 

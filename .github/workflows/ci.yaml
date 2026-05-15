@@ -192,7 +192,7 @@ jobs:
           go-version: '1.25'
           cache: false
       - uses: astral-sh/setup-uv@v7
-      # Install Python dependencies and tools (prek, ruff, ty)
+      # Install Python dependencies and tools (prek, reuse, ruff, ty)
       - run: uv sync --group tools
       # Cache prek hooks
       - uses: actions/cache@v5

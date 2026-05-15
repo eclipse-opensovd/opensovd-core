@@ -13,8 +13,7 @@
 use std::io::Cursor;
 
 use jsonwebtoken::{Algorithm, EncodingKey, Header, encode};
-use opensovd_extra::auth::jwt::Claims;
-use opensovd_extra::{JwtAlgorithm, JwtAuthenticator, RegorusAuthorizer};
+use opensovd_extra::{JwtAlgorithm, JwtAuthenticator, RegorusAuthorizer, auth::jwt::Claims};
 use opensovd_mocks::create_mock_topology;
 use opensovd_server::Server;
 use tokio::net::TcpListener;

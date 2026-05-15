@@ -3,8 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::error::GenericError;
-use crate::{Items, JsonPointer};
+use crate::{Items, JsonPointer, error::GenericError};
 
 /// Data category type.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

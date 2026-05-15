@@ -3,28 +3,30 @@
 
 //! Server builder and listener types.
 
-use std::future::Future;
-use std::pin::Pin;
+use std::{future::Future, pin::Pin};
 
 use axum::Router;
-use futures::future::{FutureExt, Shared};
-use futures::stream::StreamExt;
+use futures::{
+    future::{FutureExt, Shared},
+    stream::StreamExt,
+};
 use opensovd_core::{DiscoveryProvider, EntityKind, Topology};
 use serde::Serialize;
 use thiserror::Error;
 use tokio::net::TcpListener;
 #[cfg(unix)]
 use tokio::net::UnixListener;
-use tower::Service as TowerService;
-use tower::ServiceExt;
-use tower::layer::util::{Identity, Stack};
-use tower::util::BoxCloneSyncService;
-
-use crate::auth::{
-    AllowAll, AuthenticationLayer, Authenticator, AuthorizationLayer, Authorizer, NoAuth,
+use tower::{
+    Service as TowerService, ServiceExt,
+    layer::util::{Identity, Stack},
+    util::BoxCloneSyncService,
 };
-use crate::connect_info::ConnectInfo;
-use crate::routes::VendorInfo;
+
+use crate::{
+    auth::{AllowAll, AuthenticationLayer, Authenticator, AuthorizationLayer, Authorizer, NoAuth},
+    connect_info::ConnectInfo,
+    routes::VendorInfo,
+};
 
 pub(crate) type Service = BoxCloneSyncService<
     http::Request<axum::body::Body>,

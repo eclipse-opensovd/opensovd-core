@@ -3,8 +3,7 @@
 
 mod cli;
 
-use std::fmt::Write;
-use std::process::ExitCode;
+use std::{fmt::Write, process::ExitCode};
 
 use clap::Parser;
 use opensovd_client::Client;
@@ -93,16 +92,14 @@ impl McpServer {
 impl McpServer {
     #[prompt(
         name = "explore-topology",
-        description = "Explore the vehicle diagnostic topology by listing components, areas, and apps."
+        description = "Explore the vehicle diagnostic topology by listing components, areas, and \
+                       apps."
     )]
     async fn explore_topology(&self) -> GetPromptResult {
         GetPromptResult::new(vec![PromptMessage::new_text(
             PromptMessageRole::User,
-            "Read the sovd://topology resource, then:\n\
-                 1. List components\n\
-                 2. List areas\n\
-                 3. List apps and their hosting relationships\n\
-                 4. Summarize the vehicle's diagnostic topology",
+            "Read the sovd://topology resource, then:\n1. List components\n2. List areas\n3. List \
+             apps and their hosting relationships\n4. Summarize the vehicle's diagnostic topology",
         )])
         .with_description("Explore the vehicle diagnostic topology exposed by the SOVD server.")
     }
@@ -122,12 +119,10 @@ impl ServerHandler for McpServer {
         ServerInfo::new(capabilities)
             .with_server_info(server_info)
             .with_instructions(
-                "OpenSOVD MCP server for vehicle diagnostics. \
-                 Base URI: /sovd/v1. \
-                 Entity hierarchy: Areas > Components > Apps > Functions. \
-                 Each entity may expose: data, faults, operations, configurations, \
-                 bulk-data, locks, and modes. \
-                 Use the topology resource to explore the vehicle.",
+                "OpenSOVD MCP server for vehicle diagnostics. Base URI: /sovd/v1. Entity \
+                 hierarchy: Areas > Components > Apps > Functions. Each entity may expose: data, \
+                 faults, operations, configurations, bulk-data, locks, and modes. Use the \
+                 topology resource to explore the vehicle.",
             )
     }
 
@@ -277,8 +272,10 @@ async fn serve(url: &str) -> anyhow::Result<()> {
 #[cfg(test)]
 mod tests {
     use opensovd_models::discovery::EntityReference;
-    use rmcp::model::{CallToolRequestParams, GetPromptRequestParams};
-    use rmcp::service::{RoleClient, RunningService};
+    use rmcp::{
+        model::{CallToolRequestParams, GetPromptRequestParams},
+        service::{RoleClient, RunningService},
+    };
 
     use super::*;
 

@@ -3,8 +3,7 @@
 
 use opensovd_models::discovery::Entities;
 
-use crate::client::Client;
-use crate::error::Result;
+use crate::{client::Client, error::Result};
 
 /// A reference to a specific area.
 pub struct Area<'a> {

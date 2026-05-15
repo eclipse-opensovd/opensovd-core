@@ -7,8 +7,21 @@
 # This program and the accompanying materials are made available under the
 # terms of the Apache License Version 2.0 which is available at
 # https://www.apache.org/licenses/LICENSE-2.0
-style_edition = "2024"
-max_width = 100
-newline_style = "Unix"
-group_imports = "StdExternalCrate"
-imports_granularity = "Crate"
+line-length = 100
+
+[lint]
+select = [
+    "E",      # pycodestyle (error)
+    "F",      # pyflakes
+    "B",      # bugbear
+    "B9",
+    "C4",     # flake8-comprehensions
+    "SIM",    # flake8-simplify
+    "I",      # isort
+    "UP",     # pyupgrade
+    "PIE",    # flake8-pie
+    "PGH",    # pygrep-hooks
+    "PYI",    # flake8-pyi
+    "RUF",
+    "PT",     # flake8-pytest-style
+]
