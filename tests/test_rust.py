@@ -44,7 +44,7 @@ def parse_cargo_test_output(output: str) -> list[tuple[str, str]]:
 def list_rust_tests() -> list[tuple[str, str]]:
     """List all Rust tests in the workspace, returning (binary_path, test_name) tuples."""
     result = subprocess.run(
-        ["cargo", "test", "--workspace", "--", "--list"],
+        ["cargo", "test", "--locked", "--workspace", "--all-features", "--", "--list"],
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
     )
@@ -79,7 +79,18 @@ def test_rust(rust_test):
         # Run doctest via cargo
         package = binary_path.replace("doctest:", "")
         result = subprocess.run(
-            ["cargo", "test", "-p", package, "--doc", "--", test_name, "--exact"],
+            [
+                "cargo",
+                "test",
+                "--locked",
+                "-p",
+                package,
+                "--doc",
+                "--all-features",
+                "--",
+                test_name,
+                "--exact",
+            ],
             capture_output=True,
         )
     else:

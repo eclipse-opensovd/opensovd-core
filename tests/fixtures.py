@@ -40,7 +40,7 @@ def _build_crate_binary(config: pytest.Config, crate: str) -> Path:
     project_root = Path(__file__).parent.parent
     target_dir, bin_name = _resolve_bin(project_root, crate)
 
-    cargo_cmd = ["cargo", "build", "-p", crate, "--profile", profile]
+    cargo_cmd = ["cargo", "build", "--locked", "-p", crate, "--profile", profile]
     if target:
         cargo_cmd.extend(["--target", target])
     if features := config.getoption("--opensovd-features"):

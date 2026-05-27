@@ -229,6 +229,7 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: read
+      pull-requests: write
     steps:
       - uses: actions/checkout@v6
       - uses: actions-rust-lang/setup-rust-toolchain@v1
@@ -237,15 +238,46 @@ jobs:
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-llvm-cov@${{ env.CARGO_LLVM_COV_VERSION }}
+      - uses: astral-sh/setup-uv@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+      - run: npm install -g @usebruno/cli
 
-      - run: cargo llvm-cov test --locked --all-features --html
-      - run: cargo llvm-cov report --json --output-path coverage.json
+      # --opensovd-coverage sets up cargo-llvm-cov instrumentation and writes the
+      # merged report (coverage.json + HTML + Cobertura). test_rust.py runs the
+      # Rust unit/integration/doc tests (--all-features) and the e2e tests spawn
+      # the gateway, which inherits LLVM_PROFILE_FILE, so all of it is one report.
+      - name: Collect coverage (Rust + e2e)
+        run: uv run pytest tests/ --opensovd-coverage
 
       - id: cov
         run: |
           PERCENT=$(jq -r '.data[0].totals.lines.percent | floor' coverage.json)
           COLOR=$([[ $PERCENT -ge 80 ]] && echo 28A745 || ([[ $PERCENT -ge 60 ]] && echo B08800 || echo CB2431))
           curl -s "https://img.shields.io/badge/coverage-${PERCENT}%25-${COLOR}" -o target/llvm-cov/html/badge.svg
+          bash scripts/coverage-report.sh coverage.json > coverage-comment.md
+          bash scripts/coverage-report.sh --detail coverage.json >> "$GITHUB_STEP_SUMMARY"
+
+      # Post or update a sticky PR comment, identified by the marker on line 1
+      # of the rendered body. Restricted to same-repo PRs since the token is
+      # read-only for forks.
+      - name: Comment coverage on PR
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          jq -Rs '{body: .}' coverage-comment.md > comment.json
+          marker='<!-- coverage-report -->'
+          id=$(gh api --paginate "repos/${REPO}/issues/${PR}/comments" \
+            -q ".[] | select(.body | startswith(\"${marker}\")) | .id" | head -n1)
+          if [ -n "$id" ]; then
+            gh api --method PATCH "repos/${REPO}/issues/comments/${id}" --input comment.json >/dev/null
+          else
+            gh api --method POST "repos/${REPO}/issues/${PR}/comments" --input comment.json >/dev/null
+          fi
 
       - uses: actions/upload-artifact@v7
         with:

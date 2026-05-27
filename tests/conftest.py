@@ -3,11 +3,16 @@
 
 """Pytest configuration and fixtures for end2end tests."""
 
+import os
 import re
+import shlex
+import subprocess
 from pathlib import Path
 
 import pytest
 from fixtures import default_binary_args
+
+PROJECT_ROOT = Path(__file__).parent.parent
 
 # --- Session metadata (shown in HTML report header) ---
 
@@ -23,6 +28,8 @@ def pytest_configure(config):
         for flag in ("--opensovd-profile", "--opensovd-target", "--opensovd-features"):
             if config.getoption(flag):
                 raise pytest.UsageError(f"{flag} has no effect when --opensovd-run is set")
+    if config.getoption("--opensovd-coverage"):
+        _setup_coverage(config)
 
 
 @pytest.hookimpl(optionalhook=True)
@@ -105,6 +112,74 @@ def pytest_addoption(parser):
     )
     parser.addoption(
         "--opensovd-features", default="", help="Cargo features to enable (comma-separated)"
+    )
+    parser.addoption(
+        "--opensovd-coverage",
+        action="store_true",
+        default=False,
+        help="Instrument the workspace with cargo-llvm-cov; writes coverage.json + HTML + "
+        "Cobertura at session end",
+    )
+
+
+def _setup_coverage(config):
+    """Clean prior coverage data and inject cargo-llvm-cov's instrumentation env.
+
+    Mirrors `source <(cargo llvm-cov show-env --export-prefix)`: the cargo builds
+    and the spawned gateway both inherit os.environ, so RUSTFLAGS instruments the
+    build and LLVM_PROFILE_FILE makes the running gateway emit profile data. Runs
+    from pytest_configure, before collection builds the first test binary.
+    """
+    if config.getoption("--opensovd-run"):
+        raise pytest.UsageError(
+            "--opensovd-coverage requires building from source; it cannot be combined "
+            "with --opensovd-run"
+        )
+    show_env = subprocess.run(
+        ["cargo", "llvm-cov", "show-env"],
+        cwd=PROJECT_ROOT,
+        check=True,
+        stdout=subprocess.PIPE,
+        text=True,
+    )
+    for line in show_env.stdout.splitlines():
+        key, sep, value = line.partition("=")
+        if sep:
+            # show-env quotes values; shlex unwraps single/double/unquoted alike.
+            os.environ[key] = shlex.split(value)[0] if value else ""
+    subprocess.run(["cargo", "llvm-cov", "clean", "--workspace"], cwd=PROJECT_ROOT, check=True)
+
+    # Render the report at teardown. Config cleanups run after every
+    # sessionfinish hook (incl. the trylast hook in tests/bruno/conftest.py that
+    # closes the shared gateway), so all instrumented processes have exited and
+    # flushed their profile data. Registered only on success, so the UsageError
+    # path above never triggers a report.
+    config.add_cleanup(_write_coverage_report)
+
+
+def _write_coverage_report():
+    """Render the merged coverage data to coverage.json, HTML, and Cobertura.
+
+    Reads the profile data via the env injected by _setup_coverage; no rebuild.
+    """
+    html_dir = PROJECT_ROOT / "target" / "llvm-cov" / "html"
+    subprocess.run(
+        ["cargo", "llvm-cov", "report", "--json", "--output-path", "coverage.json"],
+        cwd=PROJECT_ROOT,
+        check=True,
+    )
+    subprocess.run(["cargo", "llvm-cov", "report", "--html"], cwd=PROJECT_ROOT, check=True)
+    subprocess.run(
+        [
+            "cargo",
+            "llvm-cov",
+            "report",
+            "--cobertura",
+            "--output-path",
+            str(html_dir / "cobertura.xml"),
+        ],
+        cwd=PROJECT_ROOT,
+        check=True,
     )
 
 
