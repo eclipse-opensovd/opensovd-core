@@ -80,7 +80,7 @@ jobs:
         include:
           - {os: ubuntu-24.04, target: x86_64-unknown-linux-gnu, profile: release-small, tests: [unittest, pytest]}
           - {os: ubuntu-24.04-arm, target: aarch64-unknown-linux-gnu, profile: release-small, tests: [unittest]}
-          - {os: windows-2025, target: x86_64-pc-windows-msvc, profile: release-small, tests: [unittest]}
+          - {os: windows-2025-vs2026, target: x86_64-pc-windows-msvc, profile: release-small, tests: [unittest]}
           - {os: macos-15, target: aarch64-apple-darwin, profile: release-small, tests: [unittest]}
     runs-on: ${{ matrix.os }}
     steps:
