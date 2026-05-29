@@ -97,6 +97,10 @@ jobs:
 
       - uses: astral-sh/setup-uv@v7
       - if: contains(matrix.tests, 'pytest')
+        name: opensovd-e2e plugin self-tests
+        run: uv run --locked pytest opensovd-e2e/tests
+
+      - if: contains(matrix.tests, 'pytest')
         uses: actions/setup-node@v6
         with:
           node-version: '22'
@@ -105,7 +109,7 @@ jobs:
 
       - if: contains(matrix.tests, 'pytest')
         run: |
-          uv run pytest tests/ \
+          uv run --locked pytest tests/ \
             --opensovd-target=${{ matrix.target }} \
             --opensovd-profile=${{ matrix.profile }} \
             --html=pytest-report.html \
@@ -193,7 +197,7 @@ jobs:
           cache: false
       - uses: astral-sh/setup-uv@v7
       # Install Python dependencies and tools (prek, ruff, ty)
-      - run: uv sync --group tools
+      - run: uv sync --locked --group tools
       # Cache prek hooks
       - uses: actions/cache@v5
         with:
@@ -202,7 +206,7 @@ jobs:
           restore-keys: |
             prek-${{ runner.os }}-
 
-      - run: uv run prek run --all-files --show-diff-on-failure
+      - run: uv run --locked prek run --all-files --show-diff-on-failure
 
       - name: Validate commit subjects (Conventional Commits)
         if: github.event_name == 'pull_request'
@@ -214,7 +218,7 @@ jobs:
           fail=0
           for sha in $(git rev-list "$BASE_SHA..$HEAD_SHA"); do
             git log -1 --format=%B "$sha" > /tmp/commit-msg
-            if ! uv run prek run --hook-stage commit-msg \
+            if ! uv run --locked prek run --hook-stage commit-msg \
                 --commit-msg-filename /tmp/commit-msg conventional-pre-commit; then
               echo "::error::Non-conventional commit subject: $(git log -1 --format='%h %s' "$sha")"
               fail=1
@@ -330,8 +334,8 @@ jobs:
       fail-fast: false
       matrix:
         image:
-          - {binary: opensovd-gateway, dockerfile: docker/Dockerfile.gateway, smoke: 'uv run pytest tests/opensovd-gateway/cli/test_version.py --opensovd-run="docker run --rm opensovd-gateway:test"'}
-          - {binary: opensovd-mcp, dockerfile: docker/Dockerfile.mcp, smoke: 'uv run pytest tests/opensovd-mcp/cli/test_version.py --opensovd-run="docker run --rm opensovd-mcp:test"'}
+          - {binary: opensovd-gateway, dockerfile: docker/Dockerfile.gateway, smoke: 'uv run --locked pytest tests/opensovd-gateway/cli/test_version.py --opensovd-run="docker run --rm opensovd-gateway:test"'}
+          - {binary: opensovd-mcp, dockerfile: docker/Dockerfile.mcp, smoke: 'uv run --locked pytest tests/opensovd-mcp/cli/test_version.py --opensovd-run="docker run --rm opensovd-mcp:test"'}
     steps:
       - uses: actions/checkout@v6
       - uses: actions/download-artifact@v8

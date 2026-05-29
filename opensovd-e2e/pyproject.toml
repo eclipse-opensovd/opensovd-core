@@ -1,0 +1,36 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 Contributors to the Eclipse Foundation
+# SPDX-License-Identifier: Apache-2.0
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "opensovd-e2e"
+version = "0.1.0"
+description = "Reusable pytest plugin for OpenSOVD end-to-end binary tests"
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.13"
+keywords = ["pytest", "opensovd", "e2e"]
+classifiers = [
+    "Framework :: Pytest",
+    "Programming Language :: Python :: 3",
+]
+dependencies = ["pytest>=9"]
+
+[project.optional-dependencies]
+# Enables the Requirements column and metadata links in the HTML report.
+html = ["pytest-html>=4", "pytest-metadata>=3"]
+
+# Auto-load the plugin in any project that installs this package, so consumers
+# get --opensovd-run and the base fixtures without wiring up pytest_plugins.
+[project.entry-points.pytest11]
+opensovd_e2e = "opensovd_e2e.plugin"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/opensovd_e2e"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

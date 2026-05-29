@@ -7,7 +7,8 @@ import shutil
 import subprocess
 
 import pytest
-from fixtures import LISTENING_PATTERN, default_binary_args, listening_url, spawn_process
+from fixtures import LISTENING_PATTERN, default_binary_args, listening_url
+from opensovd_e2e import spawn_process
 
 
 def pytest_collect_file(parent, file_path):
@@ -30,7 +31,12 @@ def pytest_runtest_setup(item):
         pytest.skip("bru CLI not installed")
 
     if not hasattr(item.config, "_bruno_process"):
-        proc = spawn_process(item.config, default_binary_args(item.config), LISTENING_PATTERN)
+        proc = spawn_process(
+            item.config,
+            default_binary_args(item.config),
+            LISTENING_PATTERN,
+            crate="opensovd-gateway",
+        )
         item.config._bruno_process = proc
         if proc.match is not None:
             item.config._gateway_base_url = listening_url(proc.match)
