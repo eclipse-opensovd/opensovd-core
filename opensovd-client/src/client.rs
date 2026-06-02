@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 Contributors to the Eclipse Foundation
 // SPDX-License-Identifier: Apache-2.0
 
+use std::sync::Arc;
+
 use bytes::Bytes;
 use http_body::Body;
 use http_body_util::{BodyExt, Full, combinators::BoxBody};
@@ -10,12 +12,14 @@ use hyper_util::{
 };
 use serde::{Serialize, de::DeserializeOwned};
 use thiserror::Error;
+use tokio::sync::OnceCell;
 use tower::{
     Layer, Service,
     layer::util::{Identity, Stack},
     util::{BoxCloneSyncService, MapErrLayer, MapResponseLayer},
 };
 
+use crate::discovery::Discovery;
 use crate::entities::{App, Area, Component};
 use crate::error::{Error, Result};
 use crate::list::ListEntitiesRequest;
@@ -101,7 +105,7 @@ impl<Conn, Layers> ClientBuilder<Conn, Layers> {
     ///
     /// # Errors
     ///
-    /// Returns an error if the base URI has not been set.
+    /// Returns [`BuilderError::NoBaseUri`] if the base URI has not been set.
     pub fn build<ResBody>(self) -> std::result::Result<Client, BuilderError>
     where
         Conn: hyper_util::client::legacy::connect::Connect + Clone + Send + Sync + 'static,
@@ -131,6 +135,36 @@ impl<Conn, Layers> ClientBuilder<Conn, Layers> {
             http: BoxCloneSyncService::new(service),
         })
     }
+
+    /// Build a [`Discovery`] client for the unversioned `/version-info` endpoint, reusing this
+    /// builder's transport.
+    ///
+    /// The base URI must be the unversioned SOVD root (no version identifier), e.g.
+    /// `http://localhost:7690/sovd`. Select a version on the returned [`Discovery`] to reach a
+    /// [`Client`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`BuilderError::NoBaseUri`] if the base URI has not been set.
+    pub fn discovery<ResBody>(self) -> std::result::Result<Discovery, BuilderError>
+    where
+        Conn: hyper_util::client::legacy::connect::Connect + Clone + Send + Sync + 'static,
+        Layers: Layer<legacy::Client<Conn, Full<Bytes>>> + Clone + Send + Sync + 'static,
+        Layers::Service: Service<http::Request<Full<Bytes>>, Response = http::Response<ResBody>>
+            + Clone
+            + Send
+            + Sync
+            + 'static,
+        <Layers::Service as Service<http::Request<Full<Bytes>>>>::Future: Send,
+        <Layers::Service as Service<http::Request<Full<Bytes>>>>::Error: Into<BoxError>,
+        ResBody: Body<Data = Bytes> + Send + Sync + 'static,
+        ResBody::Error: Into<BoxError>,
+    {
+        Ok(Discovery {
+            inner: self.build()?,
+            cache: Arc::new(OnceCell::new()),
+        })
+    }
 }
 
 /// SOVD REST client with a type-erased HTTP transport.
@@ -153,7 +187,7 @@ impl Client {
     ///
     /// # Errors
     ///
-    /// Returns an error if the URI is invalid.
+    /// Returns [`BuilderError::InvalidUri`] if the URI is invalid.
     pub fn connect(uri: &str) -> std::result::Result<Self, BuilderError> {
         Self::builder().base_uri(uri)?.build()
     }
@@ -279,7 +313,7 @@ impl Client {
     ///
     /// # Errors
     ///
-    /// Returns an error if the URI is invalid.
+    /// Returns [`BuilderError::InvalidUri`] if the URI is invalid.
     pub fn connect_unix(
         uri: &str,
         path: impl AsRef<std::path::Path>,
@@ -296,7 +330,7 @@ impl Client {
     ///
     /// # Errors
     ///
-    /// Returns an error if the URI is invalid.
+    /// Returns [`BuilderError::InvalidUri`] if the URI is invalid.
     #[cfg(target_os = "linux")]
     pub fn connect_unix_abstract(
         uri: &str,
@@ -328,7 +362,13 @@ pub(crate) fn build_uri_with_query(
     path: &str,
     query: &[(&str, &str)],
 ) -> Result<http::Uri> {
-    let base = format!("{base_uri}{path}");
+    // A root base URI such as `http://localhost` renders with a trailing slash;
+    // avoid a doubled slash when the path also starts with one.
+    let mut base = base_uri.to_string();
+    if path.starts_with('/') && base.ends_with('/') {
+        base.pop();
+    }
+    base.push_str(path);
     Ok(build_uri_query_string(&base, query).parse()?)
 }
 

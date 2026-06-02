@@ -5,7 +5,12 @@ use opensovd_models::GenericError;
 
 /// Client error type.
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum Error {
+    /// No advertised SOVD instance matched the selection.
+    #[error("no matching SOVD version")]
+    NoMatchingVersion,
+
     /// Server returned a non-success status code.
     #[error("server error {status}: {error:?}")]
     ApiError {
