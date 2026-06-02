@@ -1,6 +1,0 @@
-# SPDX-FileCopyrightText: Copyright (c) 2026 Contributors to the Eclipse Foundation
-# SPDX-License-Identifier: Apache-2.0
-
-group_imports = "StdExternalCrate"
-style_edition = "2024"
-max_width = 100
