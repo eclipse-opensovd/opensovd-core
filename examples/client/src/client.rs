@@ -5,21 +5,24 @@
 
 //! CLI client example exercising the `opensovd-client` API.
 //!
-//! Connects to a running gateway and fetches version info, components,
-//! data items, apps, and areas.
+//! Connects to a running gateway, discovers the advertised SOVD versions via
+//! `/version-info`, and for every found version prints its metadata and lists
+//! its components, data items, apps, and areas.
+//!
+//! `--url` is the unversioned discovery root in every mode.
 //!
 //! ```text
 //! # TCP (default)
 //! cargo run --example client
 //!
 //! # Custom URL
-//! cargo run --example client -- --url http://host:8080/sovd/v1
+//! cargo run --example client -- --url http://host:8080/sovd
 //!
 //! # Unix socket (filesystem path)
-//! cargo run --example client -- --unix-socket /tmp/opensovd.sock --url http://localhost/sovd/v1
+//! cargo run --example client -- --unix-socket /tmp/opensovd.sock --url http://localhost/sovd
 //!
 //! # Abstract Unix socket
-//! cargo run --example client -- --unix-socket @opensovd --url http://localhost/sovd/v1
+//! cargo run --example client -- --unix-socket @opensovd --url http://localhost/sovd
 //! ```
 
 use std::time::Duration;
@@ -28,7 +31,7 @@ use bytes::Bytes;
 use clap::Parser;
 use http::{HeaderMap, Request, Response};
 use http_body_util::Full;
-use opensovd_client::Client;
+use opensovd_client::{Client, Discovery, SovdInfo};
 use tower_http::classify::ServerErrorsFailureClass;
 use tower_http::trace::TraceLayer;
 use tracing::Span;
@@ -38,18 +41,19 @@ use tracing::Span;
 #[command(about = "OpenSOVD client example")]
 #[command(after_help = "\
 Examples:
-  # Connect over TCP (default)
-  client --url http://localhost:7690/sovd/v1
+  # Discover versions over TCP (default)
+  client --url http://localhost:7690/sovd
 
-  # Connect over a Unix socket (filesystem path)
-  client --unix-socket /tmp/opensovd.sock --url http://localhost/sovd/v1
+  # Discover over a Unix socket (filesystem path)
+  client --unix-socket /tmp/opensovd.sock --url http://localhost/sovd
 
-  # Connect over an abstract Unix socket
-  client --unix-socket @opensovd --url http://localhost/sovd/v1
+  # Discover over an abstract Unix socket
+  client --unix-socket @opensovd --url http://localhost/sovd
 ")]
 struct Cli {
-    /// Base URL of the SOVD server (including version prefix).
-    #[arg(long, default_value = "http://localhost:7690/sovd/v1")]
+    /// SOVD `accessurl`: root of the SOVD API, parent of `version-info` (no version
+    /// identifier). `/version-info` is fetched from it to enumerate supported versions.
+    #[arg(long, default_value = "http://localhost:7690/sovd")]
     url: String,
 
     /// Path to a Unix socket to connect to. Use '@' prefix for abstract sockets.
@@ -90,6 +94,30 @@ async fn run(client: &Client) -> Result<(), opensovd_client::Error> {
     Ok(())
 }
 
+/// Print each advertised version's metadata and run the exercises against its client.
+async fn discover_and_run(discovery: &Discovery) -> Result<(), opensovd_client::Error> {
+    // Value vendor payload so any server's vendor_info shape prints.
+    let versions = discovery.versions::<serde_json::Value>().await?;
+    println!("found {} version(s)", versions.len());
+
+    for v in &versions {
+        let vendor = v.vendor_info.as_ref().map_or_else(
+            || "none".to_string(),
+            |info| serde_json::to_string_pretty(info).unwrap_or_else(|_| "<unprintable>".into()),
+        );
+        println!("version {}", v.version);
+        println!("  base_uri: {}", v.base_uri.0);
+        println!("  vendor_info: {vendor}");
+
+        let client = discovery
+            .select(|s: &SovdInfo<serde_json::Value>| s.version == v.version)
+            .await?;
+        run(&client).await?;
+    }
+
+    Ok(())
+}
+
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     drop(libcli::init_tracing("info", None));
@@ -100,8 +128,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         if let Some(name) = socket.strip_prefix('@') {
             #[cfg(target_os = "linux")]
             {
-                let client = Client::connect_unix_abstract(&cli.url, name)?;
-                run(&client).await?;
+                let discovery = Discovery::connect_unix_abstract(&cli.url, name)?;
+                discover_and_run(&discovery).await?;
                 return Ok(());
             }
             #[cfg(not(target_os = "linux"))]
@@ -110,12 +138,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 return Err("abstract Unix sockets are only supported on Linux".into());
             }
         }
-        let client = Client::connect_unix(&cli.url, socket)?;
-        run(&client).await?;
+        let discovery = Discovery::connect_unix(&cli.url, socket)?;
+        discover_and_run(&discovery).await?;
         return Ok(());
     }
 
-    let client = Client::builder()
+    let discovery = Client::builder()
         .base_uri(&cli.url)?
         .layer(
             TraceLayer::new_for_http()
@@ -162,7 +190,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     },
                 ),
         )
-        .build()?;
-    run(&client).await?;
+        .discovery()?;
+    discover_and_run(&discovery).await?;
     Ok(())
 }

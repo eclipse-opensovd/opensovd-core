@@ -20,6 +20,7 @@ http-body-util = { workspace = true }
 hyper = { workspace = true, features = ["http1"] }
 libcli = { workspace = true }
 opensovd-client = { workspace = true }
+serde_json = { workspace = true, features = ["std"] }
 tokio = { workspace = true, features = ["net", "rt", "macros", "signal"] }
 tower-http = { workspace = true, features = ["trace"] }
 tracing = { workspace = true }

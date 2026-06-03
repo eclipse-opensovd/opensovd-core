@@ -1129,6 +1129,7 @@ dependencies = [
  "hyper",
  "libcli",
  "opensovd-client",
+ "serde_json",
  "tokio",
  "tower-http",
  "tracing",
