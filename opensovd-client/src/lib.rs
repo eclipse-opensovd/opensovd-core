@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #![allow(clippy::missing_errors_doc)]
+#![doc = include_str!("../README.md")]
 
 mod client;
 mod data;
