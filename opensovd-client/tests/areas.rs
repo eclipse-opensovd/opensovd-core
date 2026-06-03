@@ -30,7 +30,7 @@ async fn area_contains() {
         .unwrap();
     let client = mock_client(builder.build());
     let result = client.area("powertrain").contains().await.unwrap();
-    assert!(result.items.is_empty());
+    assert!(result.data.items.is_empty());
 }
 
 #[tokio::test]

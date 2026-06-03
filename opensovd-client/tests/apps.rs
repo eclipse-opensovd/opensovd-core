@@ -30,7 +30,7 @@ async fn app_is_located_on() {
         .unwrap();
     let client = mock_client(builder.build());
     let result = client.app("diag").is_located_on().await.unwrap();
-    assert!(result.items.is_empty());
+    assert!(result.data.items.is_empty());
 }
 
 #[tokio::test]
@@ -43,7 +43,7 @@ async fn app_belongs_to() {
         .unwrap();
     let client = mock_client(builder.build());
     let result = client.app("diag").belongs_to().await.unwrap();
-    assert!(result.items.is_empty());
+    assert!(result.data.items.is_empty());
 }
 
 #[tokio::test]

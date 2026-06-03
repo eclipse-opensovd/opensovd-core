@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 Contributors to the Eclipse Foundation
 // SPDX-License-Identifier: Apache-2.0
 
+use std::marker::PhantomData;
+
 use bytes::Bytes;
 use http_body::Body;
 use http_body_util::{BodyExt, Full, combinators::BoxBody};
@@ -19,6 +21,7 @@ use tower::{
 use crate::entities::{App, Area, Component};
 use crate::error::{Error, Result};
 use crate::list::ListEntitiesRequest;
+use crate::models::{DefaultModels, Models};
 
 /// Boxed error type for HTTP service flexibility with layers.
 pub(crate) type BoxError = Box<dyn std::error::Error + Send + Sync>;
@@ -42,24 +45,39 @@ pub enum BuilderError {
 }
 
 /// Builder for constructing a [`Client`] with custom configuration.
+///
+/// `M` selects the response [`Models`] set ([`DefaultModels`] unless changed
+/// via [`ClientBuilder::models`]).
 #[must_use]
-pub struct ClientBuilder<Conn = HttpConnector, Layers = Identity> {
+pub struct ClientBuilder<M = DefaultModels, Conn = HttpConnector, Layers = Identity> {
     base_uri: Option<http::Uri>,
     connector: Conn,
     layer: Layers,
+    _models: PhantomData<fn() -> M>,
 }
 
-impl ClientBuilder<HttpConnector, Identity> {
+impl ClientBuilder<DefaultModels, HttpConnector, Identity> {
     fn new() -> Self {
         Self {
             base_uri: None,
             connector: HttpConnector::new(),
             layer: Identity::new(),
+            _models: PhantomData,
         }
     }
 }
 
-impl<Conn, Layers> ClientBuilder<Conn, Layers> {
+impl<M, Conn, Layers> ClientBuilder<M, Conn, Layers> {
+    /// Select the response model set the built client deserializes into.
+    pub fn models<NewM>(self) -> ClientBuilder<NewM, Conn, Layers> {
+        ClientBuilder {
+            base_uri: self.base_uri,
+            connector: self.connector,
+            layer: self.layer,
+            _models: PhantomData,
+        }
+    }
+
     /// Set the base URI for the SOVD server.
     ///
     /// The URI should include the SOVD version prefix,
@@ -78,22 +96,27 @@ impl<Conn, Layers> ClientBuilder<Conn, Layers> {
     }
 
     /// Set a custom connector for the HTTP transport.
-    pub fn connector<NewConn>(self, connector: NewConn) -> ClientBuilder<NewConn, Layers> {
+    pub fn connector<NewConn>(self, connector: NewConn) -> ClientBuilder<M, NewConn, Layers> {
         ClientBuilder {
             base_uri: self.base_uri,
             connector,
             layer: self.layer,
+            _models: PhantomData,
         }
     }
 
     /// Add a Tower layer to the HTTP client stack.
     ///
     /// Layers are applied in order: the first layer added is the outermost.
-    pub fn layer<NewLayer>(self, layer: NewLayer) -> ClientBuilder<Conn, Stack<NewLayer, Layers>> {
+    pub fn layer<NewLayer>(
+        self,
+        layer: NewLayer,
+    ) -> ClientBuilder<M, Conn, Stack<NewLayer, Layers>> {
         ClientBuilder {
             base_uri: self.base_uri,
             connector: self.connector,
             layer: Stack::new(layer, self.layer),
+            _models: PhantomData,
         }
     }
 
@@ -102,7 +125,7 @@ impl<Conn, Layers> ClientBuilder<Conn, Layers> {
     /// # Errors
     ///
     /// Returns an error if the base URI has not been set.
-    pub fn build<ResBody>(self) -> std::result::Result<Client, BuilderError>
+    pub fn build<ResBody>(self) -> std::result::Result<Client<M>, BuilderError>
     where
         Conn: hyper_util::client::legacy::connect::Connect + Clone + Send + Sync + 'static,
         Layers: Layer<legacy::Client<Conn, Full<Bytes>>> + Clone + Send + Sync + 'static,
@@ -129,18 +152,31 @@ impl<Conn, Layers> ClientBuilder<Conn, Layers> {
         Ok(Client {
             base_uri,
             http: BoxCloneSyncService::new(service),
+            _models: PhantomData,
         })
     }
 }
 
 /// SOVD REST client with a type-erased HTTP transport.
-#[derive(Clone)]
-pub struct Client {
+///
+/// `M` selects the response [`Models`] set ([`DefaultModels`] by default).
+pub struct Client<M = DefaultModels> {
     pub(crate) base_uri: http::Uri,
     pub(crate) http: HttpService,
+    pub(crate) _models: PhantomData<fn() -> M>,
 }
 
-impl Client {
+impl<M> Clone for Client<M> {
+    fn clone(&self) -> Self {
+        Self {
+            base_uri: self.base_uri.clone(),
+            http: self.http.clone(),
+            _models: PhantomData,
+        }
+    }
+}
+
+impl Client<DefaultModels> {
     /// Create a new client builder.
     pub fn builder() -> ClientBuilder {
         ClientBuilder::new()
@@ -157,10 +193,12 @@ impl Client {
     pub fn connect(uri: &str) -> std::result::Result<Self, BuilderError> {
         Self::builder().base_uri(uri)?.build()
     }
+}
 
+impl<M: Models> Client<M> {
     /// Returns a request builder for listing components.
     #[must_use]
-    pub fn list_components(&self) -> ListEntitiesRequest<'_> {
+    pub fn list_components(&self) -> ListEntitiesRequest<'_, M> {
         ListEntitiesRequest {
             client: self,
             path: "/components".into(),
@@ -170,7 +208,7 @@ impl Client {
 
     /// Returns a request builder for listing apps.
     #[must_use]
-    pub fn list_apps(&self) -> ListEntitiesRequest<'_> {
+    pub fn list_apps(&self) -> ListEntitiesRequest<'_, M> {
         ListEntitiesRequest {
             client: self,
             path: "/apps".into(),
@@ -180,7 +218,7 @@ impl Client {
 
     /// Returns a request builder for listing areas.
     #[must_use]
-    pub fn list_areas(&self) -> ListEntitiesRequest<'_> {
+    pub fn list_areas(&self) -> ListEntitiesRequest<'_, M> {
         ListEntitiesRequest {
             client: self,
             path: "/areas".into(),
@@ -190,7 +228,7 @@ impl Client {
 
     /// Returns a reference to a specific component by ID.
     #[must_use]
-    pub fn component(&self, id: &str) -> Component<'_> {
+    pub fn component(&self, id: &str) -> Component<'_, M> {
         Component {
             client: self,
             id: encode(id),
@@ -199,7 +237,7 @@ impl Client {
 
     /// Returns a reference to a specific app by ID.
     #[must_use]
-    pub fn app(&self, id: &str) -> App<'_> {
+    pub fn app(&self, id: &str) -> App<'_, M> {
         App {
             client: self,
             id: encode(id),
@@ -208,13 +246,15 @@ impl Client {
 
     /// Returns a reference to a specific area by ID.
     #[must_use]
-    pub fn area(&self, id: &str) -> Area<'_> {
+    pub fn area(&self, id: &str) -> Area<'_, M> {
         Area {
             client: self,
             id: encode(id),
         }
     }
+}
 
+impl<M> Client<M> {
     /// GET a JSON resource at `path` (relative to the base URI) with optional query parameters.
     pub async fn get<T: DeserializeOwned>(&self, path: &str, query: &[(&str, &str)]) -> Result<T> {
         let uri = build_uri_with_query(&self.base_uri, path, query)?;
@@ -270,7 +310,7 @@ impl Client {
 }
 
 #[cfg(unix)]
-impl Client {
+impl Client<DefaultModels> {
     /// Connect to an SOVD server over a Unix domain socket (filesystem path).
     ///
     /// `uri` is the full URI including the path prefix,
