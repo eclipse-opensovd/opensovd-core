@@ -33,28 +33,28 @@ impl<'a, M: Models> App<'a, M> {
     }
 
     /// Fetch data categories for this entity.
-    pub async fn data_categories(&self) -> Result<M::DataCategories> {
+    pub async fn data_categories(&self) -> Result<M::DataCategoriesResponse> {
         self.client
             .get(&format!("/apps/{}/data-categories", self.id), &[])
             .await
     }
 
     /// Fetch data groups for this entity.
-    pub async fn data_groups(&self) -> Result<M::DataGroups> {
+    pub async fn data_groups(&self) -> Result<M::DataGroupsResponse> {
         self.client
             .get(&format!("/apps/{}/data-groups", self.id), &[])
             .await
     }
 
     /// Get the component this app is located on.
-    pub async fn is_located_on(&self) -> Result<M::Entities> {
+    pub async fn is_located_on(&self) -> Result<M::EntitiesResponse> {
         self.client
             .get(&format!("/apps/{}/is-located-on", self.id), &[])
             .await
     }
 
     /// List areas this app belongs to.
-    pub async fn belongs_to(&self) -> Result<M::Entities> {
+    pub async fn belongs_to(&self) -> Result<M::EntitiesResponse> {
         self.client
             .get(&format!("/apps/{}/belongs-to", self.id), &[])
             .await

@@ -1,9 +1,10 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 Contributors to the Eclipse Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-//! A consumer supplies its own `Models` (CDA-shaped entity items with an
-//! optional `id`, which `DefaultModels` would reject) and the typed client
-//! deserializes into it.
+//! A consumer supplies its own `Models`: a CDA-shaped entity POD (`Resource`
+//! with an optional `id`, which `DefaultModels` would reject) and its own
+//! response envelope (`ResourceResponse`, with `items` at the top level rather
+//! than under `data`). The typed client deserializes into it.
 
 use mock_http_connector::Connector;
 use opensovd_client::{Client, Models};
@@ -25,11 +26,16 @@ struct ResourceResponse {
 struct CdaModels;
 
 impl Models for CdaModels {
-    type Entities = ResourceResponse;
-    type DataList = ResourceResponse;
+    type EntityRef = Resource;
+    type DataInfo = serde_json::Value;
+    type DataCategory = serde_json::Value;
+    type DataGroup = serde_json::Value;
+
+    type EntitiesResponse = ResourceResponse;
+    type DataListResponse = serde_json::Value;
+    type DataCategoriesResponse = serde_json::Value;
+    type DataGroupsResponse = serde_json::Value;
     type ReadResponse = serde_json::Value;
-    type DataCategories = serde_json::Value;
-    type DataGroups = serde_json::Value;
 }
 
 #[tokio::test]

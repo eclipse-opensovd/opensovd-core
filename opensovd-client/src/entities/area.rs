@@ -13,7 +13,7 @@ pub struct Area<'a, M = DefaultModels> {
 
 impl<M: Models> Area<'_, M> {
     /// List entities contained in this area.
-    pub async fn contains(&self) -> Result<M::Entities> {
+    pub async fn contains(&self) -> Result<M::EntitiesResponse> {
         self.client
             .get(&format!("/areas/{}/contains", self.id), &[])
             .await

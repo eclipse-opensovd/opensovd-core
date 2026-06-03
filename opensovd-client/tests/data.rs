@@ -30,7 +30,7 @@ async fn data_categories() {
         .unwrap();
     let client = mock_client(builder.build());
     let result = client.component("ecu1").data_categories().await.unwrap();
-    assert!(result.items.is_empty());
+    assert!(result.data.items.is_empty());
 }
 
 #[tokio::test]
@@ -43,7 +43,7 @@ async fn data_groups() {
         .unwrap();
     let client = mock_client(builder.build());
     let result = client.component("ecu1").data_groups().await.unwrap();
-    assert!(result.items.is_empty());
+    assert!(result.data.items.is_empty());
 }
 
 #[tokio::test]

@@ -1,37 +1,60 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 Contributors to the Eclipse Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-//! Pluggable response model set.
+//! Pluggable model set.
 //!
-//! [`Models`] names the deserializable POD type returned by each endpoint.
-//! Implement it with your own types to target a server whose wire shapes
-//! differ from [`DefaultModels`] (e.g. a classic-diagnostic-adapter).
+//! [`Models`] splits the wire contract into two halves:
+//! - **PODs** — the leaf item types (`EntityRef`, `DataInfo`, ...), which is
+//!   where servers usually differ.
+//! - **`*Response` envelopes** — the full response each endpoint returns,
+//!   typically `Response<Items<Pod>>`.
+//!
+//! A consumer overrides only the PODs (reusing the default envelopes via
+//! `Self::EntityRef` etc.) or swaps a whole envelope when its shape differs.
+//! Implement it with your own deserializable types to target a server whose
+//! wire shapes differ from [`DefaultModels`] (e.g. a classic-diagnostic-adapter).
 
-use opensovd_models::{Response, data, discovery};
+use opensovd_models::{Items, Response, data, discovery};
 use serde::de::DeserializeOwned;
 
-/// Response POD types a SOVD server speaks.
+/// The POD and response types a SOVD server speaks.
 pub trait Models {
-    /// Entity collections: `/components`, `/apps`, `/areas`, and the
-    /// `hosts` / `belongs-to` / `is-located-on` / `contains` relationships.
-    type Entities: DeserializeOwned;
+    // ---- PODs (leaf items) ------------------------------------------------
+    /// Item in entity collections.
+    type EntityRef: DeserializeOwned;
+    /// Item in `/data`.
+    type DataInfo: DeserializeOwned;
+    /// Item in `/data-categories`.
+    type DataCategory: DeserializeOwned;
+    /// Item in `/data-groups`.
+    type DataGroup: DeserializeOwned;
+
+    // ---- Response envelopes -----------------------------------------------
+    /// `/components`, `/apps`, `/areas`, and the `hosts` / `belongs-to` /
+    /// `is-located-on` / `contains` relationships.
+    type EntitiesResponse: DeserializeOwned;
     /// `GET /.../data`.
-    type DataList: DeserializeOwned;
+    type DataListResponse: DeserializeOwned;
+    /// `GET /.../data-categories`.
+    type DataCategoriesResponse: DeserializeOwned;
+    /// `GET /.../data-groups`.
+    type DataGroupsResponse: DeserializeOwned;
     /// `GET /.../data/{id}`.
     type ReadResponse: DeserializeOwned;
-    /// `GET /.../data-categories`.
-    type DataCategories: DeserializeOwned;
-    /// `GET /.../data-groups`.
-    type DataGroups: DeserializeOwned;
 }
 
 /// Default model set backed by `opensovd-models`.
 pub struct DefaultModels;
 
 impl Models for DefaultModels {
-    type Entities = Response<discovery::Entities>;
-    type DataList = Response<data::DataList>;
+    type EntityRef = discovery::EntityReference;
+    type DataInfo = data::Metadata;
+    type DataCategory = data::DataCategoryInformation;
+    type DataGroup = data::Group;
+
+    type EntitiesResponse = Response<Items<Self::EntityRef>>;
+    type DataListResponse = Response<Items<Self::DataInfo>>;
+    type DataCategoriesResponse = Response<Items<Self::DataCategory>>;
+    type DataGroupsResponse = Response<Items<Self::DataGroup>>;
     type ReadResponse = data::ReadResponse;
-    type DataCategories = data::DataCategories;
-    type DataGroups = data::DataGroups;
 }

@@ -24,7 +24,7 @@ impl<M: Models> ListDataRequest<'_, M> {
     }
 
     /// Send the request.
-    pub async fn send(&self) -> Result<M::DataList> {
+    pub async fn send(&self) -> Result<M::DataListResponse> {
         self.client.get(&self.path, schema_query(self.schema)).await
     }
 }

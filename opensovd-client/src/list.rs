@@ -21,7 +21,7 @@ impl<M: Models> ListEntitiesRequest<'_, M> {
     }
 
     /// Send the request.
-    pub async fn send(&self) -> Result<M::Entities> {
+    pub async fn send(&self) -> Result<M::EntitiesResponse> {
         self.client.get(&self.path, schema_query(self.schema)).await
     }
 }
