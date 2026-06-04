@@ -21,14 +21,8 @@ mod app;
 mod area;
 mod component;
 
-use axum::{
-    Router,
-    extract::{Query, State},
-    http::request::Parts,
-    response::Json,
-    routing::get,
-};
-use axum_extra::extract::WithRejection;
+use axum::{Router, extract::State, http::request::Parts, response::Json, routing::get};
+use axum_extra::extract::{Query, WithRejection};
 use opensovd_core::Topology;
 use opensovd_models::Response;
 use opensovd_models::discovery::{EntityCapabilities, EntityCapabilitiesQuery};

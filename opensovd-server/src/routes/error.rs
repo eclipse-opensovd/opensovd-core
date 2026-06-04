@@ -6,10 +6,10 @@
 //! Defines error types that convert to SOVD-compliant HTTP error responses.
 
 use axum::{
-    extract::rejection::QueryRejection,
     http::StatusCode,
     response::{IntoResponse, Json, Response},
 };
+use axum_extra::extract::QueryRejection;
 use opensovd_core::{DataError, TopologyError};
 use opensovd_models::{ErrorCode, GenericError};
 
@@ -170,8 +170,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_error_bad_query() {
-        use axum::{Router, body::Body, extract::Query, http::Request, routing::get};
-        use axum_extra::extract::WithRejection;
+        use axum::{Router, body::Body, http::Request, routing::get};
+        use axum_extra::extract::{Query, WithRejection};
         use serde::Deserialize;
         use tower::ServiceExt;
 

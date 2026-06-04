@@ -6,14 +6,8 @@
 //! Provides routes for:
 //! - GET /version-info - Get SOVD server version and vendor information
 
-use axum::{
-    Router,
-    extract::{Query, State},
-    http::request::Parts,
-    response::Json,
-    routing::get,
-};
-use axum_extra::extract::WithRejection;
+use axum::{Router, extract::State, http::request::Parts, response::Json, routing::get};
+use axum_extra::extract::{Query, WithRejection};
 use opensovd_models::Response;
 use opensovd_models::version::{SovdInfo, VersionInfo, VersionInfoQuery};
 use serde::Serialize;

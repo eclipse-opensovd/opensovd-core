@@ -17,12 +17,12 @@
 
 use axum::{
     Router,
-    extract::{Path, Query, State},
+    extract::{Path, State},
     http::StatusCode,
     response::Json,
     routing::get,
 };
-use axum_extra::extract::WithRejection;
+use axum_extra::extract::{Query, WithRejection};
 use opensovd_core::DataFilter;
 use opensovd_core::Topology;
 use opensovd_models::Response;
