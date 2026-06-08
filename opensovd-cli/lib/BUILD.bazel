@@ -1,0 +1,24 @@
+load("@crate_index//:defs.bzl", "aliases", "all_crate_deps")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files(["Cargo.toml"])
+
+rust_library(
+    name = "libcli",
+    srcs = glob(["src/**/*.rs"]),
+    aliases = aliases(normal = True, proc_macro = True),
+    crate_name = "libcli",
+    edition = "2024",
+    proc_macro_deps = all_crate_deps(proc_macro = True),
+    version = "0.1.1",
+    deps = all_crate_deps(normal = True),
+)
+
+rust_test(
+    name = "unit_test",
+    crate = ":libcli",
+    deps = all_crate_deps(normal_dev = True),
+    proc_macro_deps = all_crate_deps(proc_macro_dev = True),
+)

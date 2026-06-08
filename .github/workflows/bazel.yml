@@ -1,0 +1,35 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 Contributors to the Eclipse Foundation
+# SPDX-License-Identifier: Apache-2.0
+
+name: Bazel Build
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref_name }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  bazel_build:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Build opensovd-core
+        run: bazel build //:opensovd-core
+
+      - name: Build opensovd-gateway
+        run: bazel build //:opensovd-gateway
+
+      - name: Build opensovd-mcp
+        run: bazel build //:opensovd-mcp
+
+      - name: Test Bazel suite
+        run: bazel test //:tests

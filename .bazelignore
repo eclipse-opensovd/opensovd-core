@@ -1,0 +1,5 @@
+target
+dist
+.venv
+.devenv
+.pytest_cache

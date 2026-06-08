@@ -1,0 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 Contributors to the Eclipse Foundation
+# SPDX-License-Identifier: Apache-2.0
+
+common --enable_bzlmod
+common --experimental_isolated_extension_usages
+common --@rules_rust//rust/toolchain/channel=nightly
