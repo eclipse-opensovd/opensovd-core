@@ -59,7 +59,7 @@ impl RegorusAuthorizer {
     pub fn from_paths(
         policies: &[impl AsRef<Path>],
         data: &[impl AsRef<Path>],
-    ) -> Result<Self, Box<dyn std::error::Error>> {
+    ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let mut engine = Engine::new();
 
         for (i, path) in policies.iter().enumerate() {
