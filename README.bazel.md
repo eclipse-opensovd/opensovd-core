@@ -37,7 +37,7 @@ The following command is validated and succeeds:
 bazel build //opensovd-core:opensovd_core
 ```
 
-Useful root aliases from [BUILD.bazel](/home/ioan/opensovd-fork/opensovd-core/BUILD.bazel):
+Useful root aliases from [BUILD.bazel](./opensovd-core/BUILD.bazel):
 
 ```bash
 bazel build //:opensovd-core
