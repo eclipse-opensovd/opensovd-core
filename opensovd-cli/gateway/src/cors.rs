@@ -12,7 +12,7 @@ use tower_http::cors::{self, CorsLayer};
 /// # Errors
 ///
 /// Returns an error if any origin, method, or header string is invalid,
-/// or if credentials are enabled with wildcard origins or headers.
+/// or if credentials are enabled with wildcard origins, methods, or headers.
 pub fn create_cors_layer(
     origins: &[String],
     methods: &[String],
@@ -25,11 +25,15 @@ pub fn create_cors_layer(
     }
 
     let wildcard_origins = origins.iter().any(|v| v == "*");
+    let wildcard_methods = methods.iter().any(|v| v == "*");
     let wildcard_headers = headers.iter().any(|v| v == "*");
 
     if credentials {
         if wildcard_origins {
             return Err("cannot use wildcard '*' for origins when credentials are enabled".into());
+        }
+        if wildcard_methods {
+            return Err("cannot use wildcard '*' for methods when credentials are enabled".into());
         }
         if wildcard_headers {
             return Err("cannot use wildcard '*' for headers when credentials are enabled".into());
@@ -48,7 +52,7 @@ pub fn create_cors_layer(
         layer.allow_origin(parsed)
     };
 
-    layer = if methods.iter().any(|v| v == "*") {
+    layer = if wildcard_methods {
         layer.allow_methods(cors::Any)
     } else {
         let parsed: Vec<http::Method> = methods
@@ -99,6 +103,13 @@ mod tests {
     fn test_credentials_with_wildcard_origin_fails() {
         let err = create_cors_layer(&[s("*")], &[], &[], true, None).unwrap_err();
         assert!(err.contains("origins"));
+    }
+
+    #[test]
+    fn test_credentials_with_wildcard_method_fails() {
+        let err =
+            create_cors_layer(&[s("http://example.com")], &[s("*")], &[], true, None).unwrap_err();
+        assert!(err.contains("methods"));
     }
 
     #[test]
