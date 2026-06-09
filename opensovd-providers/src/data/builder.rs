@@ -8,7 +8,8 @@ use std::collections::HashSet;
 use async_trait::async_trait;
 use indexmap::IndexMap;
 use opensovd_core::{
-    CategoryInfo, Data, DataError, DataFilter, DataProvider, GroupInfo, Metadata, TagInfo,
+    CategoryInfo, Data, DataError, DataFilter, DataProvider, DataScope, GroupInfo, Metadata,
+    TagInfo,
 };
 use opensovd_models::data::DataCategory;
 use serde_json::Value;
@@ -264,34 +265,14 @@ impl BuiltDataProvider {
     }
 
     fn matches_filter(metadata: &Metadata, filter: &DataFilter) -> bool {
-        // Check categories filter
-        if !filter.categories.is_empty()
-            && !filter.categories.iter().any(|c| c == &metadata.category)
-        {
-            return false;
-        }
+        let scope_ok = match &filter.scope {
+            Some(DataScope::Groups(gs)) => gs.iter().any(|g| metadata.groups.contains(g)),
+            Some(DataScope::Categories(cs)) => cs.contains(&metadata.category),
+            None => true,
+        };
 
-        // Check groups filter
-        if !filter.groups.is_empty()
-            && !filter
-                .groups
-                .iter()
-                .any(|g| metadata.groups.iter().any(|mg| mg == g))
-        {
-            return false;
-        }
-
-        // Check tags filter
-        if !filter.tags.is_empty()
-            && !filter
-                .tags
-                .iter()
-                .any(|t| metadata.tags.iter().any(|mt| mt == t))
-        {
-            return false;
-        }
-
-        true
+        scope_ok
+            && (filter.tags.is_empty() || filter.tags.iter().any(|t| metadata.tags.contains(t)))
     }
 }
 
@@ -468,8 +449,8 @@ mod tests {
             .unwrap();
 
         let filter = DataFilter {
-            categories: vec!["identData".to_string()],
-            ..Default::default()
+            scope: Some(DataScope::Categories(vec!["identData".to_string()])),
+            tags: vec![],
         };
         let items = provider.list(filter).await.unwrap();
         assert_eq!(items.len(), 1);
@@ -496,8 +477,8 @@ mod tests {
             .unwrap();
 
         let filter = DataFilter {
+            scope: None,
             tags: vec!["monitoring".to_string()],
-            ..Default::default()
         };
         let items = provider.list(filter).await.unwrap();
         assert_eq!(items.len(), 1);
@@ -525,8 +506,8 @@ mod tests {
             .unwrap();
 
         let filter = DataFilter {
-            groups: vec!["info".to_string()],
-            ..Default::default()
+            scope: Some(DataScope::Groups(vec!["info".to_string()])),
+            tags: vec![],
         };
         let items = provider.list(filter).await.unwrap();
         assert_eq!(items.len(), 1);

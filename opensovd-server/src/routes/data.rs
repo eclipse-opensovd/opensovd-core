@@ -23,8 +23,7 @@ use axum::{
     routing::get,
 };
 use axum_extra::extract::{Query, WithRejection};
-use opensovd_core::DataFilter;
-use opensovd_core::Topology;
+use opensovd_core::{DataFilter, DataScope, Topology};
 use opensovd_models::Response;
 use opensovd_models::data::{
     DataCategories, DataCategoryInformation, DataGroups, DataGroupsQuery, DataList, DataQuery,
@@ -132,6 +131,28 @@ async fn component_data_groups(
     }))
 }
 
+/// Resolve a `DataQuery` into a provider `DataFilter`.
+///
+/// Applies groups/categories precedence: when both are given, groups wins and
+/// categories is ignored.
+fn data_filter(query: DataQuery) -> DataFilter {
+    let groups = query.groups.unwrap_or_default();
+    let categories = query.categories.unwrap_or_default();
+
+    let scope = if !groups.is_empty() {
+        Some(DataScope::Groups(groups))
+    } else if !categories.is_empty() {
+        Some(DataScope::Categories(categories))
+    } else {
+        None
+    };
+
+    DataFilter {
+        scope,
+        tags: query.tags.unwrap_or_default(),
+    }
+}
+
 /// GET /components/{component_id}/data - List data resources.
 ///
 /// Returns the list of data resources available for a component, optionally
@@ -149,11 +170,8 @@ async fn component_data_list(
         .data_provider()
         .ok_or_else(|| Error::ProviderNotAvailable("data".into()))?;
 
-    let filter = DataFilter {
-        groups: query.groups.clone().unwrap_or_default(),
-        categories: query.categories.clone().unwrap_or_default(),
-        tags: query.tags.clone().unwrap_or_default(),
-    };
+    let include_schema = query.include_schema;
+    let filter = data_filter(query);
 
     let items = provider
         .list(filter)
@@ -171,7 +189,7 @@ async fn component_data_list(
 
     Ok(Json(Response {
         data: DataList { items },
-        schema: query.include_schema.then(DataList::schema),
+        schema: include_schema.then(DataList::schema),
     }))
 }
 
@@ -308,11 +326,8 @@ async fn app_data_list(
         .data_provider()
         .ok_or_else(|| Error::ProviderNotAvailable("data".into()))?;
 
-    let filter = DataFilter {
-        groups: query.groups.clone().unwrap_or_default(),
-        categories: query.categories.clone().unwrap_or_default(),
-        tags: query.tags.clone().unwrap_or_default(),
-    };
+    let include_schema = query.include_schema;
+    let filter = data_filter(query);
 
     let items = provider
         .list(filter)
@@ -330,7 +345,7 @@ async fn app_data_list(
 
     Ok(Json(Response {
         data: DataList { items },
-        schema: query.include_schema.then(DataList::schema),
+        schema: include_schema.then(DataList::schema),
     }))
 }
 
@@ -378,4 +393,31 @@ async fn app_data_write(
 
     provider.write(&data_id, body.data).await?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn query(groups: Vec<&str>, categories: Vec<&str>, tags: Vec<&str>) -> DataQuery {
+        DataQuery {
+            groups: Some(groups.into_iter().map(String::from).collect()),
+            categories: Some(categories.into_iter().map(String::from).collect()),
+            tags: Some(tags.into_iter().map(String::from).collect()),
+            include_schema: false,
+        }
+    }
+
+    #[test]
+    fn groups_take_precedence_over_categories() {
+        let filter = data_filter(query(vec!["g"], vec!["c"], vec![]));
+        assert_eq!(filter.scope, Some(DataScope::Groups(vec!["g".into()])));
+    }
+
+    #[test]
+    fn no_scope_leaves_tags_only() {
+        let filter = data_filter(query(vec![], vec![], vec!["t"]));
+        assert_eq!(filter.scope, None);
+        assert_eq!(filter.tags, vec!["t"]);
+    }
 }

@@ -5,11 +5,17 @@
 
 use async_trait::async_trait;
 
+/// The mutually-exclusive scope of a data resource query: groups or categories.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DataScope {
+    Groups(Vec<String>),
+    Categories(Vec<String>),
+}
+
 /// Filter criteria for listing data values.
 #[derive(Debug, Clone, Default)]
 pub struct DataFilter {
-    pub groups: Vec<String>,
-    pub categories: Vec<String>,
+    pub scope: Option<DataScope>,
     pub tags: Vec<String>,
 }
 

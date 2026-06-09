@@ -20,7 +20,7 @@ IDENT = {"sw.version", "sw.build_date", "sw.sha1", "hw.version", "hw.revision", 
 CURRENT = {"voltage", "temperature"}
 
 
-# The mock provider applies filters as AND across dimensions, OR within each.
+# Scope (groups or categories, groups wins) AND-combines with tags; OR within each.
 @pytest.mark.parametrize(
     ("params", "expected"),
     [
@@ -33,6 +33,8 @@ CURRENT = {"voltage", "temperature"}
         ({"categories": "currentData", "tags": "sensor"}, CURRENT),
         ({"categories": "identData", "tags": "sensor"}, set()),
         ({"groups": "nonexistent"}, set()),
+        # groups wins, categories ignored.
+        ({"groups": "power", "categories": "identData"}, {"voltage"}),
     ],
 )
 def test_data_list_filter(client, params, expected):

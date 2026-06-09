@@ -75,13 +75,6 @@ pub struct DataErrorEntry {
     pub error: GenericError,
 }
 
-#[derive(Debug, Clone, Default)]
-pub struct DataFilter {
-    pub groups: Option<Vec<String>>,
-    pub categories: Option<Vec<DataCategory>>,
-    pub tags: Option<Vec<String>>,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "jsonschema", derive(schemars::JsonSchema))]
 pub struct DataError {
@@ -126,18 +119,6 @@ pub struct DataQuery {
     pub tags: Option<Vec<String>>,
     #[serde(default, rename = "include-schema")]
     pub include_schema: bool,
-}
-
-impl From<DataQuery> for DataFilter {
-    fn from(query: DataQuery) -> Self {
-        Self {
-            groups: query.groups,
-            categories: query
-                .categories
-                .map(|cats| cats.into_iter().map(DataCategory::from).collect()),
-            tags: query.tags,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -255,21 +236,5 @@ mod tests {
         assert_eq!(read_only.error_code, "read-only");
         assert_eq!(read_only.message, Some("Data resource is read-only".into()));
         assert_eq!(read_only.to_string(), "read-only");
-    }
-
-    #[test]
-    fn test_data_query_to_filter() {
-        let query = DataQuery {
-            groups: Some(vec!["sensors".into()]),
-            categories: Some(vec!["currentData".into()]),
-            tags: Some(vec!["temperature".into()]),
-            include_schema: true,
-        };
-
-        let filter: DataFilter = query.into();
-
-        assert_eq!(filter.groups, Some(vec!["sensors".into()]));
-        assert_eq!(filter.categories, Some(vec![DataCategory::CurrentData]));
-        assert_eq!(filter.tags, Some(vec!["temperature".into()]));
     }
 }

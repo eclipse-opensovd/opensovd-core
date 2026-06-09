@@ -11,7 +11,8 @@ mod entity;
 mod topology;
 
 pub use data::{
-    CategoryInfo, Data, DataError, DataFilter, DataProvider, GroupInfo, Metadata, TagInfo,
+    CategoryInfo, Data, DataError, DataFilter, DataProvider, DataScope, GroupInfo, Metadata,
+    TagInfo,
 };
 pub use discovery::{DiscoveryError, DiscoveryProvider, DiscoveryStream};
 pub use entity::{App, Area, Component, EntityCollection, EntityKind, EntityRef};
