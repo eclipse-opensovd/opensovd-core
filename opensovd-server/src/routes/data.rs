@@ -17,18 +17,20 @@
 
 use axum::{
     Router,
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::Json,
     routing::get,
 };
-use axum_extra::extract::{Query, WithRejection};
-use opensovd_core::{DataFilter, DataScope, Topology};
+use axum_extra::extract::WithRejection;
+use opensovd_core::DataFilter;
+use opensovd_core::Topology;
 use opensovd_models::Response;
 use opensovd_models::data::{
     DataCategories, DataCategoryInformation, DataGroups, DataGroupsQuery, DataList, DataQuery,
     Group, Metadata, ReadDataQuery, ReadResponse, WriteRequest,
 };
+use serde_json::{Value, json};
 
 use super::AppState;
 use super::error::{Error, Result};
@@ -48,6 +50,7 @@ where
             get(component_data_groups),
         )
         .route("/components/{component_id}/data", get(component_data_list))
+        .route("/components/{component_id}/data/docs", get(component_data_docs))
         .route(
             "/components/{component_id}/data/{data_id}",
             get(component_data_read).put(component_data_write),
@@ -55,10 +58,186 @@ where
         .route("/apps/{app_id}/data-categories", get(app_data_categories))
         .route("/apps/{app_id}/data-groups", get(app_data_groups))
         .route("/apps/{app_id}/data", get(app_data_list))
+        .route("/apps/{app_id}/data/docs", get(app_data_docs))
         .route(
             "/apps/{app_id}/data/{data_id}",
             get(app_data_read).put(app_data_write),
         )
+}
+
+fn data_docs_openapi(entity_kind: &str, entity_id: &str) -> Value {
+    let list_path = format!("/{entity_kind}/{entity_id}/data");
+    let item_path = format!("/{entity_kind}/{entity_id}/data/{{data_id}}");
+
+    json!({
+        "openapi": "3.1.0",
+        "info": {
+            "title": "OpenSOVD Data Capability Description",
+            "version": "1.1.0",
+            "description": "Scoped OpenAPI description for data resource collection access."
+        },
+        "servers": [{
+            "url": "https://{sovd-server-host}/sovd/v1"
+        }],
+        "paths": {
+            (list_path): {
+                "get": {
+                    "summary": "List data resources",
+                    "responses": {
+                        "200": {
+                            "description": "Successful response",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "properties": {
+                                            "items": {
+                                                "type": "array",
+                                                "items": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "id": { "type": "string" },
+                                                        "name": { "type": "string" },
+                                                        "category": { "type": "string" },
+                                                        "translation_id": { "type": ["string", "null"] },
+                                                        "groups": {
+                                                            "type": ["array", "null"],
+                                                            "items": { "type": "string" }
+                                                        },
+                                                        "tags": {
+                                                            "type": ["array", "null"],
+                                                            "items": { "type": "string" }
+                                                        }
+                                                    },
+                                                    "required": ["id", "name", "category"]
+                                                }
+                                            }
+                                        },
+                                        "required": ["items"]
+                                    }
+                                }
+                            }
+                        },
+                        "404": {
+                            "description": "Entity or provider not found",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "properties": {
+                                            "error_code": { "type": "string" },
+                                            "message": { "type": "string" },
+                                            "vendor_code": { "type": ["string", "null"] }
+                                        },
+                                        "required": ["error_code", "message"]
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            (item_path): {
+                "parameters": [
+                    {
+                        "name": "data_id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "Identifier of the data resource"
+                    }
+                ],
+                "get": {
+                    "summary": "Read data resource",
+                    "responses": {
+                        "200": {
+                            "description": "Successful response",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "properties": {
+                                            "id": { "type": "string" },
+                                            "data": {},
+                                            "errors": {
+                                                "type": ["array", "null"],
+                                                "items": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "path": { "type": "string" },
+                                                        "error": { "type": "object" }
+                                                    },
+                                                    "required": ["path", "error"]
+                                                }
+                                            },
+                                            "schema": {}
+                                        },
+                                        "required": ["id", "data"]
+                                    }
+                                }
+                            }
+                        },
+                        "404": {
+                            "description": "Entity, provider, or data id not found",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "properties": {
+                                            "error_code": { "type": "string" },
+                                            "message": { "type": "string" },
+                                            "vendor_code": { "type": ["string", "null"] }
+                                        },
+                                        "required": ["error_code", "message"]
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "put": {
+                    "summary": "Write data resource",
+                    "requestBody": {
+                        "required": true,
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {}
+                                    },
+                                    "required": ["data"]
+                                }
+                            }
+                        }
+                    },
+                    "responses": {
+                        "204": {
+                            "description": "No content"
+                        },
+                        "404": {
+                            "description": "Entity, provider, or data id not found",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "properties": {
+                                            "error_code": { "type": "string" },
+                                            "message": { "type": "string" },
+                                            "vendor_code": { "type": ["string", "null"] }
+                                        },
+                                        "required": ["error_code", "message"]
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    })
 }
 
 /// GET /components/{component_id}/data-categories - List data categories.
@@ -131,28 +310,6 @@ async fn component_data_groups(
     }))
 }
 
-/// Resolve a `DataQuery` into a provider `DataFilter`.
-///
-/// Applies groups/categories precedence: when both are given, groups wins and
-/// categories is ignored.
-fn data_filter(query: DataQuery) -> DataFilter {
-    let groups = query.groups.unwrap_or_default();
-    let categories = query.categories.unwrap_or_default();
-
-    let scope = if !groups.is_empty() {
-        Some(DataScope::Groups(groups))
-    } else if !categories.is_empty() {
-        Some(DataScope::Categories(categories))
-    } else {
-        None
-    };
-
-    DataFilter {
-        scope,
-        tags: query.tags.unwrap_or_default(),
-    }
-}
-
 /// GET /components/{component_id}/data - List data resources.
 ///
 /// Returns the list of data resources available for a component, optionally
@@ -170,8 +327,11 @@ async fn component_data_list(
         .data_provider()
         .ok_or_else(|| Error::ProviderNotAvailable("data".into()))?;
 
-    let include_schema = query.include_schema;
-    let filter = data_filter(query);
+    let filter = DataFilter {
+        groups: query.groups.clone().unwrap_or_default(),
+        categories: query.categories.clone().unwrap_or_default(),
+        tags: query.tags.clone().unwrap_or_default(),
+    };
 
     let items = provider
         .list(filter)
@@ -189,7 +349,7 @@ async fn component_data_list(
 
     Ok(Json(Response {
         data: DataList { items },
-        schema: include_schema.then(DataList::schema),
+        schema: query.include_schema.then(DataList::schema),
     }))
 }
 
@@ -237,6 +397,22 @@ async fn component_data_write(
 
     provider.write(&data_id, body.data).await?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// GET /components/{component_id}/data/docs - Get scoped OpenAPI docs for component data routes.
+async fn component_data_docs(
+    State(topology): State<Topology>,
+    Path(component_id): Path<String>,
+) -> Result<Json<Value>> {
+    let topo = topology.read().await;
+    let entity = topo
+        .get_component(&component_id)
+        .map_err(|_| Error::EntityNotFound(component_id.clone()))?;
+    entity
+        .data_provider()
+        .ok_or_else(|| Error::ProviderNotAvailable("data".into()))?;
+
+    Ok(Json(data_docs_openapi("components", &component_id)))
 }
 
 /// GET /apps/{app_id}/data-categories - List app data categories.
@@ -326,8 +502,11 @@ async fn app_data_list(
         .data_provider()
         .ok_or_else(|| Error::ProviderNotAvailable("data".into()))?;
 
-    let include_schema = query.include_schema;
-    let filter = data_filter(query);
+    let filter = DataFilter {
+        groups: query.groups.clone().unwrap_or_default(),
+        categories: query.categories.clone().unwrap_or_default(),
+        tags: query.tags.clone().unwrap_or_default(),
+    };
 
     let items = provider
         .list(filter)
@@ -345,7 +524,7 @@ async fn app_data_list(
 
     Ok(Json(Response {
         data: DataList { items },
-        schema: include_schema.then(DataList::schema),
+        schema: query.include_schema.then(DataList::schema),
     }))
 }
 
@@ -375,6 +554,22 @@ async fn app_data_read(
     }))
 }
 
+/// GET /apps/{app_id}/data/docs - Get scoped OpenAPI docs for app data routes.
+async fn app_data_docs(
+    State(topology): State<Topology>,
+    Path(app_id): Path<String>,
+) -> Result<Json<Value>> {
+    let topo = topology.read().await;
+    let entity = topo
+        .get_app(&app_id)
+        .map_err(|_| Error::EntityNotFound(app_id.clone()))?;
+    entity
+        .data_provider()
+        .ok_or_else(|| Error::ProviderNotAvailable("data".into()))?;
+
+    Ok(Json(data_docs_openapi("apps", &app_id)))
+}
+
 /// PUT /apps/{app_id}/data/{data_id} - Write an app data value.
 ///
 /// Writes a value to a data resource of an app.
@@ -393,31 +588,4 @@ async fn app_data_write(
 
     provider.write(&data_id, body.data).await?;
     Ok(StatusCode::NO_CONTENT)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn query(groups: Vec<&str>, categories: Vec<&str>, tags: Vec<&str>) -> DataQuery {
-        DataQuery {
-            groups: Some(groups.into_iter().map(String::from).collect()),
-            categories: Some(categories.into_iter().map(String::from).collect()),
-            tags: Some(tags.into_iter().map(String::from).collect()),
-            include_schema: false,
-        }
-    }
-
-    #[test]
-    fn groups_take_precedence_over_categories() {
-        let filter = data_filter(query(vec!["g"], vec!["c"], vec![]));
-        assert_eq!(filter.scope, Some(DataScope::Groups(vec!["g".into()])));
-    }
-
-    #[test]
-    fn no_scope_leaves_tags_only() {
-        let filter = data_filter(query(vec![], vec![], vec!["t"]));
-        assert_eq!(filter.scope, None);
-        assert_eq!(filter.tags, vec!["t"]);
-    }
 }
