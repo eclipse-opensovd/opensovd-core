@@ -54,7 +54,8 @@ class BrunoItem(pytest.Item):
         self.add_marker(pytest.mark.bruno)
 
     def runtest(self):
-        if shutil.which("bru") is None:
+        bru = shutil.which("bru")
+        if bru is None:
             pytest.skip("bru CLI not installed")
 
         # Find bruno.json root
@@ -69,7 +70,7 @@ class BrunoItem(pytest.Item):
             raise RuntimeError("Gateway base URL not set -- gateway may have failed to start")
         result = subprocess.run(
             [
-                "bru",
+                bru,
                 "run",
                 str(self.path),
                 "--env",
@@ -80,6 +81,8 @@ class BrunoItem(pytest.Item):
             cwd=collection_root,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
         )
         if result.returncode != 0:
             raise BrunoTestException(result.stdout, result.stderr)
