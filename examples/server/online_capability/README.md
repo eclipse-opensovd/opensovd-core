@@ -3,19 +3,23 @@
 SOVD online capability description
 ISO 17978-3: appending `/docs` to a SOVD endpoint returns a self-contained
 OpenAPI 3.1 specification describing how to interact with that endpoint.
-For the data API, this example exposes the collection endpoint
-`/components/{component-id}/data/docs`.
+For the data API, this example exposes the collection endpoints
+`/components/{component-id}/data/docs` and `/apps/{app-id}/data/docs`.
 
 ## Topology
 
 ```text
 SOVDServer
-  └── Component: "engine"
-        └── Data Provider
+  ├── Component: "engine"
+  │     └── Data Provider
       ├── rpm                  (read-write, CurrentData)
       ├── coolant_temperature  (read-only, CurrentData)
       ├── battery_voltage      (read-only, SysInfo)
       └── serial_number        (read-only, IdentData)
+  └── App: "diag" (hosted on engine)
+        └── Data Provider
+      ├── health_status        (read-only, CurrentData)
+      └── event_count          (read-only, SysInfo)
 ```
 
 ## Running
@@ -31,6 +35,7 @@ The server starts on `http://127.0.0.1:7691`.
 ```bash
 # Retrieve the ONLINE CAPABILITY DESCRIPTION for the data collection
 curl -s http://localhost:7691/sovd/v1/components/engine/data/docs | jq
+curl -s http://localhost:7691/sovd/v1/apps/diag/data/docs | jq
 
 # Read the data resource value
 curl -s http://localhost:7691/sovd/v1/components/engine/data/rpm | jq
@@ -42,6 +47,9 @@ curl -s -X PUT http://localhost:7691/sovd/v1/components/engine/data/rpm \
 
 # Read another resource from the same collection
 curl -s http://localhost:7691/sovd/v1/components/engine/data/coolant_temperature | jq
+
+# Read an app resource value
+curl -s http://localhost:7691/sovd/v1/apps/diag/data/health_status | jq
 ```
 
 The collection-level `/data/docs` response documents the list endpoint,

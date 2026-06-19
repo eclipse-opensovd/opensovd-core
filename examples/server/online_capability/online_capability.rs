@@ -5,8 +5,8 @@
 
 //! Online capability description example (ISO 17978-3).
 //!
-//! Starts a server on port 7691 with a single "engine" component that exposes
-//! several data resources. The point of interest is the SOVD *online
+//! Starts a server on port 7691 with one "engine" component and one "diag"
+//! app, each exposing data resources. The point of interest is the SOVD *online
 //! capability description*: appending `/docs` to the data collection path returns
 //! a self-contained OpenAPI 3.1 specification describing how to interact with
 //! that endpoint.
@@ -17,12 +17,13 @@
 //!
 //! ```bash
 //! curl -s http://localhost:7691/sovd/v1/components/engine/data/docs | jq
+//! curl -s http://localhost:7691/sovd/v1/apps/diag/data/docs | jq
 //! ```
 
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
-use opensovd_core::Component;
+use opensovd_core::{App, Component};
 use opensovd_models::data::DataCategory;
 use opensovd_providers::data::{
     Constant, DataProviderBuilder, ReadableDataResource, Value, WriteableDataResource,
@@ -111,11 +112,33 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .build()?;
 
     let engine = Component::new("engine", "Engine Control Unit").with_data_provider(provider);
+    let app_provider = DataProviderBuilder::new()
+        .read_data(
+            "health_status",
+            "Diagnostics Health Status",
+            &DataCategory::CurrentData,
+            Constant::new("ok")?,
+        )
+        .groups(["diagnostics"])
+        .tags(["live", "status"])
+        .translation_id("diag.health.status")
+        .read_data(
+            "event_count",
+            "Diagnostic Event Count",
+            &DataCategory::SysInfo,
+            Constant::new(3_u32)?,
+        )
+        .groups(["diagnostics"])
+        .tags(["counter"])
+        .translation_id("diag.event.count")
+        .build()?;
+    let diag = App::new("diag", "Diagnostics App", "engine").with_data_provider(app_provider);
 
     let topology = Topology::new();
     {
         let mut t = topology.write().await;
         t.add_component(engine);
+        t.add_app(diag);
     }
 
     let listener = TcpListener::bind("127.0.0.1:7691").await?;
@@ -127,8 +150,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .build()?;
 
     tracing::info!(
-        "Server running. Try: curl -s \
-         http://localhost:7691/sovd/v1/components/engine/data/docs | jq"
+           "Server running. Try: curl -s \
+            http://localhost:7691/sovd/v1/components/engine/data/docs | jq; \
+            curl -s http://localhost:7691/sovd/v1/apps/diag/data/docs | jq"
     );
     server.serve().await?;
     Ok(())
