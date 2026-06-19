@@ -13,6 +13,10 @@ name = "simple"
 path = "simple/simple.rs"
 
 [[example]]
+name = "online_capability"
+path = "online_capability/online_capability.rs"
+
+[[example]]
 name = "systemd"
 path = "systemd/systemd.rs"
 

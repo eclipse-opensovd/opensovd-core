@@ -14,13 +14,20 @@
 //! - GET /components/{component_id}/data-categories - List data categories
 //! - GET /components/{component_id}/data-groups - List data groups
 //! - GET /components/{component_id}/data - List data resources
+//! - GET /components/{component_id}/data/docs - Online capability description
 //! - GET /components/{component_id}/data/{data_id} - Read a data value
 //! - PUT /components/{component_id}/data/{data_id} - Write a data value
+//! - GET /apps/{app_id}/data/docs - Online capability description
+//!
+//! ## Online capability descriptions
+//! - GET /{entity-path}/data/docs - Self-contained OpenAPI 3.1 spec
+//!   describing the data collection endpoint (currently for components and apps)
 //!
 //! ## Version
 //! - GET /version-info - Get SOVD server version information
 
 mod data;
+mod docs;
 mod entities;
 mod error;
 mod version;
