@@ -6,8 +6,8 @@ name = "opensovd-tests"
 version = "0.1.0"
 requires-python = ">=3.13"
 dependencies = [
-    "cryptography>=48.0.1",
-    "pytest>=9.0.3",
+    "cryptography>=49.0.0",
+    "pytest>=9.1.1",
     "httpx>=0.28.1",
     "jsonschema>=4.26",
     "openapi-spec-validator>=0.9.0",
@@ -15,7 +15,7 @@ dependencies = [
 ]
 
 [dependency-groups]
-tools = ["prek>=0.4.3", "ruff>=0.15.15", "ty>=0.0.42"]
+tools = ["prek>=0.4.3", "ruff>=0.15.18", "ty>=0.0.51"]
 docs = ["sphinx>=9.1", "furo>=2025.12.19", "myst-parser>=5.1.0"]
 dev = [
     "pytest-html>=4.2.0",
