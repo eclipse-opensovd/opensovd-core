@@ -126,7 +126,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "event_count",
             "Diagnostic Event Count",
             &DataCategory::SysInfo,
-            Constant::new(3_u32)?,
+            Constant::new(3u32)?,
         )
         .groups(["diagnostics"])
         .tags(["counter"])
@@ -150,7 +150,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .build()?;
 
     tracing::info!(
-        "Server running. Try: curl -s \
+           "Server running. Try: curl -s \
             http://localhost:7691/sovd/v1/components/engine/data/docs | jq; \
             curl -s http://localhost:7691/sovd/v1/apps/diag/data/docs | jq"
     );
