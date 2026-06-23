@@ -117,7 +117,9 @@ pub fn data_collection_docs(collection_path: &str, items: &[Metadata]) -> Value 
                             },
                         },
                     },
+                    "400": { "description": "The request query was invalid." },
                     "404": { "description": "The entity was not found." },
+                    "500": { "description": "An internal data provider error occurred." },
                 },
             }
         }),
@@ -215,6 +217,8 @@ mod tests {
             path["get"]["responses"]["200"]["content"]["application/json"]["example"]["items"][0]["id"],
             "rpm"
         );
+        assert!(path["get"]["responses"]["400"].is_object());
+        assert!(path["get"]["responses"]["500"].is_object());
     }
 
     /// Collect every `$ref` string in a JSON value.
