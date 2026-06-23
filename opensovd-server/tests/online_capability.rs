@@ -12,7 +12,9 @@ mod common;
 use async_trait::async_trait;
 use http_body_util::BodyExt;
 use hyper::Request;
-use opensovd_core::{App, Component, Data, DataError, DataFilter, DataProvider, Metadata, Topology};
+use opensovd_core::{
+    App, Component, Data, DataError, DataFilter, DataProvider, Metadata, Topology,
+};
 
 /// Lists a fixed set of resources so tests can pin their capabilities.
 #[derive(Clone)]
@@ -79,14 +81,17 @@ async fn server() -> common::TestServer {
         .write()
         .await
         .add_component(Component::new("ECU", "Engine Control Unit").with_data_provider(provider));
-    topology.write().await.add_app(
-        App::new("diag", "Diagnostics", "ECU").with_data_provider(StubProvider {
-            items: vec![
-                metadata("rpm", true, true, Some(value_schema())),
-                metadata("temp", true, false, None),
-            ],
-        }),
-    );
+    topology
+        .write()
+        .await
+        .add_app(
+            App::new("diag", "Diagnostics", "ECU").with_data_provider(StubProvider {
+                items: vec![
+                    metadata("rpm", true, true, Some(value_schema())),
+                    metadata("temp", true, false, None),
+                ],
+            }),
+        );
     common::TestServer::builder()
         .topology(topology)
         .build()

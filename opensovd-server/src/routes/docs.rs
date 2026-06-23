@@ -212,8 +212,7 @@ mod tests {
         assert_eq!(path["get"]["parameters"][0]["name"], "groups");
         assert_eq!(path["get"]["parameters"][0]["explode"], true);
         assert_eq!(
-            path["get"]["responses"]["200"]["content"]["application/json"]["example"]["items"][0]
-                ["id"],
+            path["get"]["responses"]["200"]["content"]["application/json"]["example"]["items"][0]["id"],
             "rpm"
         );
     }

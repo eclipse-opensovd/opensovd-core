@@ -150,7 +150,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .build()?;
 
     tracing::info!(
-           "Server running. Try: curl -s \
+        "Server running. Try: curl -s \
             http://localhost:7691/sovd/v1/components/engine/data/docs | jq; \
             curl -s http://localhost:7691/sovd/v1/apps/diag/data/docs | jq"
     );
