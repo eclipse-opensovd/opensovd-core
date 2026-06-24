@@ -20,7 +20,7 @@
 use axum::{
     Router,
     extract::{Path, State},
-    http::StatusCode,
+    http::{StatusCode, request::Parts},
     response::Json,
     routing::get,
 };
@@ -251,9 +251,13 @@ async fn component_data_write(
 }
 
 /// Shared body for the collection `/data/docs` handlers.
+///
+/// `server_url` is the mounted SOVD API base advertised in the generated
+/// OpenAPI document.
 async fn data_collection_docs(
     provider: Option<&dyn DataProvider>,
     collection_path: &str,
+    server_url: &str,
 ) -> Result<Json<serde_json::Value>> {
     let provider = provider.ok_or_else(|| Error::ProviderNotAvailable("data".into()))?;
     let items = provider
@@ -263,7 +267,11 @@ async fn data_collection_docs(
         .map(response_metadata)
         .collect::<Vec<_>>();
 
-    Ok(Json(docs::data_collection_docs(collection_path, &items)))
+    Ok(Json(docs::data_collection_docs(
+        collection_path,
+        &items,
+        server_url,
+    )))
 }
 
 /// GET /components/{component_id}/data/docs
@@ -272,14 +280,16 @@ async fn data_collection_docs(
 async fn component_data_collection_docs(
     State(topology): State<Topology>,
     Path(component_id): Path<String>,
+    parts: Parts,
 ) -> Result<Json<serde_json::Value>> {
+    let server_url = super::versioned_uri(&parts);
     let topo = topology.read().await;
     let entity = topo
         .get_component(&component_id)
         .map_err(|_| Error::EntityNotFound(component_id.clone()))?;
 
     let collection_path = format!("/components/{component_id}/data");
-    data_collection_docs(entity.data_provider(), &collection_path).await
+    data_collection_docs(entity.data_provider(), &collection_path, &server_url).await
 }
 
 /// GET /apps/{app_id}/data-categories - List app data categories.
@@ -437,14 +447,16 @@ async fn app_data_write(
 async fn app_data_collection_docs(
     State(topology): State<Topology>,
     Path(app_id): Path<String>,
+    parts: Parts,
 ) -> Result<Json<serde_json::Value>> {
+    let server_url = super::versioned_uri(&parts);
     let topo = topology.read().await;
     let entity = topo
         .get_app(&app_id)
         .map_err(|_| Error::EntityNotFound(app_id.clone()))?;
 
     let collection_path = format!("/apps/{app_id}/data");
-    data_collection_docs(entity.data_provider(), &collection_path).await
+    data_collection_docs(entity.data_provider(), &collection_path, &server_url).await
 }
 
 #[cfg(test)]

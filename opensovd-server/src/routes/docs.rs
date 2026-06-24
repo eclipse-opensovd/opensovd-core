@@ -16,13 +16,17 @@ use crate::schema::JsonSchema;
 
 /// Wrap a single path item into a self-contained OpenAPI 3.1 document.
 ///
+/// The `server_url` is emitted as the sole `servers` entry so clients know the
+/// runtime base URL (e.g. `http://host/sovd/v1`). Paths in the document are
+/// relative to that base.
+///
 /// Embedded JSON Schemas (e.g. from `schemars`) carry their reusable
 /// definitions under `$defs` and reference them with `#/$defs/...`. Inside an
 /// OpenAPI document such fragment references resolve against the document root,
 /// where no `$defs` exists. To keep the result a valid OpenAPI 3.1 document, the
 /// definitions are hoisted into the document-level `components/schemas` and the
 /// references are rewritten to `#/components/schemas/...`.
-pub fn build_openapi_doc(title: &str, path: &str, path_item: Value) -> Value {
+pub fn build_openapi_doc(title: &str, path: &str, path_item: Value, server_url: &str) -> Value {
     let mut path_item = path_item;
     let mut schemas = serde_json::Map::new();
     hoist_schema_defs(&mut path_item, &mut schemas);
@@ -37,6 +41,7 @@ pub fn build_openapi_doc(title: &str, path: &str, path_item: Value) -> Value {
         json!({ "title": title, "version": "1.0.0" }),
     );
     doc.insert("paths".to_owned(), Value::Object(paths));
+    doc.insert("servers".to_owned(), json!([{"url": server_url}]));
     if !schemas.is_empty() {
         doc.insert(
             "components".to_owned(),
@@ -97,7 +102,7 @@ fn rewrite_defs_refs(value: &mut Value) {
 ///
 /// The document covers `GET /.../data` and includes the collection's query
 /// parameters plus an example payload containing the current metadata entries.
-pub fn data_collection_docs(collection_path: &str, items: &[Metadata]) -> Value {
+pub fn data_collection_docs(collection_path: &str, items: &[Metadata], server_url: &str) -> Value {
     build_openapi_doc(
         &format!("Data collection {collection_path}"),
         collection_path,
@@ -123,6 +128,7 @@ pub fn data_collection_docs(collection_path: &str, items: &[Metadata]) -> Value 
                 },
             }
         }),
+        server_url,
     )
 }
 
@@ -206,6 +212,7 @@ mod tests {
                 groups: Some(vec!["powertrain".into()]),
                 tags: Some(vec!["OBD".into()]),
             }],
+            "http://localhost/sovd/v1",
         );
         let path = &doc["paths"]["/components/Engine/data"];
 
@@ -249,6 +256,7 @@ mod tests {
                 groups: None,
                 tags: None,
             }],
+            "http://localhost/sovd/v1",
         );
 
         let mut refs = Vec::new();

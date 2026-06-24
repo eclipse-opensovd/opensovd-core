@@ -122,6 +122,10 @@ async fn data_collection_docs_document_get_and_include_metadata_example() {
 
     assert!(status.is_success(), "got {status}");
     assert_eq!(doc["openapi"], "3.1.0");
+    assert_eq!(
+        doc["servers"][0]["url"],
+        format!("http://{}/sovd/v1", server.addr)
+    );
 
     let path = &doc["paths"]["/components/ECU/data"];
     assert!(path["get"].is_object(), "GET must be documented");
