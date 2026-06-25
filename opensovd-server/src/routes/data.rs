@@ -32,8 +32,8 @@ use opensovd_models::data::{
     Group, Metadata, ReadDataQuery, ReadResponse, WriteRequest,
 };
 
-use super::error::{Error, Result};
 use super::entities::encode_path_segment;
+use super::error::{Error, Result};
 use super::{AppState, docs};
 use crate::schema::JsonSchema;
 
@@ -496,7 +496,10 @@ mod tests {
 
     #[test]
     fn collection_paths_percent_encode_reserved_characters() {
-        assert_eq!(component_data_collection_path("ecu/1"), "/components/ecu%2F1/data");
+        assert_eq!(
+            component_data_collection_path("ecu/1"),
+            "/components/ecu%2F1/data"
+        );
         assert_eq!(app_data_collection_path("diag/1"), "/apps/diag%2F1/data");
     }
 }
