@@ -33,6 +33,7 @@ use opensovd_models::data::{
 };
 
 use super::error::{Error, Result};
+use super::entities::encode_path_segment;
 use super::{AppState, docs};
 use crate::schema::JsonSchema;
 
@@ -288,7 +289,7 @@ async fn component_data_collection_docs(
         .get_component(&component_id)
         .map_err(|_| Error::EntityNotFound(component_id.clone()))?;
 
-    let collection_path = format!("/components/{component_id}/data");
+    let collection_path = component_data_collection_path(&component_id);
     data_collection_docs(entity.data_provider(), &collection_path, &server_url).await
 }
 
@@ -455,8 +456,16 @@ async fn app_data_collection_docs(
         .get_app(&app_id)
         .map_err(|_| Error::EntityNotFound(app_id.clone()))?;
 
-    let collection_path = format!("/apps/{app_id}/data");
+    let collection_path = app_data_collection_path(&app_id);
     data_collection_docs(entity.data_provider(), &collection_path, &server_url).await
+}
+
+fn component_data_collection_path(component_id: &str) -> String {
+    format!("/components/{}/data", encode_path_segment(component_id))
+}
+
+fn app_data_collection_path(app_id: &str) -> String {
+    format!("/apps/{}/data", encode_path_segment(app_id))
 }
 
 #[cfg(test)]
@@ -483,5 +492,11 @@ mod tests {
         let filter = data_filter(query(vec![], vec![], vec!["t"]));
         assert_eq!(filter.scope, None);
         assert_eq!(filter.tags, vec!["t"]);
+    }
+
+    #[test]
+    fn collection_paths_percent_encode_reserved_characters() {
+        assert_eq!(component_data_collection_path("ecu/1"), "/components/ecu%2F1/data");
+        assert_eq!(app_data_collection_path("diag/1"), "/apps/diag%2F1/data");
     }
 }
