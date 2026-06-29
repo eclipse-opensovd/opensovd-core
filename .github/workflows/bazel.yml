@@ -22,6 +22,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
+      - name: Set up Bazelisk
+        uses: bazelbuild/setup-bazelisk@v3
+
       - name: Build opensovd-core
         run: bazel build //:opensovd-core
 
