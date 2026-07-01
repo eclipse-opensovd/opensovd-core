@@ -199,7 +199,7 @@ jobs:
       # Install Python dependencies and tools (prek, ruff, ty)
       - run: uv sync --locked --group tools
       # Cache prek hooks
-      - uses: actions/cache@v5
+      - uses: actions/cache@v6
         with:
           path: ~/.cache/prek
           key: prek-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml', 'pyproject.toml') }}
