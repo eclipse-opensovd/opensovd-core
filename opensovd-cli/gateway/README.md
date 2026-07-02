@@ -30,6 +30,8 @@ opensovd-gateway --mock
 
 Mock data comes from the shared `opensovd-mocks` crate used across examples and tests.
 
+For mDNS architecture and gateway/private-network design, see [`docs/mdns/README.md`](../../docs/mdns/README.md).
+
 ## Options
 
 | Option          | Description                                          |

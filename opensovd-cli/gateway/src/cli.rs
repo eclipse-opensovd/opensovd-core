@@ -38,6 +38,9 @@ Examples:
 
   # Listen on an abstract Unix socket
   opensovd-gateway --unix-socket @opensovd
+
+  # Advertise the gateway on mDNS and browse private-side SOVD services
+  opensovd-gateway --mdns --mdns-host 192.168.1.10
 ")]
 pub struct Cli {
     /// Server URL including base URI path (e.g., http://host:port/path).
@@ -74,6 +77,34 @@ pub struct Cli {
     /// Format: PATH:DIRECTORY (e.g., "/ui:./webui/dist")
     #[arg(long, help_heading = "Options")]
     pub serve_dir: Option<String>,
+
+    #[command(flatten)]
+    #[cfg(feature = "mdns")]
+    pub mdns: MdnsArgs,
+}
+
+#[cfg(feature = "mdns")]
+#[derive(Args)]
+#[command(next_help_heading = "mDNS Options")]
+pub struct MdnsArgs {
+    // Enable mDNS-SD: advertise the gateway and browse private-side SOVD services.
+    #[arg(long = "mdns")]
+    pub enabled: bool,
+
+    // Gateway instance name to advertise on mDNS.
+    #[arg(long = "mdns-name", value_name = "NAME", default_value = "opensovd")]
+    pub name: String,
+
+    // Infotainment-facing gateway IP to advertise. Required when --url binds to 0.0.0.0.
+    #[arg(long = "mdns-host", value_name = "IP", env = "SOVD_MDNS_HOST")]
+    pub host: Option<std::net::IpAddr>,
+
+    /*
+        VIN, gateway ID, or deployment ID for the mDNS identification TXT record.
+        Defaults to --mdns-name if not set.
+    */
+    #[arg(long = "mdns-identification", value_name = "ID", env = "SOVD_MDNS_ID")]
+    pub identification: Option<String>,
 }
 
 #[derive(Args)]

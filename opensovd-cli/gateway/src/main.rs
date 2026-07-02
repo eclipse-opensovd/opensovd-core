@@ -7,7 +7,12 @@ mod cli;
 mod cors;
 mod serve_dir;
 
+#[cfg(feature = "mdns")]
+mod mdns;
+
 use std::process::ExitCode;
+#[cfg(feature = "mdns")]
+use std::sync::Arc;
 
 use anyhow::Context;
 use base64::Engine;
@@ -135,13 +140,12 @@ where
     builder = configure_listener(builder, &cli, authority).await?;
     builder = configure_topology(builder, &cli).await;
 
-    #[cfg(feature = "tls")]
-    {
-        if let Some(tls_config) = cli.tls.build()? {
-            tracing::info!(target: TARGET, "TLS enabled");
-            builder = builder.tls(tls_config);
-        }
-    }
+    #[cfg(all(feature = "tls", feature = "mdns"))]
+    let (mut builder, tls_enabled) = configure_tls(builder, cli.tls)?;
+    #[cfg(all(feature = "tls", not(feature = "mdns")))]
+    let mut builder = configure_tls(builder, cli.tls)?;
+    #[cfg(all(not(feature = "tls"), feature = "mdns"))]
+    let tls_enabled = false;
 
     let cors = cors::create_cors_layer(
         &cli.cors.origins,
@@ -169,6 +173,10 @@ where
         tracing::info!(target: TARGET, path = %path, dir = %dir, "Serving static files");
     }
 
+    #[cfg(feature = "mdns")]
+    let (builder, _mdns_wrapper) =
+        configure_mdns(builder, &cli.mdns, &uri, authority, base_uri, tls_enabled);
+
     let server = builder
         .layer(libcli::trace::trace_layer())
         .layer(tower::util::option_layer(cors))
@@ -181,6 +189,81 @@ where
     tracing::info!(target: TARGET, "Shutdown complete");
 
     Ok(())
+}
+
+#[cfg(all(feature = "tls", feature = "mdns"))]
+fn configure_tls<Vendor, Authn, Authz, Layer>(
+    builder: opensovd_server::ServerBuilder<Vendor, Authn, Authz, Layer>,
+    tls: cli::TlsArgs,
+) -> anyhow::Result<(
+    opensovd_server::ServerBuilder<Vendor, Authn, Authz, Layer>,
+    bool,
+)> {
+    if let Some(tls_config) = tls.build()? {
+        tracing::info!(target: TARGET, "TLS enabled");
+        Ok((builder.tls(tls_config), true))
+    } else {
+        Ok((builder, false))
+    }
+}
+
+#[cfg(all(feature = "tls", not(feature = "mdns")))]
+fn configure_tls<Vendor, Authn, Authz, Layer>(
+    builder: opensovd_server::ServerBuilder<Vendor, Authn, Authz, Layer>,
+    tls: cli::TlsArgs,
+) -> anyhow::Result<opensovd_server::ServerBuilder<Vendor, Authn, Authz, Layer>> {
+    if let Some(tls_config) = tls.build()? {
+        tracing::info!(target: TARGET, "TLS enabled");
+        Ok(builder.tls(tls_config))
+    } else {
+        Ok(builder)
+    }
+}
+
+#[cfg(feature = "mdns")]
+fn configure_mdns<Vendor, Authn, Authz, Layer>(
+    mut builder: opensovd_server::ServerBuilder<Vendor, Authn, Authz, Layer>,
+    mdns_args: &cli::MdnsArgs,
+    uri: &http::Uri,
+    authority: &str,
+    base_uri: &str,
+    tls_enabled: bool,
+) -> (
+    opensovd_server::ServerBuilder<Vendor, Authn, Authz, Layer>,
+    Option<Arc<opensovd_providers::mdns::MdnsWrapper>>,
+) {
+    if !mdns_args.enabled {
+        return (builder, None);
+    }
+
+    let Some(port) = parse_port(authority) else {
+        tracing::warn!(target: TARGET, "Cannot determine port for mDNS from --url");
+        return (builder, None);
+    };
+
+    let mdns_scheme = if tls_enabled {
+        "https"
+    } else {
+        uri.scheme_str().unwrap_or("http")
+    };
+
+    match mdns::setup(
+        mdns_args,
+        parse_host(authority),
+        port,
+        mdns_scheme,
+        base_uri,
+    ) {
+        Ok((wrapper, provider)) => {
+            tracing::info!(target: TARGET, "mDNS enabled");
+            builder = builder.discovery(Box::new(provider));
+            (builder, Some(wrapper))
+        }
+        Err(e) => {
+            tracing::error!(target: TARGET, error = %e, "Failed to start mDNS");
+            (builder, None)
+        }
+    }
 }
 
 #[cfg(unix)]
@@ -266,5 +349,46 @@ fn notify_readiness() {
     #[cfg(target_os = "linux")]
     if let Err(e) = sd_notify::notify(&[sd_notify::NotifyState::Ready]) {
         tracing::warn!(target: TARGET, error = %e, "Failed to notify systemd readiness");
+    }
+}
+
+#[cfg(feature = "mdns")]
+fn parse_host(authority: &str) -> &str {
+    authority
+        .rsplit_once(':')
+        .map_or(authority, |(host, _)| host)
+}
+
+#[cfg(feature = "mdns")]
+fn parse_port(authority: &str) -> Option<u16> {
+    authority
+        .rsplit_once(':')
+        .and_then(|(_, port)| port.parse().ok())
+}
+
+#[cfg(all(test, feature = "mdns"))]
+mod tests {
+    use super::{parse_host, parse_port};
+
+    #[test]
+    fn parse_host_strips_port() {
+        assert_eq!(parse_host("192.168.1.10:7690"), "192.168.1.10");
+        assert_eq!(parse_host("localhost:8080"), "localhost");
+    }
+
+    #[test]
+    fn parse_host_without_port_returns_input() {
+        assert_eq!(parse_host("192.168.1.10"), "192.168.1.10");
+    }
+
+    #[test]
+    fn parse_port_extracts_port() {
+        assert_eq!(parse_port("192.168.1.10:7690"), Some(7690));
+    }
+
+    #[test]
+    fn parse_port_missing_or_invalid_is_none() {
+        assert_eq!(parse_port("192.168.1.10"), None);
+        assert_eq!(parse_port("host:notaport"), None);
     }
 }
