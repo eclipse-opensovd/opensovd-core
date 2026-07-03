@@ -3,6 +3,5 @@ coverage.json
 dist/
 __pycache__/
 *.pyc
-.devenv/
-.devenv.flake.nix
+.direnv/
 gen/
