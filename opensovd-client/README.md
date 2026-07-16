@@ -33,12 +33,13 @@ for info in discovery.versions::<VendorInfo>().await? {
 
 // Select a version and exercise it (or match on `vendor_info` via the `V` payload).
 let client = discovery.select(|s: &SovdInfo<VendorInfo>| s.version == "1.1").await?;
-for c in &client.list_components().send().await?.data.items {
-    println!("component: {} ({})", c.id, c.name);
-}
-
 match client.list_components().send().await {
-    Ok(list) => println!("{} components", list.data.items.len()),
+    Ok(list) => {
+        for c in &list.data.items {
+            println!("component: {} ({})", c.id, c.name);
+        }
+        println!("{} components", list.data.items.len());
+    }
     Err(Error::Timeout(d)) => eprintln!("request timed out after {d:?}"),
     Err(other) => return Err(other.into()),
 }
@@ -46,7 +47,7 @@ match client.list_components().send().await {
 # }
 ```
 
-`Discovery::select`. If no timeout is configured, requests have no deadline.
+If no timeout is configured, requests have no deadline.
 
 On Unix, `Discovery::connect_unix` / `connect_unix_abstract` reach `version-info`
 over a Unix domain socket. A runnable example lives in `examples/client`.
