@@ -33,7 +33,7 @@ tower-service = { workspace = true }
 
 [dev-dependencies]
 mock-http-connector = { workspace = true, features = ["hyper_1"] }
-tower = { workspace = true, features = ["timeout"] }
+tower = { workspace = true, features = ["timeout", "limit"] }
 tokio = { workspace = true, features = ["rt", "macros", "time", "net", "io-util"] }
 serde_json = { workspace = true, features = ["std"] }
 
