@@ -15,12 +15,15 @@
 ## Usage
 
 ```rust,no_run
-use opensovd_client::{Client, SovdInfo, VendorInfo};
+use std::time::Duration;
+
+use opensovd_client::{Client, Error, SovdInfo, VendorInfo};
 
 # async fn run() -> Result<(), Box<dyn std::error::Error>> {
 // Point at the SOVD server root (no version identifier).
 let discovery = Client::builder()
     .base_uri("http://localhost:7690/sovd")?
+    .timeout(Duration::from_secs(5))
     .discovery()?;
 
 // See what the server advertises.
@@ -30,12 +33,21 @@ for info in discovery.versions::<VendorInfo>().await? {
 
 // Select a version and exercise it (or match on `vendor_info` via the `V` payload).
 let client = discovery.select(|s: &SovdInfo<VendorInfo>| s.version == "1.1").await?;
-for c in &client.list_components().send().await?.data.items {
-    println!("component: {} ({})", c.id, c.name);
+match client.list_components().send().await {
+    Ok(list) => {
+        for c in &list.data.items {
+            println!("component: {} ({})", c.id, c.name);
+        }
+        println!("{} components", list.data.items.len());
+    }
+    Err(Error::Timeout(d)) => eprintln!("request timed out after {d:?}"),
+    Err(other) => return Err(other.into()),
 }
 # Ok(())
 # }
 ```
+
+If no timeout is configured, requests have no deadline.
 
 On Unix, `Discovery::connect_unix` / `connect_unix_abstract` reach `version-info`
 over a Unix domain socket. A runnable example lives in `examples/client`.
