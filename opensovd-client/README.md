@@ -56,11 +56,14 @@ To combine Unix sockets with builder configuration such as request timeouts,
 switch the builder transport explicitly:
 
 ```rust,no_run
-use std::time::Duration;
-
 use opensovd_client::Client;
 
+# #[cfg(unix)]
+use std::time::Duration;
+
 # async fn run() -> Result<(), Box<dyn std::error::Error>> {
+# #[cfg(unix)]
+# {
 let client = Client::builder()
     .base_uri("http://localhost/sovd/v1")?
     .timeout(Duration::from_secs(5))
@@ -68,6 +71,7 @@ let client = Client::builder()
     .build()?;
 
 let _components = client.list_components().send().await?;
+# }
 # Ok(())
 # }
 ```
