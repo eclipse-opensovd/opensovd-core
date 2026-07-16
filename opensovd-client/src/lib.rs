@@ -4,6 +4,7 @@
 #![allow(clippy::missing_errors_doc)]
 #![doc = include_str!("../README.md")]
 
+mod auth;
 mod client;
 mod data;
 mod discovery;
@@ -13,6 +14,7 @@ mod list;
 #[cfg(unix)]
 mod unix;
 
+pub use auth::Auth;
 pub use client::{BuilderError, Client, ClientBuilder};
 pub use discovery::Discovery;
 pub use error::{Error, Result};
