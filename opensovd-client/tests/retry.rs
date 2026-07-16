@@ -91,7 +91,7 @@ async fn no_retry_on_put() {
     // Only one expectation: if a retry were attempted the mock would error differently.
     b.expect()
         .with_uri("http://localhost/sovd/v1/resource")
-        .returning((http::StatusCode::SERVICE_UNAVAILABLE, "".to_string()))
+        .returning((http::StatusCode::SERVICE_UNAVAILABLE, String::new()))
         .unwrap();
 
     let client = retry_client(
@@ -167,7 +167,7 @@ async fn default_no_retry() {
     let mut b = Connector::builder();
     b.expect()
         .with_uri("http://localhost/sovd/v1/components")
-        .returning((http::StatusCode::SERVICE_UNAVAILABLE, "".to_string()))
+        .returning((http::StatusCode::SERVICE_UNAVAILABLE, String::new()))
         .unwrap();
 
     let client = mock_client(b.build());
