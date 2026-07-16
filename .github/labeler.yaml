@@ -14,6 +14,22 @@ crate:server:
   - changed-files:
       - any-glob-to-any-file: opensovd-server/**
 
+crate:client:
+  - changed-files:
+      - any-glob-to-any-file: opensovd-client/**
+
+crate:providers:
+  - changed-files:
+      - any-glob-to-any-file: opensovd-providers/**
+
+crate:extra:
+  - changed-files:
+      - any-glob-to-any-file: opensovd-extra/**
+
+crate:mocks:
+  - changed-files:
+      - any-glob-to-any-file: opensovd-mocks/**
+
 crate:cli:
   - changed-files:
       - any-glob-to-any-file: opensovd-cli/**
@@ -44,13 +60,14 @@ tests:
   - changed-files:
       - any-glob-to-any-file:
           - tests/**
+          - opensovd-e2e/**
           - "**/tests/**/*.rs"
 
 docs:
   - changed-files:
       - any-glob-to-any-file:
           - docs/**
-          - "*.md"
+          - "**/*.md"
 
 docker:
   - changed-files:
@@ -62,3 +79,10 @@ docker:
 scripts:
   - changed-files:
       - any-glob-to-any-file: scripts/**
+
+python:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "**/*.py"
+          - "**/pyproject.toml"
+          - uv.lock
