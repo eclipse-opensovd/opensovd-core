@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 #![allow(clippy::expect_used, clippy::unwrap_used)]
 
+use std::time::Duration;
+
 use mock_http_connector::Connector;
 use opensovd_client::{Client, SovdInfo, VendorInfo};
 use serde_json::json;
@@ -41,6 +43,60 @@ async fn select_reuses_transport() {
     // The selected client must reuse the same (mock) transport and hit the advertised base.
     let list = client.list_components().send().await.unwrap();
     assert!(list.data.items.is_empty());
+}
+
+#[tokio::test]
+async fn select_inherits_request_timeout() {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::net::TcpListener;
+
+    // Advertise a versioned base URI, then delay the selected client's /components response.
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+
+    tokio::spawn(async move {
+        // First connection: discovery /version-info request.
+        let (mut socket, _) = listener.accept().await.unwrap();
+        let mut buf = [0u8; 1024];
+        let _ = socket.read(&mut buf).await;
+        let version_info = format!(
+            "{{\"sovd_info\":[{{\"version\":\"1.1\",\"base_uri\":\"http://{addr}/sovd/v1\"}}]}}"
+        );
+        let response = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+            version_info.len(),
+            version_info
+        );
+        let _ = socket.write_all(response.as_bytes()).await;
+
+        // Second connection: selected client /components request, intentionally slow.
+        let (mut socket, _) = listener.accept().await.unwrap();
+        let _ = socket.read(&mut buf).await;
+        tokio::time::sleep(Duration::from_secs(2)).await;
+        let body = "{\"items\": []}";
+        let response = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+            body.len(),
+            body
+        );
+        let _ = socket.write_all(response.as_bytes()).await;
+    });
+
+    let client = Client::builder()
+        .base_uri(format!("http://{addr}/sovd"))
+        .expect("valid URI")
+        .timeout(Duration::from_secs(1))
+        .discovery()
+        .expect("valid discovery client")
+        .select(|s: &SovdInfo<serde_json::Value>| s.version == "1.1")
+        .await
+        .unwrap();
+
+    let err = client.list_components().send().await.unwrap_err();
+    assert!(
+        matches!(err, opensovd_client::Error::Timeout(d) if d == Duration::from_secs(1)),
+        "expected propagated Timeout(1s), got: {err:?}"
+    );
 }
 
 #[tokio::test]

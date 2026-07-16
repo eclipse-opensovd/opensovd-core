@@ -4,6 +4,8 @@
 
 mod common;
 
+use std::time::Duration;
+
 use common::mock_client;
 use mock_http_connector::Connector;
 use serde_json::json;
@@ -74,8 +76,6 @@ async fn with_layer_builds_client() {
 
 #[tokio::test]
 async fn timeout_layer_times_out() {
-    use std::time::Duration;
-
     use tokio::io::AsyncWriteExt;
     use tokio::net::TcpListener;
     use tower::timeout::TimeoutLayer;
@@ -113,4 +113,40 @@ async fn timeout_layer_times_out() {
         source.is::<tower::timeout::error::Elapsed>(),
         "expected timeout error, got: {source:?}"
     );
+}
+
+#[tokio::test]
+async fn builder_timeout_returns_typed_timeout_error() {
+    use tokio::io::AsyncWriteExt;
+    use tokio::net::TcpListener;
+
+    // Spawn a slow server that delays 2s before responding
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+
+    tokio::spawn(async move {
+        let (mut socket, _) = listener.accept().await.unwrap();
+        // Wait longer than the client timeout
+        tokio::time::sleep(Duration::from_secs(2)).await;
+        // Send a valid HTTP response (client won't see this due to timeout)
+        let response = "HTTP/1.1 200 OK\r\nContent-Length: 13\r\n\r\n{\"items\": []}";
+        let _ = socket.write_all(response.as_bytes()).await;
+    });
+
+    // Build client with first-class 1s request timeout
+    let client = opensovd_client::Client::builder()
+        .base_uri(format!("http://{addr}/sovd/v1"))
+        .expect("valid URI")
+        .timeout(Duration::from_secs(1))
+        .build()
+        .expect("valid test client with request timeout");
+
+    let err = client.list_components().send().await.unwrap_err();
+
+    match err {
+        opensovd_client::Error::Timeout(duration) => {
+            assert_eq!(duration, Duration::from_secs(1));
+        }
+        other => panic!("expected Timeout error, got: {other:?}"),
+    }
 }

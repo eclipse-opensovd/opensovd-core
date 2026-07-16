@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 Contributors to the Eclipse Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use bytes::Bytes;
 use http_body::Body;
@@ -49,6 +49,7 @@ pub enum BuilderError {
 #[must_use]
 pub struct ClientBuilder<Conn = HttpConnector, Layers = Identity> {
     base_uri: Option<http::Uri>,
+    timeout: Option<Duration>,
     connector: Conn,
     layer: Layers,
 }
@@ -57,6 +58,7 @@ impl ClientBuilder<HttpConnector, Identity> {
     fn new() -> Self {
         Self {
             base_uri: None,
+            timeout: None,
             connector: HttpConnector::new(),
             layer: Identity::new(),
         }
@@ -85,9 +87,16 @@ impl<Conn, Layers> ClientBuilder<Conn, Layers> {
     pub fn connector<NewConn>(self, connector: NewConn) -> ClientBuilder<NewConn, Layers> {
         ClientBuilder {
             base_uri: self.base_uri,
+            timeout: self.timeout,
             connector,
             layer: self.layer,
         }
+    }
+
+    /// Set a total per-request timeout covering send and full response body collection.
+    pub fn timeout(mut self, duration: Duration) -> Self {
+        self.timeout = Some(duration);
+        self
     }
 
     /// Add a Tower layer to the HTTP client stack.
@@ -96,6 +105,7 @@ impl<Conn, Layers> ClientBuilder<Conn, Layers> {
     pub fn layer<NewLayer>(self, layer: NewLayer) -> ClientBuilder<Conn, Stack<NewLayer, Layers>> {
         ClientBuilder {
             base_uri: self.base_uri,
+            timeout: self.timeout,
             connector: self.connector,
             layer: Stack::new(layer, self.layer),
         }
@@ -132,6 +142,7 @@ impl<Conn, Layers> ClientBuilder<Conn, Layers> {
         );
         Ok(Client {
             base_uri,
+            timeout: self.timeout,
             http: BoxCloneSyncService::new(service),
         })
     }
@@ -171,6 +182,7 @@ impl<Conn, Layers> ClientBuilder<Conn, Layers> {
 #[derive(Clone)]
 pub struct Client {
     pub(crate) base_uri: http::Uri,
+    pub(crate) timeout: Option<Duration>,
     pub(crate) http: HttpService,
 }
 
@@ -282,24 +294,34 @@ impl Client {
     ///
     /// Returns an [`Error::ApiError`] if the server responds with a non-success status.
     pub(crate) async fn request(&self, req: http::Request<Full<Bytes>>) -> Result<Bytes> {
-        let resp = self
-            .http
-            .clone()
-            .call(req)
-            .await
-            .map_err(|e| Error::Service { source: e })?;
-        let status = resp.status();
-        let body = resp
-            .into_body()
-            .collect()
-            .await
-            .map_err(|e| Error::Service { source: e })?
-            .to_bytes();
-        if !status.is_success() {
-            let error = serde_json::from_slice(&body).ok();
-            return Err(Error::ApiError { status, error });
+        let request = async {
+            let resp = self
+                .http
+                .clone()
+                .call(req)
+                .await
+                .map_err(|e| Error::Service { source: e })?;
+            let status = resp.status();
+            let body = resp
+                .into_body()
+                .collect()
+                .await
+                .map_err(|e| Error::Service { source: e })?
+                .to_bytes();
+            if !status.is_success() {
+                let error = serde_json::from_slice(&body).ok();
+                return Err(Error::ApiError { status, error });
+            }
+            Ok(body)
+        };
+
+        if let Some(timeout) = self.timeout {
+            tokio::time::timeout(timeout, request)
+                .await
+                .map_err(|_| Error::Timeout(timeout))?
+        } else {
+            request.await
         }
-        Ok(body)
     }
 }
 
