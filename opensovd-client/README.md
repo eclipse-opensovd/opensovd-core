@@ -52,4 +52,24 @@ If no timeout is configured, requests have no deadline.
 On Unix, `Discovery::connect_unix` / `connect_unix_abstract` reach `version-info`
 over a Unix domain socket. A runnable example lives in `examples/client`.
 
+To combine Unix sockets with builder configuration such as request timeouts,
+switch the builder transport explicitly:
+
+```rust,no_run
+use std::time::Duration;
+
+use opensovd_client::Client;
+
+# async fn run() -> Result<(), Box<dyn std::error::Error>> {
+let client = Client::builder()
+    .base_uri("http://localhost/sovd/v1")?
+    .timeout(Duration::from_secs(5))
+    .unix_socket("/run/sovd.sock")
+    .build()?;
+
+let _components = client.list_components().send().await?;
+# Ok(())
+# }
+```
+
 Part of [OpenSOVD Core](https://github.com/eclipse-opensovd/opensovd-core).
