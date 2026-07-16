@@ -23,7 +23,7 @@ use opensovd_client::{Client, Error, SovdInfo, VendorInfo};
 // Point at the SOVD server root (no version identifier).
 let discovery = Client::builder()
     .base_uri("http://localhost:7690/sovd")?
-  .timeout(Duration::from_secs(5))
+    .timeout(Duration::from_secs(5))
     .discovery()?;
 
 // See what the server advertises.
@@ -38,16 +38,14 @@ for c in &client.list_components().send().await?.data.items {
 }
 
 match client.list_components().send().await {
-  Ok(list) => println!("{} components", list.data.items.len()),
-  Err(Error::Timeout(d)) => eprintln!("request timed out after {d:?}"),
-  Err(other) => return Err(other.into()),
+    Ok(list) => println!("{} components", list.data.items.len()),
+    Err(Error::Timeout(d)) => eprintln!("request timed out after {d:?}"),
+    Err(other) => return Err(other.into()),
 }
 # Ok(())
 # }
 ```
 
-`ClientBuilder::timeout` sets a total per-request deadline (connect, send, and
-response body collection). The timeout is inherited by clients returned from
 `Discovery::select`. If no timeout is configured, requests have no deadline.
 
 On Unix, `Discovery::connect_unix` / `connect_unix_abstract` reach `version-info`

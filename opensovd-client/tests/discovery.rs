@@ -47,45 +47,30 @@ async fn select_reuses_transport() {
 
 #[tokio::test]
 async fn select_inherits_request_timeout() {
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
-    use tokio::net::TcpListener;
-
-    // Advertise a versioned base URI, then delay the selected client's /components response.
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let addr = listener.local_addr().unwrap();
-
-    tokio::spawn(async move {
-        // First connection: discovery /version-info request.
-        let (mut socket, _) = listener.accept().await.unwrap();
-        let mut buf = [0u8; 1024];
-        let _ = socket.read(&mut buf).await;
-        let version_info = format!(
-            "{{\"sovd_info\":[{{\"version\":\"1.1\",\"base_uri\":\"http://{addr}/sovd/v1\"}}]}}"
-        );
-        let response = format!(
-            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
-            version_info.len(),
-            version_info
-        );
-        let _ = socket.write_all(response.as_bytes()).await;
-
-        // Second connection: selected client /components request, intentionally slow.
-        let (mut socket, _) = listener.accept().await.unwrap();
-        let _ = socket.read(&mut buf).await;
-        tokio::time::sleep(Duration::from_secs(2)).await;
-        let body = "{\"items\": []}";
-        let response = format!(
-            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
-            body.len(),
-            body
-        );
-        let _ = socket.write_all(response.as_bytes()).await;
-    });
+    let mut b = Connector::builder();
+    b.expect()
+        .with_uri("http://localhost:7690/sovd/version-info")
+        .returning(
+            json!({"sovd_info": [{
+                "version": "1.1",
+                "base_uri": "http://localhost:7690/sovd/v1"
+            }]})
+            .to_string(),
+        )
+        .unwrap();
+    b.expect()
+        .with_uri("http://localhost:7690/sovd/v1/components")
+        .returning(|_| async {
+            tokio::time::sleep(Duration::from_secs(2)).await;
+            json!({"items": []}).to_string()
+        })
+        .unwrap();
 
     let client = Client::builder()
-        .base_uri(format!("http://{addr}/sovd"))
+        .base_uri("http://localhost:7690/sovd")
         .expect("valid URI")
         .timeout(Duration::from_secs(1))
+        .connector(b.build())
         .discovery()
         .expect("valid discovery client")
         .select(|s: &SovdInfo<serde_json::Value>| s.version == "1.1")
