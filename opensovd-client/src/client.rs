@@ -25,6 +25,7 @@ use crate::error::{Error, Result};
 use crate::list::ListEntitiesRequest;
 #[cfg(unix)]
 use crate::unix::UnixConnector;
+use crate::retry::RetryPolicy;
 
 /// Boxed error type for HTTP service flexibility with layers.
 pub(crate) type BoxError = Box<dyn std::error::Error + Send + Sync>;
@@ -52,6 +53,7 @@ pub enum BuilderError {
 pub struct ClientBuilder<Conn = HttpConnector, Layers = Identity> {
     base_uri: Option<http::Uri>,
     timeout: Option<Duration>,
+    retry: Option<RetryPolicy>,
     connector: Conn,
     layer: Layers,
 }
@@ -61,6 +63,7 @@ impl ClientBuilder<HttpConnector, Identity> {
         Self {
             base_uri: None,
             timeout: None,
+            retry: None,
             connector: HttpConnector::new(),
             layer: Identity::new(),
         }
@@ -90,6 +93,7 @@ impl<Conn, Layers> ClientBuilder<Conn, Layers> {
         ClientBuilder {
             base_uri: self.base_uri,
             timeout: self.timeout,
+            retry: self.retry,
             connector,
             layer: self.layer,
         }
@@ -101,6 +105,15 @@ impl<Conn, Layers> ClientBuilder<Conn, Layers> {
         self
     }
 
+    /// Set the retry policy for automatic retries on transient failures.
+    ///
+    /// Only GET requests are retried. Retryable conditions: transport errors, HTTP
+    /// 502/503/504, and per-attempt timeouts. Default is no retries.
+    pub fn retry(mut self, policy: RetryPolicy) -> Self {
+        self.retry = Some(policy);
+        self
+    }
+
     /// Add a Tower layer to the HTTP client stack.
     ///
     /// Layers are applied in order: the first layer added is the outermost.
@@ -108,6 +121,7 @@ impl<Conn, Layers> ClientBuilder<Conn, Layers> {
         ClientBuilder {
             base_uri: self.base_uri,
             timeout: self.timeout,
+            retry: self.retry,
             connector: self.connector,
             layer: Stack::new(layer, self.layer),
         }
@@ -145,6 +159,7 @@ impl<Conn, Layers> ClientBuilder<Conn, Layers> {
         Ok(Client {
             base_uri,
             timeout: self.timeout,
+            retry: self.retry,
             http: BoxCloneSyncService::new(service),
         })
     }
@@ -213,6 +228,7 @@ impl<Conn, Layers> ClientBuilder<Conn, Layers> {
 pub struct Client {
     pub(crate) base_uri: http::Uri,
     pub(crate) timeout: Option<Duration>,
+    pub(crate) retry: Option<RetryPolicy>,
     pub(crate) http: HttpService,
 }
 
@@ -322,8 +338,50 @@ impl Client {
 
     /// Send an HTTP request and return the response body bytes.
     ///
+    /// When a [`RetryPolicy`] is set and the request is a GET, the request is retried on
+    /// retryable errors (transport errors, HTTP 502/503/504, per-attempt timeouts).
+    /// Non-GET requests and non-retryable errors are returned immediately.
+    ///
     /// Returns an [`Error::ApiError`] if the server responds with a non-success status.
     pub(crate) async fn request(&self, req: http::Request<Full<Bytes>>) -> Result<Bytes> {
+        let Some(policy) = &self.retry else {
+            return self.execute_once(req).await;
+        };
+        if req.method() != http::Method::GET {
+            return self.execute_once(req).await;
+        }
+
+        // Decompose the request so each retry attempt can rebuild it.
+        // `http::Request` is not Clone, but its constituent parts are.
+        let method = req.method().clone();
+        let uri = req.uri().clone();
+        let version = req.version();
+        let headers = req.headers().clone();
+        let body = req.into_body(); // Full<Bytes> is Clone
+
+        let mut attempt: u32 = 0;
+        loop {
+            let mut rebuilt = http::Request::builder()
+                .method(method.clone())
+                .uri(uri.clone())
+                .version(version)
+                .body(body.clone())?;
+            *rebuilt.headers_mut() = headers.clone();
+
+            let err = match self.execute_once(rebuilt).await {
+                Ok(bytes) => return Ok(bytes),
+                Err(e) => e,
+            };
+            if !is_retryable(&err) || attempt >= policy.max_retries {
+                return Err(err);
+            }
+            tokio::time::sleep(policy.delay(attempt)).await;
+            attempt = attempt.saturating_add(1);
+        }
+    }
+
+    /// Execute a single HTTP attempt, applying the per-attempt timeout if configured.
+    async fn execute_once(&self, req: http::Request<Full<Bytes>>) -> Result<Bytes> {
         let request = async {
             let resp = self
                 .http
@@ -391,6 +449,20 @@ impl Client {
             .base_uri(uri)?
             .unix_socket_abstract(name)
             .build()
+    }
+}
+
+/// Return `true` for errors that are safe to retry.
+fn is_retryable(err: &Error) -> bool {
+    match err {
+        Error::Service { .. } | Error::Timeout(_) => true,
+        Error::ApiError { status, .. } => matches!(
+            *status,
+            http::StatusCode::BAD_GATEWAY
+                | http::StatusCode::SERVICE_UNAVAILABLE
+                | http::StatusCode::GATEWAY_TIMEOUT
+        ),
+        _ => false,
     }
 }
 
