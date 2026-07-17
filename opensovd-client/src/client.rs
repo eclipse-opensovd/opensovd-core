@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 Contributors to the Eclipse Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use std::{sync::Arc, time::Duration};
+use std::{future::Future, pin::Pin, sync::Arc, time::Duration};
 
 use bytes::Bytes;
 use http_body::Body;
@@ -16,6 +16,7 @@ use tokio::sync::OnceCell;
 use tower::{
     Layer, Service,
     layer::util::{Identity, Stack},
+    retry::Policy,
     util::{BoxCloneSyncService, MapErrLayer, MapResponseLayer},
 };
 
@@ -24,6 +25,7 @@ use crate::entities::{App, Area, Component};
 use crate::error::{Error, Result};
 use crate::list::ListEntitiesRequest;
 use crate::retry::RetryPolicy;
+use crate::timeout::{RequestTimeoutLayer, TimeoutError};
 #[cfg(unix)]
 use crate::unix::UnixConnector;
 
@@ -36,6 +38,102 @@ pub(crate) type BoxResponseBody = BoxBody<Bytes, BoxError>;
 /// Type-erased HTTP service used by the client.
 pub(crate) type HttpService =
     BoxCloneSyncService<http::Request<Full<Bytes>>, http::Response<BoxResponseBody>, BoxError>;
+
+/// Internal retry policy implementation for tower::retry::Policy.
+#[derive(Debug, Clone)]
+pub(crate) struct RetryState {
+    config: RetryPolicy,
+    attempt: u32,
+}
+
+impl RetryState {
+    pub(crate) fn new(policy: RetryPolicy) -> Self {
+        Self {
+            config: policy,
+            attempt: 0,
+        }
+    }
+}
+
+impl Policy<http::Request<Full<Bytes>>, http::Response<BoxResponseBody>, BoxError> for RetryState {
+    type Future = Pin<Box<dyn Future<Output = ()> + Send>>;
+
+    fn retry(
+        &mut self,
+        _req: &mut http::Request<Full<Bytes>>,
+        result: &mut std::result::Result<http::Response<BoxResponseBody>, BoxError>,
+    ) -> Option<Self::Future> {
+        if !is_retryable_result(result) {
+            return None;
+        }
+        if self.attempt >= self.config.max_retries {
+            return None;
+        }
+        let delay = self.config.delay(self.attempt);
+        self.attempt = self.attempt.saturating_add(1);
+        Some(Box::pin(tokio::time::sleep(delay)))
+    }
+
+    fn clone_request(
+        &mut self,
+        req: &http::Request<Full<Bytes>>,
+    ) -> Option<http::Request<Full<Bytes>>> {
+        // Only retry GET requests.
+        if req.method() != http::Method::GET {
+            return None;
+        }
+        rebuild_request(req).ok()
+    }
+}
+
+/// Helper: Reconstruct a request from its components.
+/// Used by RetryState::clone_request to rebuild non-Clone requests.
+fn rebuild_request(
+    req: &http::Request<Full<Bytes>>,
+) -> std::result::Result<http::Request<Full<Bytes>>, http::Error> {
+    let method = req.method().clone();
+    let uri = req.uri().clone();
+    let version = req.version();
+    let headers = req.headers().clone();
+    let body = req.body().clone();
+
+    let mut rebuilt = http::Request::builder()
+        .method(method)
+        .uri(uri)
+        .version(version)
+        .body(body)?;
+    *rebuilt.headers_mut() = headers;
+    Ok(rebuilt)
+}
+
+/// Helper: Check if an error/response is retryable.
+fn is_retryable_result(
+    result: &std::result::Result<http::Response<BoxResponseBody>, BoxError>,
+) -> bool {
+    match result {
+        Ok(resp) => {
+            // Retryable status codes: 502, 503, 504
+            matches!(
+                resp.status(),
+                http::StatusCode::BAD_GATEWAY
+                    | http::StatusCode::SERVICE_UNAVAILABLE
+                    | http::StatusCode::GATEWAY_TIMEOUT
+            )
+        }
+        Err(e) => {
+            // Per-attempt timeout from our RequestTimeout layer.
+            if e.is::<TimeoutError>() {
+                return true;
+            }
+            // Hyper / hyper-util transport errors (connection refused, DNS, reset, etc.).
+            if e.is::<hyper::Error>() || e.is::<hyper_util::client::legacy::Error>() {
+                return true;
+            }
+            // Unknown errors (e.g., from user-defined layers) are not retried.
+            false
+        }
+    }
+}
 
 /// Error returned when building a client fails.
 #[derive(Debug, Error)]
@@ -156,12 +254,25 @@ impl<Conn, Layers> ClientBuilder<Conn, Layers> {
             })
             .layer(service),
         );
-        Ok(Client {
-            base_uri,
-            timeout: self.timeout,
-            retry: self.retry,
-            http: BoxCloneSyncService::new(service),
-        })
+
+        // Add timeout layer (per-attempt timeout wraps inner service)
+        let service = RequestTimeoutLayer::new(self.timeout).layer(service);
+
+        // Conditionally add retry layer only when a policy is configured.
+        // This avoids Option-based branching inside the policy and keeps the
+        // retry/clone_request logic straightforward.
+        if let Some(retry) = self.retry {
+            let service = tower::retry::Retry::new(RetryState::new(retry), service);
+            Ok(Client {
+                base_uri,
+                http: BoxCloneSyncService::new(service),
+            })
+        } else {
+            Ok(Client {
+                base_uri,
+                http: BoxCloneSyncService::new(service),
+            })
+        }
     }
 
     /// Build a [`Discovery`] client for the unversioned `/version-info` endpoint, reusing this
@@ -227,8 +338,6 @@ impl<Conn, Layers> ClientBuilder<Conn, Layers> {
 #[derive(Clone)]
 pub struct Client {
     pub(crate) base_uri: http::Uri,
-    pub(crate) timeout: Option<Duration>,
-    pub(crate) retry: Option<RetryPolicy>,
     pub(crate) http: HttpService,
 }
 
@@ -344,72 +453,29 @@ impl Client {
     ///
     /// Returns an [`Error::ApiError`] if the server responds with a non-success status.
     pub(crate) async fn request(&self, req: http::Request<Full<Bytes>>) -> Result<Bytes> {
-        let Some(policy) = &self.retry else {
-            return self.execute_once(req).await;
-        };
-        if req.method() != http::Method::GET {
-            return self.execute_once(req).await;
+        let resp = self.http.clone().call(req).await.map_err(classify_boxerr)?;
+        let status = resp.status();
+        let body = resp
+            .into_body()
+            .collect()
+            .await
+            .map_err(|e| Error::Service { source: e })?
+            .to_bytes();
+        if !status.is_success() {
+            let error = serde_json::from_slice(&body).ok();
+            return Err(Error::ApiError { status, error });
         }
-
-        // Decompose the request so each retry attempt can rebuild it.
-        // `http::Request` is not Clone, but its constituent parts are.
-        let method = req.method().clone();
-        let uri = req.uri().clone();
-        let version = req.version();
-        let headers = req.headers().clone();
-        let body = req.into_body(); // Full<Bytes> is Clone
-
-        let mut attempt: u32 = 0;
-        loop {
-            let mut rebuilt = http::Request::builder()
-                .method(method.clone())
-                .uri(uri.clone())
-                .version(version)
-                .body(body.clone())?;
-            *rebuilt.headers_mut() = headers.clone();
-
-            let err = match self.execute_once(rebuilt).await {
-                Ok(bytes) => return Ok(bytes),
-                Err(e) => e,
-            };
-            if !is_retryable(&err) || attempt >= policy.max_retries {
-                return Err(err);
-            }
-            tokio::time::sleep(policy.delay(attempt)).await;
-            attempt = attempt.saturating_add(1);
-        }
+        Ok(body)
     }
+}
 
-    /// Execute a single HTTP attempt, applying the per-attempt timeout if configured.
-    async fn execute_once(&self, req: http::Request<Full<Bytes>>) -> Result<Bytes> {
-        let request = async {
-            let resp = self
-                .http
-                .clone()
-                .call(req)
-                .await
-                .map_err(|e| Error::Service { source: e })?;
-            let status = resp.status();
-            let body = resp
-                .into_body()
-                .collect()
-                .await
-                .map_err(|e| Error::Service { source: e })?
-                .to_bytes();
-            if !status.is_success() {
-                let error = serde_json::from_slice(&body).ok();
-                return Err(Error::ApiError { status, error });
-            }
-            Ok(body)
-        };
-
-        if let Some(timeout) = self.timeout {
-            tokio::time::timeout(timeout, request)
-                .await
-                .map_err(|_| Error::Timeout(timeout))?
-        } else {
-            request.await
-        }
+/// Helper: Classify a BoxError to recover typed errors like TimeoutError.
+fn classify_boxerr(err: BoxError) -> Error {
+    // Attempt to downcast to TimeoutError and recover Error::Timeout(Duration).
+    // On failure, downcast returns the original Box for use in Error::Service.
+    match err.downcast::<TimeoutError>() {
+        Ok(timeout_err) => Error::Timeout(timeout_err.0),
+        Err(err) => Error::Service { source: err },
     }
 }
 
@@ -449,20 +515,6 @@ impl Client {
             .base_uri(uri)?
             .unix_socket_abstract(name)
             .build()
-    }
-}
-
-/// Return `true` for errors that are safe to retry.
-fn is_retryable(err: &Error) -> bool {
-    match err {
-        Error::Service { .. } | Error::Timeout(_) => true,
-        Error::ApiError { status, .. } => matches!(
-            *status,
-            http::StatusCode::BAD_GATEWAY
-                | http::StatusCode::SERVICE_UNAVAILABLE
-                | http::StatusCode::GATEWAY_TIMEOUT
-        ),
-        _ => false,
     }
 }
 

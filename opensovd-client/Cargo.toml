@@ -24,7 +24,7 @@ percent-encoding = { workspace = true }
 serde = { workspace = true, features = ["derive", "std"] }
 serde_json = { workspace = true, features = ["std"] }
 thiserror = { workspace = true }
-tower = { workspace = true, features = ["util"] }
+tower = { workspace = true, features = ["util", "retry"] }
 tokio = { workspace = true, features = ["sync", "time"] }
 rand = { workspace = true, features = ["std", "std_rng", "thread_rng"] }
 
