@@ -23,6 +23,8 @@ use crate::discovery::Discovery;
 use crate::entities::{App, Area, Component};
 use crate::error::{Error, Result};
 use crate::list::ListEntitiesRequest;
+#[cfg(unix)]
+use crate::unix::UnixConnector;
 
 /// Boxed error type for HTTP service flexibility with layers.
 pub(crate) type BoxError = Box<dyn std::error::Error + Send + Sync>;
@@ -175,6 +177,34 @@ impl<Conn, Layers> ClientBuilder<Conn, Layers> {
             inner: self.build()?,
             cache: Arc::new(OnceCell::new()),
         })
+    }
+}
+
+#[cfg(unix)]
+impl<Conn, Layers> ClientBuilder<Conn, Layers> {
+    /// Route requests over a Unix domain socket (filesystem path).
+    ///
+    /// The eventual base URI should include the path prefix,
+    /// e.g. `http://localhost/sovd/v1`. The host is ignored;
+    /// all requests are routed to the socket at `path`.
+    pub fn unix_socket(
+        self,
+        path: impl AsRef<std::path::Path>,
+    ) -> ClientBuilder<UnixConnector, Layers> {
+        self.connector(UnixConnector::new(path))
+    }
+
+    /// Route requests over a Linux abstract Unix socket.
+    ///
+    /// `name` is the abstract socket name (without a leading null byte).
+    /// The eventual base URI should include the path prefix,
+    /// e.g. `http://localhost/sovd/v1`.
+    #[cfg(target_os = "linux")]
+    pub fn unix_socket_abstract(
+        self,
+        name: impl AsRef<[u8]>,
+    ) -> ClientBuilder<UnixConnector, Layers> {
+        self.connector(UnixConnector::abstract_name(name))
     }
 }
 
@@ -340,8 +370,7 @@ impl Client {
         uri: &str,
         path: impl AsRef<std::path::Path>,
     ) -> std::result::Result<Self, BuilderError> {
-        let connector = crate::unix::UnixConnector::new(path);
-        Self::builder().base_uri(uri)?.connector(connector).build()
+        Self::builder().base_uri(uri)?.unix_socket(path).build()
     }
 
     /// Connect to an SOVD server over a Linux abstract Unix socket.
@@ -358,8 +387,10 @@ impl Client {
         uri: &str,
         name: impl AsRef<[u8]>,
     ) -> std::result::Result<Self, BuilderError> {
-        let connector = crate::unix::UnixConnector::abstract_name(name);
-        Self::builder().base_uri(uri)?.connector(connector).build()
+        Self::builder()
+            .base_uri(uri)?
+            .unix_socket_abstract(name)
+            .build()
     }
 }
 
