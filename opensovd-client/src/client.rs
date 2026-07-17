@@ -23,9 +23,9 @@ use crate::discovery::Discovery;
 use crate::entities::{App, Area, Component};
 use crate::error::{Error, Result};
 use crate::list::ListEntitiesRequest;
+use crate::retry::RetryPolicy;
 #[cfg(unix)]
 use crate::unix::UnixConnector;
-use crate::retry::RetryPolicy;
 
 /// Boxed error type for HTTP service flexibility with layers.
 pub(crate) type BoxError = Box<dyn std::error::Error + Send + Sync>;

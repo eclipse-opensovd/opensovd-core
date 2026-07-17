@@ -20,6 +20,6 @@ pub use error::{Error, Result};
 pub use opensovd_models::Response;
 pub use opensovd_models::data::DataCategory;
 pub use opensovd_models::version::{SovdInfo, VendorInfo, VersionInfo};
+pub use retry::RetryPolicy;
 #[cfg(unix)]
 pub use unix::UnixConnector;
-pub use retry::RetryPolicy;
