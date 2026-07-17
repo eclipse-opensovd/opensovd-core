@@ -6,6 +6,7 @@
 
 use std::time::Duration;
 
+use tempfile::TempDir;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::UnixListener;
 
@@ -93,20 +94,15 @@ async fn connect_unix_not_found() {
 
 #[tokio::test]
 async fn builder_unix_socket_timeout_returns_typed_timeout_error() {
-    let dir = std::env::temp_dir().join(format!(
-        "opensovd-client-timeout-test-{}",
-        std::process::id()
-    ));
-    std::fs::create_dir_all(&dir).unwrap();
-    let sock_path = dir.join("timeout.sock");
-
-    let _ = std::fs::remove_file(&sock_path);
+    let dir = TempDir::new().unwrap();
+    let sock_path = dir.path().join("timeout.sock");
 
     let listener = UnixListener::bind(&sock_path).unwrap();
 
     tokio::spawn(async move {
         let (_stream, _) = listener.accept().await.unwrap();
         tokio::time::sleep(Duration::from_secs(2)).await;
+        std::future::pending::<()>().await;
     });
 
     let client = opensovd_client::Client::builder()
@@ -125,21 +121,12 @@ async fn builder_unix_socket_timeout_returns_typed_timeout_error() {
         }
         other => panic!("expected Timeout error, got: {other:?}"),
     }
-
-    let _ = std::fs::remove_file(&sock_path);
-    let _ = std::fs::remove_dir(&dir);
 }
 
 #[tokio::test]
 async fn builder_can_use_exported_unix_connector() {
-    let dir = std::env::temp_dir().join(format!(
-        "opensovd-client-builder-test-{}",
-        std::process::id()
-    ));
-    std::fs::create_dir_all(&dir).unwrap();
-    let sock_path = dir.join("builder.sock");
-
-    let _ = std::fs::remove_file(&sock_path);
+    let dir = TempDir::new().unwrap();
+    let sock_path = dir.path().join("builder.sock");
 
     let listener = UnixListener::bind(&sock_path).unwrap();
 
@@ -156,9 +143,6 @@ async fn builder_can_use_exported_unix_connector() {
         .unwrap();
     let result = client.list_components().send().await.unwrap();
     assert!(result.data.items.is_empty());
-
-    let _ = std::fs::remove_file(&sock_path);
-    let _ = std::fs::remove_dir(&dir);
 }
 
 #[cfg(target_os = "linux")]
