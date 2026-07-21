@@ -20,7 +20,7 @@
 //! - GET /apps/{app_id}/data/docs - Online capability description
 //!
 //! ## Online capability descriptions
-//! - GET /{entity-path}/data/docs - Self-contained OpenAPI 3.1 spec
+//! - GET /{entity-path}/data/docs - Self-contained OpenAPI 3.1.0 spec
 //!   describing the data collection endpoint (currently for components and apps)
 //!
 //! ## Version

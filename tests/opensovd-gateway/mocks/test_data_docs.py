@@ -28,6 +28,7 @@ def test_data_docs_is_valid_openapi_31(client, path, expected_collection):
     """The docs payload is a valid OpenAPI 3.1.0 document scoped to `data`."""
     response = client.get(path)
     assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/json")
 
     doc = response.json()
 
@@ -40,8 +41,7 @@ def test_data_docs_is_valid_openapi_31(client, path, expected_collection):
     assert list(doc["paths"].keys()) == [expected_collection]
 
     operation = doc["paths"][expected_collection]
-    assert "get" in operation
-    assert "put" not in operation, "only the read (GET) contract is documented"
+    assert set(operation) == {"get"}, "only the read (GET) contract is documented"
 
     # HTTP response codes are part of the schema.
     responses = operation["get"]["responses"]
