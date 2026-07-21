@@ -11,7 +11,6 @@ pub mod entities;
 mod error;
 mod list;
 mod retry;
-mod timeout;
 #[cfg(unix)]
 mod unix;
 
