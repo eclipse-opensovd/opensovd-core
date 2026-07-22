@@ -29,7 +29,7 @@ opensovd-gateway --mock
 
 # Advertise the gateway and discover private-side SOVD services with mDNS
 cargo run -p opensovd-gateway --features mdns -- \
-	--url http://0.0.0.0:7690/sovd --mdns --mdns-host 192.168.1.10
+    --url http://0.0.0.0:7690/sovd --mdns --mdns-host 192.168.1.10
 ```
 
 Mock data comes from the shared `opensovd-mocks` crate used across examples and tests.
