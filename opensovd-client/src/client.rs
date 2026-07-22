@@ -14,7 +14,7 @@ use serde::{Serialize, de::DeserializeOwned};
 use thiserror::Error;
 use tokio::sync::OnceCell;
 use tower::{
-    Layer, Service,
+    Layer, Service, ServiceExt,
     layer::util::{Identity, Stack},
     util::{BoxCloneSyncService, MapErrLayer, MapResponseLayer},
 };
@@ -328,7 +328,7 @@ impl Client {
             let resp = self
                 .http
                 .clone()
-                .call(req)
+                .oneshot(req)
                 .await
                 .map_err(|e| Error::Service { source: e })?;
             let status = resp.status();

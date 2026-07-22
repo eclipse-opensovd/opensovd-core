@@ -150,3 +150,30 @@ async fn builder_timeout_returns_typed_timeout_error() {
         other => panic!("expected Timeout error, got: {other:?}"),
     }
 }
+
+#[tokio::test]
+async fn backpressure_layer_does_not_panic() {
+    use tower::limit::ConcurrencyLimitLayer;
+
+    let mut builder = Connector::builder();
+    builder
+        .expect()
+        .with_uri("http://localhost/sovd/v1/components")
+        .times(2)
+        .returning(json!({"items": []}).to_string())
+        .unwrap();
+
+    // A limit layer requires poll_ready to be driven before call.
+    let client = opensovd_client::Client::builder()
+        .base_uri("http://localhost/sovd/v1")
+        .expect("valid URI")
+        .layer(ConcurrencyLimitLayer::new(1))
+        .connector(builder.build())
+        .build()
+        .expect("valid test client with limit layer");
+
+    for _ in 0..2 {
+        let list = client.list_components().send().await.unwrap();
+        assert!(list.data.items.is_empty());
+    }
+}
