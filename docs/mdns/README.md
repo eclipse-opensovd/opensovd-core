@@ -1,4 +1,4 @@
- mDNS Integration Design
+# mDNS Integration Design
 
 This document describes how mDNS is intended to fit into the OpenSOVD gateway architecture.
 
@@ -46,6 +46,11 @@ opensovd-gateway \
 ```
 
 If TLS is enabled for the gateway listener, the advertised `accessurl` uses `https`.
+
+The gateway uses the actual bound TCP port in its service record, including an
+OS-assigned port when `--url` uses port `0`. With a Unix socket listener, mDNS
+discovery remains enabled but gateway advertisement is skipped because there is
+no TCP endpoint for mDNS clients to call.
 
 ### Gateway Private Discovery
 

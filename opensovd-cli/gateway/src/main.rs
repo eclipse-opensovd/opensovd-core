@@ -133,11 +133,13 @@ where
         })?
         .as_str();
 
-    let mut builder = Server::builder()
+    let builder = Server::builder()
         .authenticator(authenticator)
         .authorizer(authorizer);
 
-    builder = configure_listener(builder, &cli, authority).await?;
+    let (mut builder, listener_addr) = configure_listener(builder, &cli, authority).await?;
+    #[cfg(not(feature = "mdns"))]
+    let _ = listener_addr;
     builder = configure_topology(builder, &cli).await;
 
     #[cfg(all(feature = "tls", feature = "mdns"))]
@@ -174,8 +176,14 @@ where
     }
 
     #[cfg(feature = "mdns")]
-    let (builder, _mdns_wrapper) =
-        configure_mdns(builder, &cli.mdns, &uri, authority, base_uri, tls_enabled);
+    let (builder, mdns_wrapper) = configure_mdns(
+        builder,
+        &cli.mdns,
+        &uri,
+        listener_addr,
+        base_uri,
+        tls_enabled,
+    );
 
     let server = builder
         .layer(libcli::trace::trace_layer())
@@ -185,7 +193,16 @@ where
         .build()?;
 
     notify_readiness();
-    server.serve().await?;
+    let serve_result = server.serve().await;
+
+    #[cfg(feature = "mdns")]
+    if let Some(wrapper) = mdns_wrapper
+        && let Err(e) = wrapper.shutdown()
+    {
+        tracing::warn!(target: TARGET, error = %e, "Failed to shut down mDNS");
+    }
+
+    serve_result?;
     tracing::info!(target: TARGET, "Shutdown complete");
 
     Ok(())
@@ -225,7 +242,7 @@ fn configure_mdns<Vendor, Authn, Authz, Layer>(
     mut builder: opensovd_server::ServerBuilder<Vendor, Authn, Authz, Layer>,
     mdns_args: &cli::MdnsArgs,
     uri: &http::Uri,
-    authority: &str,
+    listener_addr: Option<std::net::SocketAddr>,
     base_uri: &str,
     tls_enabled: bool,
 ) -> (
@@ -236,24 +253,13 @@ fn configure_mdns<Vendor, Authn, Authz, Layer>(
         return (builder, None);
     }
 
-    let Some(port) = parse_port(authority) else {
-        tracing::warn!(target: TARGET, "Cannot determine port for mDNS from --url");
-        return (builder, None);
-    };
-
     let mdns_scheme = if tls_enabled {
         "https"
     } else {
         uri.scheme_str().unwrap_or("http")
     };
 
-    match mdns::setup(
-        mdns_args,
-        parse_host(authority),
-        port,
-        mdns_scheme,
-        base_uri,
-    ) {
+    match mdns::setup(mdns_args, listener_addr, mdns_scheme, base_uri) {
         Ok((wrapper, provider)) => {
             tracing::info!(target: TARGET, "mDNS enabled");
             builder = builder.discovery(Box::new(provider));
@@ -271,7 +277,10 @@ async fn configure_listener<Vendor, Authn, Authz, Layer>(
     builder: opensovd_server::ServerBuilder<Vendor, Authn, Authz, Layer>,
     cli: &cli::Cli,
     authority: &str,
-) -> anyhow::Result<opensovd_server::ServerBuilder<Vendor, Authn, Authz, Layer>> {
+) -> anyhow::Result<(
+    opensovd_server::ServerBuilder<Vendor, Authn, Authz, Layer>,
+    Option<std::net::SocketAddr>,
+)> {
     #[cfg(target_os = "linux")]
     if let Some(fd) = sd_notify::listen_fds()?.next() {
         use std::os::fd::FromRawFd;
@@ -280,7 +289,8 @@ async fn configure_listener<Vendor, Authn, Authz, Layer>(
         let std_listener = unsafe { std::net::TcpListener::from_raw_fd(fd) };
         std_listener.set_nonblocking(true)?;
         let listener = tokio::net::TcpListener::from_std(std_listener)?;
-        return Ok(builder.listener(listener));
+        let addr = listener.local_addr()?;
+        return Ok((builder.listener(listener), Some(addr)));
     }
 
     if let Some(ref socket_path) = cli.unix_socket {
@@ -306,13 +316,14 @@ async fn configure_listener<Vendor, Authn, Authz, Layer>(
         let listener = UnixListener::bind(socket_path)
             .with_context(|| format!("failed to bind unix socket {socket_path}"))?;
 
-        return Ok(builder.listener(listener));
+        return Ok((builder.listener(listener), None));
     }
 
     let listener = tokio::net::TcpListener::bind(authority)
         .await
         .with_context(|| format!("failed to bind {authority}"))?;
-    Ok(builder.listener(listener))
+    let addr = listener.local_addr()?;
+    Ok((builder.listener(listener), Some(addr)))
 }
 
 #[cfg(not(unix))]
@@ -320,11 +331,15 @@ async fn configure_listener<Vendor, Authn, Authz, Layer>(
     builder: opensovd_server::ServerBuilder<Vendor, Authn, Authz, Layer>,
     _cli: &cli::Cli,
     authority: &str,
-) -> anyhow::Result<opensovd_server::ServerBuilder<Vendor, Authn, Authz, Layer>> {
+) -> anyhow::Result<(
+    opensovd_server::ServerBuilder<Vendor, Authn, Authz, Layer>,
+    Option<std::net::SocketAddr>,
+)> {
     let listener = tokio::net::TcpListener::bind(authority)
         .await
         .with_context(|| format!("failed to bind {authority}"))?;
-    Ok(builder.listener(listener))
+    let addr = listener.local_addr()?;
+    Ok((builder.listener(listener), Some(addr)))
 }
 
 async fn configure_topology<Vendor, Authn, Authz, Layer>(
@@ -349,46 +364,5 @@ fn notify_readiness() {
     #[cfg(target_os = "linux")]
     if let Err(e) = sd_notify::notify(&[sd_notify::NotifyState::Ready]) {
         tracing::warn!(target: TARGET, error = %e, "Failed to notify systemd readiness");
-    }
-}
-
-#[cfg(feature = "mdns")]
-fn parse_host(authority: &str) -> &str {
-    authority
-        .rsplit_once(':')
-        .map_or(authority, |(host, _)| host)
-}
-
-#[cfg(feature = "mdns")]
-fn parse_port(authority: &str) -> Option<u16> {
-    authority
-        .rsplit_once(':')
-        .and_then(|(_, port)| port.parse().ok())
-}
-
-#[cfg(all(test, feature = "mdns"))]
-mod tests {
-    use super::{parse_host, parse_port};
-
-    #[test]
-    fn parse_host_strips_port() {
-        assert_eq!(parse_host("192.168.1.10:7690"), "192.168.1.10");
-        assert_eq!(parse_host("localhost:8080"), "localhost");
-    }
-
-    #[test]
-    fn parse_host_without_port_returns_input() {
-        assert_eq!(parse_host("192.168.1.10"), "192.168.1.10");
-    }
-
-    #[test]
-    fn parse_port_extracts_port() {
-        assert_eq!(parse_port("192.168.1.10:7690"), Some(7690));
-    }
-
-    #[test]
-    fn parse_port_missing_or_invalid_is_none() {
-        assert_eq!(parse_port("192.168.1.10"), None);
-        assert_eq!(parse_port("host:notaport"), None);
     }
 }

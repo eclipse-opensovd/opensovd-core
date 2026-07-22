@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use std::collections::{HashMap, HashSet};
-use std::net::IpAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
@@ -201,12 +201,7 @@ fn convert_event(
             let port = info.get_port();
 
             let access_url = info.get_properties().get(TXT_ACCESS_URL).map_or_else(
-                || {
-                    info.get_addresses().iter().next().map_or_else(
-                        || format!("http://{name}:{port}/sovd"),
-                        |ip| format!("http://{ip}:{port}/sovd"),
-                    )
-                },
+                || fallback_access_url(&name, info.get_addresses().iter().next().copied(), port),
                 |p| p.val_str().to_string(),
             );
 
@@ -245,6 +240,13 @@ fn convert_event(
     }
 }
 
+fn fallback_access_url(host_name: &str, ip: Option<IpAddr>, port: u16) -> String {
+    ip.map_or_else(
+        || format!("http://{host_name}:{port}/sovd"),
+        |ip| format!("http://{}/sovd", SocketAddr::new(ip, port)),
+    )
+}
+
 struct MpscStream<T>(mpsc::Receiver<T>);
 
 impl<T> Stream for MpscStream<T> {
@@ -258,6 +260,9 @@ impl<T> Stream for MpscStream<T> {
 #[cfg(test)]
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
+    use std::net::{Ipv4Addr, Ipv6Addr};
+    use std::time::{Duration, Instant};
+
     use mdns_sd::ServiceInfo;
 
     use super::*;
@@ -326,6 +331,26 @@ mod tests {
     }
 
     #[test]
+    fn fallback_access_url_formats_ip_addresses_as_url_hosts() {
+        assert_eq!(
+            fallback_access_url(
+                "peer-ecu.local",
+                Some(IpAddr::V4(Ipv4Addr::new(192, 168, 1, 20))),
+                7690,
+            ),
+            "http://192.168.1.20:7690/sovd"
+        );
+        assert_eq!(
+            fallback_access_url(
+                "peer-ecu.local",
+                Some(IpAddr::V6(Ipv6Addr::LOCALHOST)),
+                7690,
+            ),
+            "http://[::1]:7690/sovd"
+        );
+    }
+
+    #[test]
     fn removed_service_yields_component_removal() {
         let event = ServiceEvent::ServiceRemoved(
             SERVICE_TYPE.to_string(),
@@ -356,5 +381,22 @@ mod tests {
         );
 
         assert!(convert_event(|name| name == "self-ecu._sovd._tcp.local.", event).is_none());
+    }
+
+    #[test]
+    fn shutdown_stops_browse_receiver() {
+        let wrapper = MdnsWrapper::new().unwrap();
+        let receiver = wrapper.browse().unwrap();
+
+        wrapper.shutdown().unwrap();
+
+        let deadline = Instant::now() + Duration::from_secs(1);
+        while !receiver.is_disconnected() {
+            let Some(remaining) = deadline.checked_duration_since(Instant::now()) else {
+                break;
+            };
+            let _ = receiver.recv_timeout(remaining);
+        }
+        assert!(receiver.is_disconnected());
     }
 }

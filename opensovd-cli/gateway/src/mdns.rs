@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 Contributors to the Eclipse Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use std::net::IpAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 
 use opensovd_providers::mdns::{MdnsDiscoveryProvider, MdnsError, MdnsWrapper};
@@ -11,11 +11,18 @@ use crate::cli::MdnsArgs;
 const TARGET: &str = "mdns";
 
 // Returns the infotainment-facing gateway IP to advertise on mDNS.
-pub fn resolve_host(args: &MdnsArgs, url_host: &str) -> Option<IpAddr> {
-    if let Some(ip) = args.host {
-        return Some(ip);
-    }
-    url_host.parse::<IpAddr>().ok()
+pub fn resolve_host(args: &MdnsArgs, listener_ip: IpAddr) -> IpAddr {
+    args.host.unwrap_or(listener_ip)
+}
+
+fn access_url(scheme: &str, ip: IpAddr, port: u16, base_path: &str) -> String {
+    format!("{scheme}://{}{base_path}", SocketAddr::new(ip, port))
+}
+
+fn advertised_addr(args: &MdnsArgs, listener_addr: Option<SocketAddr>) -> Option<SocketAddr> {
+    let listener_addr = listener_addr?;
+    let ip = resolve_host(args, listener_addr.ip());
+    (!ip.is_unspecified() && !ip.is_loopback()).then_some(SocketAddr::new(ip, listener_addr.port()))
 }
 
 /*
@@ -24,40 +31,41 @@ pub fn resolve_host(args: &MdnsArgs, url_host: &str) -> Option<IpAddr> {
 */
 pub fn setup(
     args: &MdnsArgs,
-    url_host: &str,
-    port: u16,
+    listener_addr: Option<SocketAddr>,
     scheme: &str,
     base_path: &str,
 ) -> Result<(Arc<MdnsWrapper>, MdnsDiscoveryProvider), MdnsError> {
     let wrapper = Arc::new(MdnsWrapper::new()?);
 
-    match resolve_host(args, url_host) {
-        Some(ip) if ip.is_unspecified() || ip.is_loopback() => {
-            tracing::warn!(
-                target: TARGET,
-                ip = %ip,
-                "Cannot advertise an unspecified or loopback mDNS IP - use --mdns-host with the infotainment-facing gateway address. mDNS discovery will still run."
-            );
-        }
-        Some(ip) => {
-            let identification = args.identification.as_deref().unwrap_or(args.name.as_str());
-            let access_url = format!("{scheme}://{ip}:{port}{base_path}");
+    let Some(advertised_addr) = advertised_addr(args, listener_addr) else {
+        tracing::warn!(
+            target: TARGET,
+            "Cannot advertise mDNS for a non-TCP, unspecified, or loopback listener. mDNS discovery will still run."
+        );
+        let provider = MdnsDiscoveryProvider::from_wrapper(Arc::clone(&wrapper));
+        return Ok((wrapper, provider));
+    };
 
-            if let Err(e) = wrapper.register(&args.name, identification, &access_url, ip, port) {
-                tracing::warn!(
-                    target: TARGET,
-                    error = %e,
-                    "mDNS registration failed discovery will still run"
-                );
-            }
-        }
-        None => {
-            tracing::warn!(
-                target: TARGET,
-                "Cannot determine advertise IP - use --mdns-host to set it explicitly. \
-                 mDNS discovery will still run."
-            );
-        }
+    let identification = args.identification.as_deref().unwrap_or(args.name.as_str());
+    let access_url = access_url(
+        scheme,
+        advertised_addr.ip(),
+        advertised_addr.port(),
+        base_path,
+    );
+
+    if let Err(e) = wrapper.register(
+        &args.name,
+        identification,
+        &access_url,
+        advertised_addr.ip(),
+        advertised_addr.port(),
+    ) {
+        tracing::warn!(
+            target: TARGET,
+            error = %e,
+            "mDNS registration failed discovery will still run"
+        );
     }
 
     let provider = MdnsDiscoveryProvider::from_wrapper(Arc::clone(&wrapper));
@@ -66,7 +74,7 @@ pub fn setup(
 
 #[cfg(test)]
 mod tests {
-    use std::net::Ipv4Addr;
+    use std::net::{Ipv4Addr, Ipv6Addr};
 
     use super::*;
 
@@ -82,18 +90,51 @@ mod tests {
     #[test]
     fn resolve_host_prefers_explicit_host() {
         let explicit = IpAddr::V4(Ipv4Addr::new(10, 0, 0, 5));
-        let resolved = resolve_host(&args(Some(explicit)), "192.168.1.10");
-        assert_eq!(resolved, Some(explicit));
+        let resolved = resolve_host(&args(Some(explicit)), IpAddr::V4(Ipv4Addr::LOCALHOST));
+        assert_eq!(resolved, explicit);
     }
 
     #[test]
-    fn resolve_host_falls_back_to_url_host() {
-        let resolved = resolve_host(&args(None), "192.168.1.10");
-        assert_eq!(resolved, Some(IpAddr::V4(Ipv4Addr::new(192, 168, 1, 10))));
+    fn resolve_host_falls_back_to_listener_host() {
+        let resolved = resolve_host(&args(None), IpAddr::V4(Ipv4Addr::new(192, 168, 1, 10)));
+        assert_eq!(resolved, IpAddr::V4(Ipv4Addr::new(192, 168, 1, 10)));
     }
 
     #[test]
-    fn resolve_host_returns_none_for_non_ip_host() {
-        assert_eq!(resolve_host(&args(None), "localhost"), None);
+    fn advertised_addr_uses_bound_port_and_skips_unadvertisable_listeners() {
+        let listener = SocketAddr::from((Ipv4Addr::new(192, 168, 1, 10), 53_421));
+        assert_eq!(advertised_addr(&args(None), Some(listener)), Some(listener));
+        assert_eq!(advertised_addr(&args(None), None), None);
+        assert_eq!(
+            advertised_addr(
+                &args(None),
+                Some(SocketAddr::from((Ipv4Addr::UNSPECIFIED, 7690)))
+            ),
+            None
+        );
+        assert_eq!(
+            advertised_addr(
+                &args(Some(IpAddr::V4(Ipv4Addr::new(10, 0, 0, 5)))),
+                Some(SocketAddr::from((Ipv4Addr::UNSPECIFIED, 53_421))),
+            ),
+            Some(SocketAddr::from((Ipv4Addr::new(10, 0, 0, 5), 53_421)))
+        );
+    }
+
+    #[test]
+    fn access_url_formats_ip_addresses_as_url_hosts() {
+        assert_eq!(
+            access_url(
+                "http",
+                IpAddr::V4(Ipv4Addr::new(192, 168, 1, 10)),
+                7690,
+                "/sovd"
+            ),
+            "http://192.168.1.10:7690/sovd"
+        );
+        assert_eq!(
+            access_url("https", IpAddr::V6(Ipv6Addr::LOCALHOST), 7690, "/sovd"),
+            "https://[::1]:7690/sovd"
+        );
     }
 }

@@ -25,14 +25,8 @@ name = "mtls"
 path = "mtls/mtls.rs"
 required-features = ["tls"]
 
-[[example]]
-name = "mdns"
-path = "mdns/mdns.rs"
-required-features = ["mdns"]
-
 [features]
 tls = ["opensovd-server/tls", "dep:rustls"]
-mdns = ["opensovd-providers/mdns"]
 
 [dependencies]
 async-trait = { workspace = true }

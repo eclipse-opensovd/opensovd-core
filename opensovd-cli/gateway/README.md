@@ -26,6 +26,10 @@ opensovd-gateway --unix-socket @opensovd
 
 # Enable mock topology for testing
 opensovd-gateway --mock
+
+# Advertise the gateway and discover private-side SOVD services with mDNS
+cargo run -p opensovd-gateway --features mdns -- \
+	--url http://0.0.0.0:7690/sovd --mdns --mdns-host 192.168.1.10
 ```
 
 Mock data comes from the shared `opensovd-mocks` crate used across examples and tests.
@@ -40,6 +44,17 @@ For mDNS architecture and gateway/private-network design, see [`docs/mdns/README
 | `--unix-socket` | Unix socket path (`@` prefix for abstract sockets)   |
 | `--mock`        | Enable mock entities for testing                     |
 | `--serve-dir`   | Serve static files (`PATH:DIRECTORY`)                |
+
+### mDNS Options
+
+Build with `--features mdns` to enable these options.
+
+| Option                   | Description |
+|--------------------------|-------------|
+| `--mdns`                 | Advertise the TCP gateway and discover private-side SOVD services |
+| `--mdns-name NAME`       | mDNS service instance name (default: `opensovd`) |
+| `--mdns-host IP`         | Externally reachable IP to advertise; required when binding to an unspecified address |
+| `--mdns-identification ID` | Identification TXT record; defaults to `--mdns-name` |
 
 ### CORS Options
 

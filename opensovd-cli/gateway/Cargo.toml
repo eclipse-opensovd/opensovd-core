@@ -23,7 +23,7 @@ json-preserve-order = ["opensovd-server/json-preserve-order"]
 mock = ["dep:opensovd-mocks"]
 http2 = ["opensovd-server/http2"]
 tls = ["opensovd-server/tls", "dep:rustls"]
-mdns = ["opensovd-providers/mdns"]
+mdns = ["dep:opensovd-providers", "opensovd-providers/mdns"]
 
 [dependencies]
 anyhow = { workspace = true }
@@ -32,7 +32,7 @@ opensovd-server = { workspace = true }
 opensovd-core = { workspace = true }
 opensovd-extra = { workspace = true, features = ["auth"] }
 opensovd-mocks = { workspace = true, optional = true }
-opensovd-providers = { workspace = true }
+opensovd-providers = { workspace = true, optional = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"] }
 tokio = { workspace = true, features = ["net", "rt", "signal", "time", "sync"] }
