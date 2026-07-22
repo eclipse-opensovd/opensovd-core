@@ -6,3 +6,5 @@ __pycache__/
 .devenv/
 .devenv.flake.nix
 gen/
+bazel-*
+*cache

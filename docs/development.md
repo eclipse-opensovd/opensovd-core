@@ -44,3 +44,28 @@ direnv allow
 
 > [!NOTE]
 > If neither option applies, install [Rust](https://rustup.rs/) (auto-configured via `rust-toolchain.toml`) and optionally [uv](https://docs.astral.sh/uv/) for running integration tests.
+
+## Option 3: Bazel bootstrap
+
+The repository also includes a Bazel entrypoint backed by `rules_rust` and `crate_universe`. This keeps the Rust workspace native in Bazel instead of shelling out to Cargo for package builds.
+
+Use Bazel 8.3.0 directly or via Bazelisk so the workspace follows the pinned version in `.bazelversion`.
+
+```bash
+# Build the full Rust workspace through Bazel
+bazel build //:workspace
+
+# Build a single package
+bazel build //:opensovd-gateway
+
+# Run the Bazel test aggregate
+bazel test //:tests
+```
+
+Current Bazel targets are package-oriented and map to native `rust_library`, `rust_binary`, and `rust_test` rules under the owning crate directories.
+
+When dependency versions change, refresh the generated crate-universe lock metadata with:
+
+```bash
+CARGO_BAZEL_REPIN=1 bazel sync --only=crate_index
+```
