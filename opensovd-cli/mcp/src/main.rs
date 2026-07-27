@@ -399,6 +399,39 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn list_tools_advertise_output_schema() -> TestResult {
+        let connector = mock_http_connector::Connector::builder().build();
+        let client = setup(mock_client(connector)).await;
+
+        let tools = client.list_tools(Option::default()).await?;
+
+        for name in ["list_components", "list_areas", "list_apps"] {
+            let tool = tools
+                .tools
+                .iter()
+                .find(|t| t.name == name)
+                .unwrap_or_else(|| panic!("expected tool {name}"));
+            let schema = tool
+                .output_schema
+                .as_ref()
+                .unwrap_or_else(|| panic!("expected output schema for {name}"));
+            assert_eq!(schema["type"], "object", "{name}: root must be an object");
+            let properties = &schema["properties"];
+            assert!(
+                properties.get("items").is_some(),
+                "{name}: expected items property"
+            );
+            assert!(
+                properties.get("schema").is_some(),
+                "{name}: expected schema property"
+            );
+        }
+
+        client.cancel().await?;
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn list_components_returns_json() -> TestResult {
         let components = serde_json::to_string(&opensovd_models::Items {
             items: vec![entity("components", "ecu1", "Engine ECU")],
