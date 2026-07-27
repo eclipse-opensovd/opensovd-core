@@ -26,6 +26,11 @@ const TARGET: &str = "srv";
 
 const TOPOLOGY_URI: &str = "sovd://topology";
 
+#[allow(clippy::needless_pass_by_value)]
+fn internal(e: impl ToString) -> McpError {
+    McpError::internal_error(e.to_string(), None)
+}
+
 #[derive(Clone)]
 struct McpServer {
     tool_router: ToolRouter<Self>,
@@ -43,7 +48,7 @@ impl McpServer {
             .schema(true)
             .send()
             .await
-            .map_err(|e| McpError::internal_error(e.to_string(), None))?;
+            .map_err(internal)?;
         Ok(Json(response))
     }
 
@@ -55,7 +60,7 @@ impl McpServer {
             .schema(true)
             .send()
             .await
-            .map_err(|e| McpError::internal_error(e.to_string(), None))?;
+            .map_err(internal)?;
         Ok(Json(response))
     }
 
@@ -67,7 +72,7 @@ impl McpServer {
             .schema(true)
             .send()
             .await
-            .map_err(|e| McpError::internal_error(e.to_string(), None))?;
+            .map_err(internal)?;
         Ok(Json(response))
     }
 }
@@ -148,27 +153,9 @@ impl ServerHandler for McpServer {
         }
 
         let (components, areas, apps) = tokio::try_join!(
-            async {
-                self.client
-                    .list_components()
-                    .send()
-                    .await
-                    .map_err(|e| McpError::internal_error(e.to_string(), None))
-            },
-            async {
-                self.client
-                    .list_areas()
-                    .send()
-                    .await
-                    .map_err(|e| McpError::internal_error(e.to_string(), None))
-            },
-            async {
-                self.client
-                    .list_apps()
-                    .send()
-                    .await
-                    .map_err(|e| McpError::internal_error(e.to_string(), None))
-            },
+            async { self.client.list_components().send().await.map_err(internal) },
+            async { self.client.list_areas().send().await.map_err(internal) },
+            async { self.client.list_apps().send().await.map_err(internal) },
         )?;
 
         let mut text = String::new();
