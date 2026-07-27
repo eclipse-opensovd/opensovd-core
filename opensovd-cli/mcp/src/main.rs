@@ -434,6 +434,39 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn list_components_includes_schema() -> TestResult {
+        let components = serde_json::to_string(&opensovd_models::Response {
+            data: opensovd_models::Items {
+                items: vec![entity("components", "ecu1", "Engine ECU")],
+            },
+            schema: Some(serde_json::json!({"type": "object"})),
+        })?;
+
+        let mut builder = mock_http_connector::Connector::builder();
+        builder
+            .expect()
+            .with_uri("http://localhost/sovd/v1/components?include-schema=true")
+            .returning(components)?;
+
+        let client = setup(mock_client(builder.build())).await;
+
+        let result = client
+            .call_tool(CallToolRequestParams::new("list_components"))
+            .await?;
+
+        let structured = result
+            .structured_content
+            .expect("expected structured content");
+        let schema = structured
+            .get("schema")
+            .expect("expected schema in tool output");
+        assert_eq!(schema["type"], "object");
+
+        client.cancel().await?;
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn list_areas_returns_json() -> TestResult {
         let areas = serde_json::to_string(&opensovd_models::Items {
             items: vec![entity("areas", "powertrain", "Powertrain")],
