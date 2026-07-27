@@ -29,9 +29,12 @@ pub struct Tag {
 
 /// Generic response wrapper with optional schema
 #[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "jsonschema", derive(schemars::JsonSchema))]
 pub struct Response<T> {
     #[serde(flatten)]
     pub data: T,
+    /// JSON Schema describing the payload, provided by the SOVD server
+    /// when `include-schema=true` is requested
     #[serde(skip_serializing_if = "Option::is_none")]
     pub schema: Option<serde_json::Value>,
 }
