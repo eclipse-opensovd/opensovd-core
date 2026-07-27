@@ -424,35 +424,6 @@ mod tests {
 
     #[tokio::test]
     async fn list_components_returns_json() -> TestResult {
-        let components = serde_json::to_string(&opensovd_models::Items {
-            items: vec![entity("components", "ecu1", "Engine ECU")],
-        })?;
-
-        let mut builder = mock_http_connector::Connector::builder();
-        builder
-            .expect()
-            .with_uri("http://localhost/sovd/v1/components?include-schema=true")
-            .returning(components)?;
-
-        let client = setup(mock_client(builder.build())).await;
-
-        let result = client
-            .call_tool(CallToolRequestParams::new("list_components"))
-            .await?;
-
-        let structured = result
-            .structured_content
-            .expect("expected structured content");
-        let text = serde_json::to_string(&structured)?;
-        assert!(text.contains("Engine ECU"), "expected component name");
-        assert!(text.contains("ecu1"), "expected component id");
-
-        client.cancel().await?;
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn list_components_includes_schema() -> TestResult {
         let components = serde_json::to_string(&opensovd_models::Response {
             data: opensovd_models::Items {
                 items: vec![entity("components", "ecu1", "Engine ECU")],
@@ -475,6 +446,9 @@ mod tests {
         let structured = result
             .structured_content
             .expect("expected structured content");
+        let text = serde_json::to_string(&structured)?;
+        assert!(text.contains("Engine ECU"), "expected component name");
+        assert!(text.contains("ecu1"), "expected component id");
         let schema = structured
             .get("schema")
             .expect("expected schema in tool output");
