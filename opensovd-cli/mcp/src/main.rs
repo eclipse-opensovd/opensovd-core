@@ -415,14 +415,18 @@ mod tests {
                 .output_schema
                 .as_ref()
                 .unwrap_or_else(|| panic!("expected output schema for {name}"));
-            assert_eq!(schema["type"], "object", "{name}: root must be an object");
-            let properties = &schema["properties"];
+            assert_eq!(
+                schema.get("type").and_then(|t| t.as_str()),
+                Some("object"),
+                "{name}: root must be an object"
+            );
+            let properties = schema.get("properties");
             assert!(
-                properties.get("items").is_some(),
+                properties.is_some_and(|p| p.get("items").is_some()),
                 "{name}: expected items property"
             );
             assert!(
-                properties.get("schema").is_some(),
+                properties.is_some_and(|p| p.get("schema").is_some()),
                 "{name}: expected schema property"
             );
         }
