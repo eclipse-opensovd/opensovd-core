@@ -8,14 +8,14 @@ use std::process::ExitCode;
 
 use clap::Parser;
 use opensovd_client::Client;
+use opensovd_models::{Response, discovery::Entities};
 use rmcp::{
-    RoleServer, ServerHandler, ServiceExt,
+    Json, RoleServer, ServerHandler, ServiceExt,
     handler::server::{router::prompt::PromptRouter, tool::ToolRouter},
     model::{
-        CallToolResult, ErrorData as McpError, GetPromptResult, Implementation,
-        ListResourcesResult, PaginatedRequestParams, PromptMessage, ReadResourceRequestParams,
-        ReadResourceResponse, ReadResourceResult, Resource, ResourceContents, Role,
-        ServerCapabilities, ServerInfo,
+        ErrorData as McpError, GetPromptResult, Implementation, ListResourcesResult,
+        PaginatedRequestParams, PromptMessage, ReadResourceRequestParams, ReadResourceResponse,
+        ReadResourceResult, Resource, ResourceContents, Role, ServerCapabilities, ServerInfo,
     },
     prompt, prompt_handler, prompt_router,
     service::RequestContext,
@@ -36,7 +36,7 @@ struct McpServer {
 #[tool_router]
 impl McpServer {
     #[tool(description = "List all SOVD components")]
-    async fn list_components(&self) -> Result<CallToolResult, McpError> {
+    async fn list_components(&self) -> Result<Json<Response<Entities>>, McpError> {
         let response = self
             .client
             .list_components()
@@ -44,13 +44,11 @@ impl McpServer {
             .send()
             .await
             .map_err(|e| McpError::internal_error(e.to_string(), None))?;
-        let value = serde_json::to_value(&response)
-            .map_err(|e| McpError::internal_error(e.to_string(), None))?;
-        Ok(CallToolResult::structured(value))
+        Ok(Json(response))
     }
 
     #[tool(description = "List all SOVD areas")]
-    async fn list_areas(&self) -> Result<CallToolResult, McpError> {
+    async fn list_areas(&self) -> Result<Json<Response<Entities>>, McpError> {
         let response = self
             .client
             .list_areas()
@@ -58,13 +56,11 @@ impl McpServer {
             .send()
             .await
             .map_err(|e| McpError::internal_error(e.to_string(), None))?;
-        let value = serde_json::to_value(&response)
-            .map_err(|e| McpError::internal_error(e.to_string(), None))?;
-        Ok(CallToolResult::structured(value))
+        Ok(Json(response))
     }
 
     #[tool(description = "List all SOVD apps")]
-    async fn list_apps(&self) -> Result<CallToolResult, McpError> {
+    async fn list_apps(&self) -> Result<Json<Response<Entities>>, McpError> {
         let response = self
             .client
             .list_apps()
@@ -72,9 +68,7 @@ impl McpServer {
             .send()
             .await
             .map_err(|e| McpError::internal_error(e.to_string(), None))?;
-        let value = serde_json::to_value(&response)
-            .map_err(|e| McpError::internal_error(e.to_string(), None))?;
-        Ok(CallToolResult::structured(value))
+        Ok(Json(response))
     }
 }
 
