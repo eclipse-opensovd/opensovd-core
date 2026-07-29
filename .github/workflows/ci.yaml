@@ -101,7 +101,7 @@ jobs:
         run: uv run --locked pytest opensovd-e2e/tests
 
       - if: contains(matrix.tests, 'pytest')
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: '22'
       - if: contains(matrix.tests, 'pytest')
@@ -228,7 +228,7 @@ jobs:
         with:
           tool: cargo-llvm-cov@${{ env.CARGO_LLVM_COV_VERSION }}
       - uses: astral-sh/setup-uv@v7
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
       - run: npm install -g @usebruno/cli
