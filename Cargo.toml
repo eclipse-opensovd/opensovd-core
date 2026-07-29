@@ -27,7 +27,7 @@ libcli = { path = "opensovd-cli/lib" }
 
 anyhow = { version = "1", default-features = false, features = ["std"] }
 async-trait = { version = "0.1", default-features = false }
-base64 = { version = "0.22", default-features = false, features = ["std"] }
+base64 = { version = "0.23", default-features = false, features = ["std"] }
 axum = { version = "0.8", default-features = false }
 axum-extra = { version = "0.12", default-features = false }
 dashmap = { version = "6", default-features = false }
