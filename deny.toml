@@ -13,6 +13,7 @@ targets = [
 
 [advisories]
 version = 2
+yanked = "deny"
 ignore = [
     # Unmaintained (not vulnerable) transitive dev-only dependency: paste via mock-http-connector
     { id = "RUSTSEC-2024-0436", reason = "unmaintained transitive dev-only dep (paste via mock-http-connector)" },
@@ -26,7 +27,6 @@ allow = [
     "BSD-2-Clause",
     "BSD-3-Clause",
     "ISC",
-    "OpenSSL",
     "Unicode-3.0",
 ]
 confidence-threshold = 0.93
