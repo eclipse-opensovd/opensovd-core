@@ -56,6 +56,8 @@
 
               # General tools
               git
+              (writeShellScriptBin "bazel" ''exec ${bazelisk}/bin/bazelisk "$@"'')
+              lld
               shellcheck
               markdownlint-cli
               yamlfmt
@@ -68,6 +70,7 @@
             ];
 
             RUST_BACKTRACE = "1";
+            BAZEL_LINKOPTS = "-B${pkgs.lld}/bin";
 
             shellHook = ''
               echo "OpenSOVD Core Development Environment"
