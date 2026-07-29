@@ -47,7 +47,7 @@ hyper-util = { version = "0.1", default-features = false }
 libc = { version = "0.2", default-features = false }
 percent-encoding = { version = "2", default-features = false }
 pin-project = { version = "1", default-features = false }
-regorus = { version = "0.10", default-features = false, features = ["arc", "glob"] }
+regorus = { version = "0.11", default-features = false, features = ["arc", "glob"] }
 schemars = { version = "1", default-features = false }
 sysinfo = { version = "0.39", default-features = false, features = ["system"] }
 sd-notify = { version = "0.5", default-features = false }
