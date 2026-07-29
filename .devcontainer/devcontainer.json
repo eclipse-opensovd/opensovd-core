@@ -1,11 +1,12 @@
 
 {
   "name": "OpenSOVD Core",
-  "image": "mcr.microsoft.com/devcontainers/rust:1-1-bookworm",
-  "overrideCommand": false,
+  "build": {
+    "dockerfile": ".devcontainer/Dockerfile",
+    "context": ".."
+  },
   "remoteUser": "vscode",
   "features": {
-    "ghcr.io/devcontainers/features/docker-in-docker": {},
     "ghcr.io/devcontainers/features/github-cli": {},
     "ghcr.io/devcontainers/features/python:1": {
       "version": "3.13",
@@ -39,5 +40,13 @@
     }
   },
   "forwardPorts": [7690],
-  "postCreateCommand": "uv sync"
+  "mounts": [
+    {
+      "source": "opensovd-core-bazel-cache",
+      "target": "/var/cache/bazel",
+      "type": "volume"
+    }
+  ],
+  "onCreateCommand": ".devcontainer/configure-bazel.sh",
+  "updateContentCommand": "uv sync"
 }

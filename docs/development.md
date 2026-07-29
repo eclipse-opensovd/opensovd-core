@@ -25,7 +25,7 @@ The container includes:
 
 - Python, Rust toolchain, and uv (versions per [devcontainer.json](../.devcontainer/devcontainer.json))
 - Pre-configured VS Code extensions (rust-analyzer, ruff, gitlens, errorlens, etc.)
-- Docker-in-Docker and GitHub CLI
+- GitHub CLI
 - Port 7690 forwarded for the gateway
 
 ## Option 2: Nix flake (local)
