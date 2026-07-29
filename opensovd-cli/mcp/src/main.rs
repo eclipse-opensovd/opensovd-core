@@ -14,7 +14,8 @@ use rmcp::{
     model::{
         CallToolResult, ErrorData as McpError, GetPromptResult, Implementation,
         ListResourcesResult, PaginatedRequestParams, PromptMessage, ReadResourceRequestParams,
-        ReadResourceResult, Resource, ResourceContents, Role, ServerCapabilities, ServerInfo,
+        ReadResourceResponse, ReadResourceResult, Resource, ResourceContents, Role,
+        ServerCapabilities, ServerInfo,
     },
     prompt, prompt_handler, prompt_router,
     service::RequestContext,
@@ -137,18 +138,14 @@ impl ServerHandler for McpServer {
         let resource = Resource::new(TOPOLOGY_URI, "Vehicle Topology")
             .with_description("Snapshot of the SOVD entity hierarchy: components, areas, and apps.")
             .with_mime_type("text/plain");
-        Ok(ListResourcesResult {
-            resources: vec![resource],
-            next_cursor: None,
-            meta: None,
-        })
+        Ok(ListResourcesResult::with_all_items(vec![resource]))
     }
 
     async fn read_resource(
         &self,
         request: ReadResourceRequestParams,
         _context: RequestContext<RoleServer>,
-    ) -> Result<ReadResourceResult, McpError> {
+    ) -> Result<ReadResourceResponse, McpError> {
         if request.uri != TOPOLOGY_URI {
             return Err(McpError::resource_not_found(
                 format!("unknown resource: {}", request.uri),
@@ -212,10 +209,7 @@ impl ServerHandler for McpServer {
             let _ = writeln!(text, "- {name} (id: {id})", name = app.name, id = app.id);
         }
 
-        Ok(ReadResourceResult::new(vec![ResourceContents::text(
-            text,
-            TOPOLOGY_URI,
-        )]))
+        Ok(ReadResourceResult::new(vec![ResourceContents::text(text, TOPOLOGY_URI)]).into())
     }
 }
 
