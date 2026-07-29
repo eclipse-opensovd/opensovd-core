@@ -460,8 +460,11 @@ mod tests {
 
     #[tokio::test]
     async fn list_areas_returns_json() -> TestResult {
-        let areas = serde_json::to_string(&opensovd_models::Items {
-            items: vec![entity("areas", "powertrain", "Powertrain")],
+        let areas = serde_json::to_string(&opensovd_models::Response {
+            data: opensovd_models::Items {
+                items: vec![entity("areas", "powertrain", "Powertrain")],
+            },
+            schema: Some(serde_json::json!({"type": "object"})),
         })?;
 
         let mut builder = mock_http_connector::Connector::builder();
@@ -482,6 +485,10 @@ mod tests {
         let text = serde_json::to_string(&structured)?;
         assert!(text.contains("Powertrain"), "expected area name");
         assert!(text.contains("powertrain"), "expected area id");
+        let schema = structured
+            .get("schema")
+            .expect("expected schema in tool output");
+        assert_eq!(schema["type"], "object");
 
         client.cancel().await?;
         Ok(())
@@ -489,8 +496,11 @@ mod tests {
 
     #[tokio::test]
     async fn list_apps_returns_json() -> TestResult {
-        let apps = serde_json::to_string(&opensovd_models::Items {
-            items: vec![entity("apps", "diag_app", "Diagnostic App")],
+        let apps = serde_json::to_string(&opensovd_models::Response {
+            data: opensovd_models::Items {
+                items: vec![entity("apps", "diag_app", "Diagnostic App")],
+            },
+            schema: Some(serde_json::json!({"type": "object"})),
         })?;
 
         let mut builder = mock_http_connector::Connector::builder();
@@ -511,6 +521,10 @@ mod tests {
         let text = serde_json::to_string(&structured)?;
         assert!(text.contains("Diagnostic App"), "expected app name");
         assert!(text.contains("diag_app"), "expected app id");
+        let schema = structured
+            .get("schema")
+            .expect("expected schema in tool output");
+        assert_eq!(schema["type"], "object");
 
         client.cancel().await?;
         Ok(())
