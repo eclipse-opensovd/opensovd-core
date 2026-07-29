@@ -176,7 +176,7 @@ jobs:
         with:
           cache-shared-key: ci
       # Required for gitleaks hook
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7
         with:
           go-version: '1.25'
           cache: false
