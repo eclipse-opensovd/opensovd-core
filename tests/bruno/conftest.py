@@ -7,7 +7,8 @@ import shutil
 import subprocess
 
 import pytest
-from fixtures import LISTENING_PATTERN, default_binary_args, listening_url, spawn_process
+from fixtures import LISTENING_PATTERN, default_binary_args, listening_url
+from opensovd_e2e import spawn_process
 
 
 def pytest_collect_file(parent, file_path):
@@ -30,7 +31,12 @@ def pytest_runtest_setup(item):
         pytest.skip("bru CLI not installed")
 
     if not hasattr(item.config, "_bruno_process"):
-        proc = spawn_process(item.config, default_binary_args(item.config), LISTENING_PATTERN)
+        proc = spawn_process(
+            item.config,
+            default_binary_args(item.config),
+            LISTENING_PATTERN,
+            crate="opensovd-gateway",
+        )
         item.config._bruno_process = proc
         if proc.match is not None:
             item.config._gateway_base_url = listening_url(proc.match)
@@ -54,7 +60,8 @@ class BrunoItem(pytest.Item):
         self.add_marker(pytest.mark.bruno)
 
     def runtest(self):
-        if shutil.which("bru") is None:
+        bru = shutil.which("bru")
+        if bru is None:
             pytest.skip("bru CLI not installed")
 
         # Find bruno.json root
@@ -69,7 +76,7 @@ class BrunoItem(pytest.Item):
             raise RuntimeError("Gateway base URL not set -- gateway may have failed to start")
         result = subprocess.run(
             [
-                "bru",
+                bru,
                 "run",
                 str(self.path),
                 "--env",
@@ -80,6 +87,8 @@ class BrunoItem(pytest.Item):
             cwd=collection_root,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
         )
         if result.returncode != 0:
             raise BrunoTestException(result.stdout, result.stderr)

@@ -12,11 +12,10 @@ use rmcp::{
     RoleServer, ServerHandler, ServiceExt,
     handler::server::{router::prompt::PromptRouter, tool::ToolRouter},
     model::{
-        AnnotateAble, CallToolResult, ErrorData as McpError, GetPromptRequestParams,
-        GetPromptResult, Implementation, ListPromptsResult, ListResourcesResult,
-        PaginatedRequestParams, PromptMessage, PromptMessageRole, RawResource,
-        ReadResourceRequestParams, ReadResourceResult, ResourceContents, ServerCapabilities,
-        ServerInfo,
+        CallToolResult, ErrorData as McpError, GetPromptResult, Implementation,
+        ListResourcesResult, PaginatedRequestParams, PromptMessage, ReadResourceRequestParams,
+        ReadResourceResponse, ReadResourceResult, Resource, ResourceContents, Role,
+        ServerCapabilities, ServerInfo,
     },
     prompt, prompt_handler, prompt_router,
     service::RequestContext,
@@ -97,7 +96,7 @@ impl McpServer {
     )]
     async fn explore_topology(&self) -> GetPromptResult {
         GetPromptResult::new(vec![PromptMessage::new_text(
-            PromptMessageRole::User,
+            Role::User,
             "Read the sovd://topology resource, then:\n\
                  1. List components\n\
                  2. List areas\n\
@@ -136,30 +135,17 @@ impl ServerHandler for McpServer {
         _request: Option<PaginatedRequestParams>,
         _context: RequestContext<RoleServer>,
     ) -> Result<ListResourcesResult, McpError> {
-        let resource = RawResource {
-            uri: TOPOLOGY_URI.into(),
-            name: "Vehicle Topology".into(),
-            description: Some(
-                "Snapshot of the SOVD entity hierarchy: components, areas, and apps.".into(),
-            ),
-            mime_type: Some("text/plain".into()),
-            title: None,
-            size: None,
-            icons: None,
-            meta: None,
-        };
-        Ok(ListResourcesResult {
-            resources: vec![resource.no_annotation()],
-            next_cursor: None,
-            meta: None,
-        })
+        let resource = Resource::new(TOPOLOGY_URI, "Vehicle Topology")
+            .with_description("Snapshot of the SOVD entity hierarchy: components, areas, and apps.")
+            .with_mime_type("text/plain");
+        Ok(ListResourcesResult::with_all_items(vec![resource]))
     }
 
     async fn read_resource(
         &self,
         request: ReadResourceRequestParams,
         _context: RequestContext<RoleServer>,
-    ) -> Result<ReadResourceResult, McpError> {
+    ) -> Result<ReadResourceResponse, McpError> {
         if request.uri != TOPOLOGY_URI {
             return Err(McpError::resource_not_found(
                 format!("unknown resource: {}", request.uri),
@@ -223,10 +209,7 @@ impl ServerHandler for McpServer {
             let _ = writeln!(text, "- {name} (id: {id})", name = app.name, id = app.id);
         }
 
-        Ok(ReadResourceResult::new(vec![ResourceContents::text(
-            text,
-            TOPOLOGY_URI,
-        )]))
+        Ok(ReadResourceResult::new(vec![ResourceContents::text(text, TOPOLOGY_URI)]).into())
     }
 }
 
@@ -366,9 +349,7 @@ mod tests {
 
         let text = match &result.contents[0] {
             ResourceContents::TextResourceContents { text, .. } => text.as_str(),
-            ResourceContents::BlobResourceContents { .. } => {
-                panic!("expected text resource contents")
-            }
+            _ => panic!("expected text resource contents"),
         };
 
         assert!(text.contains("Engine ECU"), "expected component name");
@@ -408,11 +389,11 @@ mod tests {
 
         assert!(!result.messages.is_empty(), "expected at least one message");
         let msg = &result.messages[0];
-        assert_eq!(msg.role, PromptMessageRole::User);
+        assert_eq!(msg.role, Role::User);
         match &msg.content {
-            rmcp::model::PromptMessageContent::Text { text } => {
+            rmcp::model::ContentBlock::Text(c) => {
                 assert!(
-                    text.contains("topology"),
+                    c.text.contains("topology"),
                     "expected prompt to mention topology"
                 );
             }

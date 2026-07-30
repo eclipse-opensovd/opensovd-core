@@ -17,4 +17,7 @@ pub use client::{BuilderError, Client, ClientBuilder};
 pub use discovery::Discovery;
 pub use error::{Error, Result};
 pub use opensovd_models::Response;
+pub use opensovd_models::data::DataCategory;
 pub use opensovd_models::version::{SovdInfo, VendorInfo, VersionInfo};
+#[cfg(unix)]
+pub use unix::UnixConnector;

@@ -7,7 +7,8 @@ from typing import Self
 
 import httpx
 import pytest
-from fixtures import LISTENING_PATTERN, ProcessUnderTest, listening_url, spawn_process
+from fixtures import LISTENING_PATTERN, listening_url
+from opensovd_e2e import ProcessUnderTest, spawn_process
 
 
 class SovdClient:
@@ -109,7 +110,7 @@ def ready_banner():
 @pytest.fixture(scope="module")
 def gateway(
     request,
-    crate_bin,
+    crate_binary,
     binary_args,
     ready_banner,
 ):
@@ -117,7 +118,7 @@ def gateway(
         request.config,
         binary_args,
         ready_banner,
-        crate=crate_bin,
+        crate=crate_binary,
     )
     yield proc
     proc.close()

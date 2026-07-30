@@ -8,20 +8,20 @@ ready-banner plumbing of the generic harness is disabled.
 """
 
 import pytest
-from fixtures import spawn_process
+from opensovd_e2e import spawn_process
 
 
 @pytest.fixture(scope="module")
-def crate_bin() -> str:
+def crate_binary() -> str:
     return "opensovd-mcp"
 
 
 @pytest.fixture(scope="module")
-def mcp(request, crate_bin, binary_args):
+def mcp(request, crate_binary, binary_args):
     proc = spawn_process(
         request.config,
         binary_args,
-        crate=crate_bin,
+        crate=crate_binary,
     )
     yield proc
     proc.close()

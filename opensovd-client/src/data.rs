@@ -1,11 +1,13 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 Contributors to the Eclipse Foundation
 // SPDX-License-Identifier: Apache-2.0
 
+use std::borrow::Borrow;
+
 use opensovd_models::Response;
-use opensovd_models::data::{DataList, ReadResponse, WriteRequest};
+use opensovd_models::data::{DataCategory, DataList, ReadResponse, WriteRequest};
 use serde::Serialize;
 
-use crate::client::{Client, schema_query};
+use crate::client::{Client, encode, schema_query};
 use crate::error::Result;
 
 /// Request builder for listing data items on an entity.
@@ -13,6 +15,9 @@ pub struct ListDataRequest<'a> {
     pub(crate) client: &'a Client,
     pub(crate) path: String,
     pub(crate) schema: bool,
+    pub(crate) groups: Vec<String>,
+    pub(crate) categories: Vec<DataCategory>,
+    pub(crate) tags: Vec<String>,
 }
 
 impl ListDataRequest<'_> {
@@ -23,9 +28,59 @@ impl ListDataRequest<'_> {
         self
     }
 
+    /// Filter by data groups.
+    #[must_use]
+    pub fn groups<I, S>(mut self, groups: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        self.groups = groups.into_iter().map(|s| s.as_ref().to_owned()).collect();
+        self
+    }
+
+    /// Filter by data categories.
+    #[must_use]
+    pub fn categories<I, C>(mut self, categories: I) -> Self
+    where
+        I: IntoIterator<Item = C>,
+        C: Borrow<DataCategory>,
+    {
+        self.categories = categories.into_iter().map(|c| c.borrow().clone()).collect();
+        self
+    }
+
+    /// Filter by data tags.
+    #[must_use]
+    pub fn tags<I, S>(mut self, tags: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        self.tags = tags.into_iter().map(|s| s.as_ref().to_owned()).collect();
+        self
+    }
+
     /// Send the request.
     pub async fn send(&self) -> Result<Response<DataList>> {
-        self.client.get(&self.path, schema_query(self.schema)).await
+        let mut query: Vec<(String, String)> = Vec::new();
+        for g in &self.groups {
+            query.push(("groups".into(), encode(g)));
+        }
+        for c in &self.categories {
+            query.push(("categories".into(), encode(c.as_str())));
+        }
+        for t in &self.tags {
+            query.push(("tags".into(), encode(t)));
+        }
+        if let [(k, v)] = schema_query(self.schema) {
+            query.push((k.to_string(), v.to_string()));
+        }
+        let refs: Vec<(&str, &str)> = query
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.as_str()))
+            .collect();
+        self.client.get(&self.path, &refs).await
     }
 }
 

@@ -18,6 +18,9 @@
 
 set -euo pipefail
 
+# Stop Git Bash from rewriting the leading-slash -subj args into Windows paths.
+export MSYS_NO_PATHCONV=1
+
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUT="${1:-"$REPO_ROOT/gen/certs"}"
 
@@ -37,9 +40,10 @@ openssl req -newkey rsa:4096 -nodes \
     -subj "/CN=127.0.0.1/O=OpenSOVD"
 
 echo "==> Signing server cert with CA (adds SAN for 127.0.0.1 and localhost)..."
+printf "subjectAltName=IP:127.0.0.1,DNS:localhost\nsubjectKeyIdentifier=hash\nauthorityKeyIdentifier=keyid:always\n" >"$OUT/server.ext"
 openssl x509 -req -days 365 -in "$OUT/server.csr" -CA "$OUT/ca.crt" -CAkey "$OUT/ca.key" \
     -CAcreateserial -out "$OUT/server.crt" \
-    -extfile <(printf "subjectAltName=IP:127.0.0.1,DNS:localhost")
+    -extfile "$OUT/server.ext"
 
 echo "==> Generating client key and CSR..."
 openssl req -newkey rsa:4096 -nodes \
@@ -47,11 +51,12 @@ openssl req -newkey rsa:4096 -nodes \
     -subj "/CN=test-client/O=OpenSOVD"
 
 echo "==> Signing client cert with CA (adds clientAuth EKU required by rustls)..."
+printf "extendedKeyUsage=clientAuth\nbasicConstraints=CA:FALSE\nsubjectKeyIdentifier=hash\nauthorityKeyIdentifier=keyid:always\n" >"$OUT/client.ext"
 openssl x509 -req -days 365 -in "$OUT/client.csr" -CA "$OUT/ca.crt" -CAkey "$OUT/ca.key" \
     -CAcreateserial -out "$OUT/client.crt" \
-    -extfile <(printf "extendedKeyUsage=clientAuth\nbasicConstraints=CA:FALSE")
+    -extfile "$OUT/client.ext"
 
-rm -f "$OUT/server.csr" "$OUT/client.csr" "$OUT/ca.srl"
+rm -f "$OUT/server.csr" "$OUT/client.csr" "$OUT/server.ext" "$OUT/client.ext" "$OUT/ca.srl"
 
 echo ""
 echo "==> Generated certificates in $OUT:"

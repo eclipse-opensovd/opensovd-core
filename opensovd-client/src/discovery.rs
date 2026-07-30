@@ -80,6 +80,7 @@ impl Discovery {
             .0;
         Ok(Client {
             base_uri: advertised.parse()?,
+            timeout: self.inner.timeout,
             http: self.inner.http.clone(),
         })
     }

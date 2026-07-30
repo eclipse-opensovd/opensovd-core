@@ -4,6 +4,9 @@
 #![cfg(unix)]
 #![allow(clippy::unwrap_used)]
 
+use std::time::Duration;
+
+use tempfile::TempDir;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::UnixListener;
 
@@ -87,4 +90,80 @@ async fn connect_unix_not_found() {
         matches!(err, opensovd_client::Error::Service { .. }),
         "expected Error::Service, got: {err:?}"
     );
+}
+
+#[tokio::test]
+async fn builder_unix_socket_timeout_returns_typed_timeout_error() {
+    let dir = TempDir::new().unwrap();
+    let sock_path = dir.path().join("timeout.sock");
+
+    let listener = UnixListener::bind(&sock_path).unwrap();
+
+    tokio::spawn(async move {
+        let (_stream, _) = listener.accept().await.unwrap();
+        tokio::time::sleep(Duration::from_secs(2)).await;
+        std::future::pending::<()>().await;
+    });
+
+    let client = opensovd_client::Client::builder()
+        .base_uri("http://localhost/sovd/v1")
+        .unwrap()
+        .timeout(Duration::from_secs(1))
+        .unix_socket(&sock_path)
+        .build()
+        .unwrap();
+
+    let err = client.list_components().send().await.unwrap_err();
+
+    match err {
+        opensovd_client::Error::Timeout(duration) => {
+            assert_eq!(duration, Duration::from_secs(1));
+        }
+        other => panic!("expected Timeout error, got: {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn builder_can_use_exported_unix_connector() {
+    let dir = TempDir::new().unwrap();
+    let sock_path = dir.path().join("builder.sock");
+
+    let listener = UnixListener::bind(&sock_path).unwrap();
+
+    let body = r#"{"items":[]}"#;
+    tokio::spawn(async move {
+        serve_one(&listener, body).await;
+    });
+
+    let client = opensovd_client::Client::builder()
+        .base_uri("http://localhost/sovd/v1")
+        .unwrap()
+        .connector(opensovd_client::UnixConnector::new(&sock_path))
+        .build()
+        .unwrap();
+    let result = client.list_components().send().await.unwrap();
+    assert!(result.data.items.is_empty());
+}
+
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn builder_unix_socket_abstract() {
+    let name = format!("opensovd-builder-test-{}", std::process::id());
+
+    let abstract_path = format!("\0{name}");
+    let listener = UnixListener::bind(&abstract_path).unwrap();
+
+    let body = r#"{"items":[]}"#;
+    tokio::spawn(async move {
+        serve_one(&listener, body).await;
+    });
+
+    let client = opensovd_client::Client::builder()
+        .base_uri("http://localhost/sovd/v1")
+        .unwrap()
+        .unix_socket_abstract(&name)
+        .build()
+        .unwrap();
+    let result = client.list_components().send().await.unwrap();
+    assert!(result.data.items.is_empty());
 }

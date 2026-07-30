@@ -22,6 +22,9 @@ impl App<'_> {
             client: self.client,
             path: format!("/apps/{}/data", self.id),
             schema: false,
+            groups: Vec::new(),
+            categories: Vec::new(),
+            tags: Vec::new(),
         }
     }
 

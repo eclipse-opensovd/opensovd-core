@@ -15,7 +15,7 @@ dependencies = [
 ]
 
 [dependency-groups]
-tools = ["prek>=0.4.3", "ruff>=0.15.18", "ty>=0.0.51"]
+tools = ["prek>=0.4.11", "ruff>=0.16.0", "ty>=0.0.64"]
 docs = ["sphinx>=9.1", "furo>=2025.12.19", "myst-parser>=5.1.0"]
 dev = [
     "pytest-html>=4.2.0",
@@ -24,7 +24,7 @@ dev = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["tests"]
+pythonpath = ["tests", "opensovd-e2e/src"]
 # importlib mode lets per-crate dirs (opensovd-gateway/cli/, opensovd-mcp/cli/)
 # share filenames like test_version.py without basename collisions.
 addopts = "--import-mode=importlib"
@@ -32,7 +32,7 @@ markers = [
     "conformance: Conformance tests (require bru CLI)",
     "schema: Tests that validate response schema",
     "bruno: Bruno API conformance tests",
-    "req: Requirement ID for traceability (e.g., @pytest.mark.req('SOVD-7.1.1'))",
+    # "req" marker is registered by the opensovd_e2e plugin.
 ]
 
 [tool.ruff]
@@ -60,4 +60,4 @@ select = [
 include = ["tests"]
 
 [tool.ty.environment]
-extra-paths = ["tests"]
+extra-paths = ["tests", "opensovd-e2e/src"]

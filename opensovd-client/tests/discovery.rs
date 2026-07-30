@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 #![allow(clippy::expect_used, clippy::unwrap_used)]
 
+use std::time::Duration;
+
 use mock_http_connector::Connector;
 use opensovd_client::{Client, SovdInfo, VendorInfo};
 use serde_json::json;
@@ -41,6 +43,45 @@ async fn select_reuses_transport() {
     // The selected client must reuse the same (mock) transport and hit the advertised base.
     let list = client.list_components().send().await.unwrap();
     assert!(list.data.items.is_empty());
+}
+
+#[tokio::test]
+async fn select_inherits_request_timeout() {
+    let mut b = Connector::builder();
+    b.expect()
+        .with_uri("http://localhost:7690/sovd/version-info")
+        .returning(
+            json!({"sovd_info": [{
+                "version": "1.1",
+                "base_uri": "http://localhost:7690/sovd/v1"
+            }]})
+            .to_string(),
+        )
+        .unwrap();
+    b.expect()
+        .with_uri("http://localhost:7690/sovd/v1/components")
+        .returning(|_| async {
+            tokio::time::sleep(Duration::from_secs(2)).await;
+            json!({"items": []}).to_string()
+        })
+        .unwrap();
+
+    let client = Client::builder()
+        .base_uri("http://localhost:7690/sovd")
+        .expect("valid URI")
+        .timeout(Duration::from_secs(1))
+        .connector(b.build())
+        .discovery()
+        .expect("valid discovery client")
+        .select(|s: &SovdInfo<serde_json::Value>| s.version == "1.1")
+        .await
+        .unwrap();
+
+    let err = client.list_components().send().await.unwrap_err();
+    assert!(
+        matches!(err, opensovd_client::Error::Timeout(d) if d == Duration::from_secs(1)),
+        "expected propagated Timeout(1s), got: {err:?}"
+    );
 }
 
 #[tokio::test]

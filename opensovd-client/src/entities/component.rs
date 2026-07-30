@@ -22,6 +22,9 @@ impl Component<'_> {
             client: self.client,
             path: format!("/components/{}/data", self.id),
             schema: false,
+            groups: Vec::new(),
+            categories: Vec::new(),
+            tags: Vec::new(),
         }
     }
 

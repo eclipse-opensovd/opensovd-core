@@ -7,7 +7,8 @@ import signal
 import sys
 
 import pytest
-from fixtures import LISTENING_PATTERN, default_binary_args, spawn_process
+from fixtures import LISTENING_PATTERN, default_binary_args
+from opensovd_e2e import spawn_process
 
 pytestmark = pytest.mark.skipif(
     sys.platform == "win32", reason="Unix signals not supported on Windows"
@@ -18,9 +19,11 @@ SHUTDOWN_SIGNALS = [(signal.SIGINT, "SIGINT"), (signal.SIGTERM, "SIGTERM")]
 
 
 @pytest.fixture
-def gateway(request):
+def gateway(request, crate_binary):
     """Function-scoped gateway for signal testing (will be terminated)."""
-    proc = spawn_process(request.config, default_binary_args(request.config), LISTENING_PATTERN)
+    proc = spawn_process(
+        request.config, default_binary_args(request.config), LISTENING_PATTERN, crate=crate_binary
+    )
     yield proc
     proc.close()
 
