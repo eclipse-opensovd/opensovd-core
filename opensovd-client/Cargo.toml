@@ -25,7 +25,7 @@ serde = { workspace = true, features = ["derive", "std"] }
 serde_json = { workspace = true, features = ["std"] }
 thiserror = { workspace = true }
 tower = { workspace = true, features = ["util"] }
-tokio = { workspace = true, features = ["sync"] }
+tokio = { workspace = true, features = ["sync", "time"] }
 
 [target.'cfg(unix)'.dependencies]
 tokio = { workspace = true, features = ["net"] }
@@ -33,9 +33,10 @@ tower-service = { workspace = true }
 
 [dev-dependencies]
 mock-http-connector = { workspace = true, features = ["hyper_1"] }
-tower = { workspace = true, features = ["timeout"] }
+tower = { workspace = true, features = ["timeout", "limit"] }
 tokio = { workspace = true, features = ["rt", "macros", "time", "net", "io-util"] }
 serde_json = { workspace = true, features = ["std"] }
+tempfile = { workspace = true }
 
 [lints]
 workspace = true

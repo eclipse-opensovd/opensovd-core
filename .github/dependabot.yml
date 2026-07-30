@@ -11,6 +11,9 @@ updates:
       actions:
         patterns:
           - "*"
+        update-types:
+          - minor
+          - patch
     commit-message:
       prefix: "chore(deps)"
 
@@ -22,6 +25,9 @@ updates:
       uv:
         patterns:
           - "*"
+        update-types:
+          - minor
+          - patch
     commit-message:
       prefix: "chore(deps)"
 
@@ -33,6 +39,9 @@ updates:
       cargo:
         patterns:
           - "*"
+        update-types:
+          - minor
+          - patch
     commit-message:
       prefix: "chore(deps)"
 
@@ -44,6 +53,9 @@ updates:
       docker:
         patterns:
           - "*"
+        update-types:
+          - minor
+          - patch
     commit-message:
       prefix: "chore(deps)"
 
@@ -55,5 +67,8 @@ updates:
       pre-commit:
         patterns:
           - "*"
+        update-types:
+          - minor
+          - patch
     commit-message:
       prefix: "chore(deps)"

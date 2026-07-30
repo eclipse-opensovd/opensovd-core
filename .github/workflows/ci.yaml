@@ -101,7 +101,7 @@ jobs:
         run: uv run --locked pytest opensovd-e2e/tests
 
       - if: contains(matrix.tests, 'pytest')
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: '22'
       - if: contains(matrix.tests, 'pytest')
@@ -155,27 +155,12 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: read
-      security-events: write
     steps:
       - uses: actions/checkout@v7
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-deny@${{ env.CARGO_DENY_VERSION }}
-
-      - name: Check advisories (SARIF)
-        if: needs.prepare.outputs.release == 'nightly' || needs.prepare.outputs.release == 'latest'
-        run: cargo deny --format sarif check advisories > advisories.sarif || true
-
-      - name: Upload SARIF
-        if: (needs.prepare.outputs.release == 'nightly' || needs.prepare.outputs.release == 'latest') && github.repository_owner == 'eclipse-opensovd'
-        uses: github/codeql-action/upload-sarif@v4
-        with:
-          sarif_file: advisories.sarif
-          category: cargo-deny-advisories
-
-      - name: Check advisories
-        if: needs.prepare.outputs.release != 'nightly' && needs.prepare.outputs.release != 'latest'
-        run: cargo deny check advisories
+      - run: cargo deny check advisories
 
   lint:
     needs: prepare
@@ -191,7 +176,7 @@ jobs:
         with:
           cache-shared-key: ci
       # Required for gitleaks hook
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7
         with:
           go-version: '1.25'
           cache: false
@@ -243,7 +228,7 @@ jobs:
         with:
           tool: cargo-llvm-cov@${{ env.CARGO_LLVM_COV_VERSION }}
       - uses: astral-sh/setup-uv@v7
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
       - run: npm install -g @usebruno/cli

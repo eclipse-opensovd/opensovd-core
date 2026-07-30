@@ -1,0 +1,51 @@
+@startuml
+' SPDX-FileCopyrightText: Copyright (c) 2026 Contributors to the Eclipse Foundation
+' SPDX-License-Identifier: Apache-2.0
+
+title OpenSOVD Service Discovery Architecture
+
+skinparam componentStyle rectangle
+
+actor "Infotainment /\nexternal client" as Client
+component "OpenSOVD Gateway" as Gateway
+database "OpenSOVD topology" as Topology
+
+package "opensovd-providers library" {
+  interface "ServiceDiscovery\nstart transport-specific discovery" as ServiceDiscovery
+  interface "ServiceDiscoverySession\nlifecycle + shutdown" as Session
+  interface "DiscoveryProvider\nstream of topology changes" as Provider
+
+  ServiceDiscovery --> Session : start()
+  Session --> Provider : discovery_provider()
+}
+
+package "Default OpenSOVD implementation" {
+  component "MdnsServiceDiscovery" as MdnsDiscovery
+  component "MdnsServiceDiscoverySession" as MdnsSession
+  component "MdnsWrapper /\nmdns-sd daemon" as MdnsDaemon
+  component "MdnsDiscoveryProvider" as MdnsProvider
+
+  MdnsDiscovery --> MdnsSession
+  MdnsSession --> MdnsDaemon
+  MdnsSession --> MdnsProvider
+}
+
+package "Possible s-core implementations" {
+  component "IpcServiceDiscovery" as IPC
+  component "DbusServiceDiscovery" as DBus
+  component "CustomServiceDiscovery" as Custom
+}
+
+Client --> Gateway : HTTP SOVD API
+Gateway --> Topology
+Gateway --> Session : uses
+Provider --> Topology : services appear/disappear
+
+MdnsDiscovery ..|> ServiceDiscovery : implements
+MdnsSession ..|> Session : implements
+MdnsProvider ..|> Provider : implements
+
+IPC ..|> ServiceDiscovery : implements
+DBus ..|> ServiceDiscovery : implements
+Custom ..|> ServiceDiscovery : implements
+@enduml

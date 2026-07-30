@@ -27,7 +27,7 @@ libcli = { path = "opensovd-cli/lib" }
 
 anyhow = { version = "1", default-features = false, features = ["std"] }
 async-trait = { version = "0.1", default-features = false }
-base64 = { version = "0.22", default-features = false, features = ["std"] }
+base64 = { version = "0.23", default-features = false, features = ["std"] }
 axum = { version = "0.8", default-features = false }
 axum-extra = { version = "0.12", default-features = false }
 dashmap = { version = "6", default-features = false }
@@ -38,7 +38,7 @@ criterion = { version = "0.8", default-features = false }
 futures = { version = "0.3", default-features = false }
 futures-core = { version = "0.3", default-features = false }
 indexmap = { version = "2", default-features = false, features = ["std"] }
-jsonwebtoken = { version = "10", default-features = false, features = ["aws_lc_rs", "use_pem"] }
+jsonwebtoken = { version = "11", default-features = false, features = ["aws_lc_rs", "use_pem"] }
 http = { version = "1", default-features = false, features = ["std"] }
 http-body = { version = "1", default-features = false }
 http-body-util = { version = "0.1", default-features = false }
@@ -47,7 +47,7 @@ hyper-util = { version = "0.1", default-features = false }
 libc = { version = "0.2", default-features = false }
 percent-encoding = { version = "2", default-features = false }
 pin-project = { version = "1", default-features = false }
-regorus = { version = "0.10", default-features = false, features = ["arc", "glob"] }
+regorus = { version = "0.11", default-features = false, features = ["arc", "glob"] }
 schemars = { version = "1", default-features = false }
 sysinfo = { version = "0.39", default-features = false, features = ["system"] }
 sd-notify = { version = "0.5", default-features = false }
@@ -64,8 +64,9 @@ tracing = { version = "0.1", default-features = false }
 tracing-subscriber = { version = "0.3", default-features = false }
 mock-http-connector = { version = "0.5", default-features = false }
 aws-lc-rs = { version = "1", default-features = false, features = ["aws-lc-sys"] }
+mdns-sd = { version = "0.12" }
 rand = { version = "0.10.1", default-features = false }
-rmcp = { version = "2.0.0" }
+rmcp = { version = "3.0.0" }
 rustls = { version = "0.23", default-features = false, features = ["aws-lc-rs", "tls12"] }
 rustls-pki-types = { version = "1", default-features = false, features = ["std"] }
 tokio-rustls = { version = "0.26", default-features = false }

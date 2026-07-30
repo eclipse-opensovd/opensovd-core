@@ -4,3 +4,6 @@
 #![cfg_attr(all(test, coverage_nightly), feature(coverage_attribute))]
 
 pub mod data;
+#[cfg(feature = "mdns")]
+pub mod mdns;
+pub mod service_discovery;

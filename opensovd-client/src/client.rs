@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 Contributors to the Eclipse Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use bytes::Bytes;
 use http_body::Body;
@@ -14,7 +14,7 @@ use serde::{Serialize, de::DeserializeOwned};
 use thiserror::Error;
 use tokio::sync::OnceCell;
 use tower::{
-    Layer, Service,
+    Layer, Service, ServiceExt,
     layer::util::{Identity, Stack},
     util::{BoxCloneSyncService, MapErrLayer, MapResponseLayer},
 };
@@ -23,6 +23,8 @@ use crate::discovery::Discovery;
 use crate::entities::{App, Area, Component};
 use crate::error::{Error, Result};
 use crate::list::ListEntitiesRequest;
+#[cfg(unix)]
+use crate::unix::UnixConnector;
 
 /// Boxed error type for HTTP service flexibility with layers.
 pub(crate) type BoxError = Box<dyn std::error::Error + Send + Sync>;
@@ -49,6 +51,7 @@ pub enum BuilderError {
 #[must_use]
 pub struct ClientBuilder<Conn = HttpConnector, Layers = Identity> {
     base_uri: Option<http::Uri>,
+    timeout: Option<Duration>,
     connector: Conn,
     layer: Layers,
 }
@@ -57,6 +60,7 @@ impl ClientBuilder<HttpConnector, Identity> {
     fn new() -> Self {
         Self {
             base_uri: None,
+            timeout: None,
             connector: HttpConnector::new(),
             layer: Identity::new(),
         }
@@ -85,9 +89,16 @@ impl<Conn, Layers> ClientBuilder<Conn, Layers> {
     pub fn connector<NewConn>(self, connector: NewConn) -> ClientBuilder<NewConn, Layers> {
         ClientBuilder {
             base_uri: self.base_uri,
+            timeout: self.timeout,
             connector,
             layer: self.layer,
         }
+    }
+
+    /// Set a total per-request timeout covering send and full response body collection.
+    pub fn timeout(mut self, duration: Duration) -> Self {
+        self.timeout = Some(duration);
+        self
     }
 
     /// Add a Tower layer to the HTTP client stack.
@@ -96,6 +107,7 @@ impl<Conn, Layers> ClientBuilder<Conn, Layers> {
     pub fn layer<NewLayer>(self, layer: NewLayer) -> ClientBuilder<Conn, Stack<NewLayer, Layers>> {
         ClientBuilder {
             base_uri: self.base_uri,
+            timeout: self.timeout,
             connector: self.connector,
             layer: Stack::new(layer, self.layer),
         }
@@ -132,6 +144,7 @@ impl<Conn, Layers> ClientBuilder<Conn, Layers> {
         );
         Ok(Client {
             base_uri,
+            timeout: self.timeout,
             http: BoxCloneSyncService::new(service),
         })
     }
@@ -167,10 +180,39 @@ impl<Conn, Layers> ClientBuilder<Conn, Layers> {
     }
 }
 
+#[cfg(unix)]
+impl<Conn, Layers> ClientBuilder<Conn, Layers> {
+    /// Route requests over a Unix domain socket (filesystem path).
+    ///
+    /// The eventual base URI should include the path prefix,
+    /// e.g. `http://localhost/sovd/v1`. The host is ignored;
+    /// all requests are routed to the socket at `path`.
+    pub fn unix_socket(
+        self,
+        path: impl AsRef<std::path::Path>,
+    ) -> ClientBuilder<UnixConnector, Layers> {
+        self.connector(UnixConnector::new(path))
+    }
+
+    /// Route requests over a Linux abstract Unix socket.
+    ///
+    /// `name` is the abstract socket name (without a leading null byte).
+    /// The eventual base URI should include the path prefix,
+    /// e.g. `http://localhost/sovd/v1`.
+    #[cfg(target_os = "linux")]
+    pub fn unix_socket_abstract(
+        self,
+        name: impl AsRef<[u8]>,
+    ) -> ClientBuilder<UnixConnector, Layers> {
+        self.connector(UnixConnector::abstract_name(name))
+    }
+}
+
 /// SOVD REST client with a type-erased HTTP transport.
 #[derive(Clone)]
 pub struct Client {
     pub(crate) base_uri: http::Uri,
+    pub(crate) timeout: Option<Duration>,
     pub(crate) http: HttpService,
 }
 
@@ -282,24 +324,34 @@ impl Client {
     ///
     /// Returns an [`Error::ApiError`] if the server responds with a non-success status.
     pub(crate) async fn request(&self, req: http::Request<Full<Bytes>>) -> Result<Bytes> {
-        let resp = self
-            .http
-            .clone()
-            .call(req)
-            .await
-            .map_err(|e| Error::Service { source: e })?;
-        let status = resp.status();
-        let body = resp
-            .into_body()
-            .collect()
-            .await
-            .map_err(|e| Error::Service { source: e })?
-            .to_bytes();
-        if !status.is_success() {
-            let error = serde_json::from_slice(&body).ok();
-            return Err(Error::ApiError { status, error });
+        let request = async {
+            let resp = self
+                .http
+                .clone()
+                .oneshot(req)
+                .await
+                .map_err(|e| Error::Service { source: e })?;
+            let status = resp.status();
+            let body = resp
+                .into_body()
+                .collect()
+                .await
+                .map_err(|e| Error::Service { source: e })?
+                .to_bytes();
+            if !status.is_success() {
+                let error = serde_json::from_slice(&body).ok();
+                return Err(Error::ApiError { status, error });
+            }
+            Ok(body)
+        };
+
+        if let Some(timeout) = self.timeout {
+            tokio::time::timeout(timeout, request)
+                .await
+                .map_err(|_| Error::Timeout(timeout))?
+        } else {
+            request.await
         }
-        Ok(body)
     }
 }
 
@@ -318,8 +370,7 @@ impl Client {
         uri: &str,
         path: impl AsRef<std::path::Path>,
     ) -> std::result::Result<Self, BuilderError> {
-        let connector = crate::unix::UnixConnector::new(path);
-        Self::builder().base_uri(uri)?.connector(connector).build()
+        Self::builder().base_uri(uri)?.unix_socket(path).build()
     }
 
     /// Connect to an SOVD server over a Linux abstract Unix socket.
@@ -336,8 +387,10 @@ impl Client {
         uri: &str,
         name: impl AsRef<[u8]>,
     ) -> std::result::Result<Self, BuilderError> {
-        let connector = crate::unix::UnixConnector::abstract_name(name);
-        Self::builder().base_uri(uri)?.connector(connector).build()
+        Self::builder()
+            .base_uri(uri)?
+            .unix_socket_abstract(name)
+            .build()
     }
 }
 

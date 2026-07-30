@@ -20,7 +20,6 @@ path = "systemd/systemd.rs"
 name = "auth"
 path = "auth/auth.rs"
 
-
 [[example]]
 name = "mtls"
 path = "mtls/mtls.rs"

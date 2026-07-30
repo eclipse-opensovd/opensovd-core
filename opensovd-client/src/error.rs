@@ -36,6 +36,10 @@ pub enum Error {
         source: Box<dyn std::error::Error + Send + Sync>,
     },
 
+    /// Request timed out before receiving a full response.
+    #[error("request timed out after {0:?}")]
+    Timeout(std::time::Duration),
+
     /// JSON serialization/deserialization error.
     #[error("json error: {0}")]
     Json(#[from] serde_json::Error),

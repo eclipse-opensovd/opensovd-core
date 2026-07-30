@@ -12,15 +12,22 @@ repository.workspace = true
 keywords.workspace = true
 categories.workspace = true
 
+[features]
+mdns = ["dep:futures-core", "dep:mdns-sd", "dep:tokio", "dep:tracing", "tokio/rt"]
+
 [dependencies]
 opensovd-core = { workspace = true }
 opensovd-models = { workspace = true }
 async-trait = { workspace = true }
+futures-core = { workspace = true, optional = true }
 indexmap = { workspace = true }
+mdns-sd = { workspace = true, optional = true }
+tracing = { workspace = true, optional = true }
 schemars = { workspace = true, features = ["derive", "std"] }
 serde = { workspace = true }
 serde_json = { workspace = true, features = ["std"] }
 thiserror = { workspace = true }
+tokio = { workspace = true, features = ["sync"], optional = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt"] }

@@ -26,13 +26,13 @@ enum SocketAddr {
 /// Implements [`tower_service::Service<Uri>`] so it can be used with
 /// `hyper_util::client::legacy::Client`.
 #[derive(Debug, Clone)]
-pub(crate) struct UnixConnector {
+pub struct UnixConnector {
     addr: SocketAddr,
 }
 
 impl UnixConnector {
     /// Create a connector for a filesystem Unix socket path.
-    pub(crate) fn new(path: impl AsRef<Path>) -> Self {
+    pub fn new(path: impl AsRef<Path>) -> Self {
         Self {
             addr: SocketAddr::Path(path.as_ref().to_owned()),
         }
@@ -43,7 +43,7 @@ impl UnixConnector {
     /// The `name` should be the abstract socket name **without** a leading null
     /// byte - the connector prepends it automatically.
     #[cfg(target_os = "linux")]
-    pub(crate) fn abstract_name(name: impl AsRef<[u8]>) -> Self {
+    pub fn abstract_name(name: impl AsRef<[u8]>) -> Self {
         let mut addr = vec![0u8];
         addr.extend_from_slice(name.as_ref());
         Self {
