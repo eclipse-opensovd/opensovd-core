@@ -68,7 +68,9 @@ impl ServiceDiscoverySession for MdnsServiceDiscoverySession {
     type Error = MdnsError;
 
     fn discovery_provider(&self) -> Box<dyn DiscoveryProvider> {
-        Box::new(MdnsDiscoveryProvider::from_wrapper(Arc::clone(&self.wrapper)))
+        Box::new(MdnsDiscoveryProvider::from_wrapper(Arc::clone(
+            &self.wrapper,
+        )))
     }
 
     fn shutdown(&self) -> Result<(), Self::Error> {
