@@ -2,9 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use std::net::{IpAddr, SocketAddr};
-use std::sync::Arc;
 
-use opensovd_providers::mdns::{MdnsDiscoveryProvider, MdnsError, MdnsWrapper};
+use opensovd_providers::{
+    mdns::{MdnsError, MdnsServiceDiscovery, MdnsServiceDiscoverySession},
+    service_discovery::ServiceDiscovery,
+};
 
 use crate::cli::MdnsArgs;
 
@@ -26,24 +28,23 @@ fn advertised_addr(args: &MdnsArgs, listener_addr: Option<SocketAddr>) -> Option
 }
 
 /*
-    Creates the mDNS daemon, advertises the gateway URL, and returns the
-    wrapper (kept alive for the process lifetime) plus the private-side discovery provider.
+    Starts the default mDNS service discovery mechanism, advertises the gateway
+    URL, and returns the session kept alive for the process lifetime.
 */
 pub fn setup(
     args: &MdnsArgs,
     listener_addr: Option<SocketAddr>,
     scheme: &str,
     base_path: &str,
-) -> Result<(Arc<MdnsWrapper>, MdnsDiscoveryProvider), MdnsError> {
-    let wrapper = Arc::new(MdnsWrapper::new()?);
+) -> Result<MdnsServiceDiscoverySession, MdnsError> {
+    let session = MdnsServiceDiscovery.start()?;
 
     let Some(advertised_addr) = advertised_addr(args, listener_addr) else {
         tracing::warn!(
             target: TARGET,
             "Cannot advertise mDNS for a non-TCP, unspecified, or loopback listener. mDNS discovery will still run."
         );
-        let provider = MdnsDiscoveryProvider::from_wrapper(Arc::clone(&wrapper));
-        return Ok((wrapper, provider));
+        return Ok(session);
     };
 
     let identification = args.identification.as_deref().unwrap_or(args.name.as_str());
@@ -54,7 +55,7 @@ pub fn setup(
         base_path,
     );
 
-    if let Err(e) = wrapper.register(
+    if let Err(e) = session.register(
         &args.name,
         identification,
         &access_url,
@@ -68,8 +69,7 @@ pub fn setup(
         );
     }
 
-    let provider = MdnsDiscoveryProvider::from_wrapper(Arc::clone(&wrapper));
-    Ok((wrapper, provider))
+    Ok(session)
 }
 
 #[cfg(test)]

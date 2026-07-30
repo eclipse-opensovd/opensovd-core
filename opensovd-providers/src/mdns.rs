@@ -15,6 +15,8 @@ use opensovd_core::{
 };
 use tokio::sync::mpsc;
 
+use crate::service_discovery::{ServiceDiscovery, ServiceDiscoverySession};
+
 type DiscoveryResult<T> = std::result::Result<T, DiscoveryError>;
 
 // mDNS service type used by SOVD gateways and private-side SOVD services.
@@ -40,6 +42,57 @@ pub enum MdnsError {
 pub struct MdnsWrapper {
     daemon: ServiceDaemon,
     local_fullnames: Mutex<HashSet<String>>,
+}
+
+/// The built-in mDNS service discovery mechanism.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct MdnsServiceDiscovery;
+
+/// A running mDNS service discovery mechanism.
+pub struct MdnsServiceDiscoverySession {
+    wrapper: Arc<MdnsWrapper>,
+}
+
+impl ServiceDiscovery for MdnsServiceDiscovery {
+    type Session = MdnsServiceDiscoverySession;
+    type Error = MdnsError;
+
+    fn start(&self) -> Result<Self::Session, Self::Error> {
+        Ok(MdnsServiceDiscoverySession {
+            wrapper: Arc::new(MdnsWrapper::new()?),
+        })
+    }
+}
+
+impl ServiceDiscoverySession for MdnsServiceDiscoverySession {
+    type Error = MdnsError;
+
+    fn discovery_provider(&self) -> Box<dyn DiscoveryProvider> {
+        Box::new(MdnsDiscoveryProvider::from_wrapper(Arc::clone(&self.wrapper)))
+    }
+
+    fn shutdown(&self) -> Result<(), Self::Error> {
+        self.wrapper.shutdown()
+    }
+}
+
+impl MdnsServiceDiscoverySession {
+    /// Advertises this process as a SOVD mDNS service.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the mDNS daemon rejects the service registration.
+    pub fn register(
+        &self,
+        instance_name: &str,
+        identification: &str,
+        access_url: &str,
+        host_ip: IpAddr,
+        port: u16,
+    ) -> Result<(), MdnsError> {
+        self.wrapper
+            .register(instance_name, identification, access_url, host_ip, port)
+    }
 }
 
 impl MdnsWrapper {
@@ -384,11 +437,11 @@ mod tests {
     }
 
     #[test]
-    fn shutdown_stops_browse_receiver() {
-        let wrapper = MdnsWrapper::new().unwrap();
-        let receiver = wrapper.browse().unwrap();
+    fn service_discovery_session_shutdown_stops_browse_receiver() {
+        let session = MdnsServiceDiscovery.start().unwrap();
+        let receiver = session.wrapper.browse().unwrap();
 
-        wrapper.shutdown().unwrap();
+        session.shutdown().unwrap();
 
         let deadline = Instant::now() + Duration::from_secs(1);
         while !receiver.is_disconnected() {

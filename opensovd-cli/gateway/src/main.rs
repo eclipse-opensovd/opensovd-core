@@ -11,8 +11,6 @@ mod serve_dir;
 mod mdns;
 
 use std::process::ExitCode;
-#[cfg(feature = "mdns")]
-use std::sync::Arc;
 
 use anyhow::Context;
 use base64::Engine;
@@ -21,6 +19,8 @@ use opensovd_core::Topology;
 use opensovd_extra::{JwtAlgorithm, JwtAuthenticator, RegorusAuthorizer};
 #[cfg(feature = "mock")]
 use opensovd_mocks::create_mock_topology;
+#[cfg(feature = "mdns")]
+use opensovd_providers::service_discovery::ServiceDiscoverySession;
 use opensovd_server::{AllowAll, Authenticator, Authorizer, NoAuth, Server};
 use serde::Serialize;
 
@@ -176,7 +176,7 @@ where
     }
 
     #[cfg(feature = "mdns")]
-    let (builder, mdns_wrapper) = configure_mdns(
+    let (builder, discovery_session) = configure_mdns(
         builder,
         &cli.mdns,
         &uri,
@@ -196,8 +196,8 @@ where
     let serve_result = server.serve().await;
 
     #[cfg(feature = "mdns")]
-    if let Some(wrapper) = mdns_wrapper
-        && let Err(e) = wrapper.shutdown()
+    if let Some(session) = discovery_session
+        && let Err(e) = session.shutdown()
     {
         tracing::warn!(target: TARGET, error = %e, "Failed to shut down mDNS");
     }
@@ -247,7 +247,7 @@ fn configure_mdns<Vendor, Authn, Authz, Layer>(
     tls_enabled: bool,
 ) -> (
     opensovd_server::ServerBuilder<Vendor, Authn, Authz, Layer>,
-    Option<Arc<opensovd_providers::mdns::MdnsWrapper>>,
+    Option<opensovd_providers::mdns::MdnsServiceDiscoverySession>,
 ) {
     if !mdns_args.enabled {
         return (builder, None);
@@ -260,10 +260,10 @@ fn configure_mdns<Vendor, Authn, Authz, Layer>(
     };
 
     match mdns::setup(mdns_args, listener_addr, mdns_scheme, base_uri) {
-        Ok((wrapper, provider)) => {
+        Ok(session) => {
             tracing::info!(target: TARGET, "mDNS enabled");
-            builder = builder.discovery(Box::new(provider));
-            (builder, Some(wrapper))
+            builder = builder.discovery(session.discovery_provider());
+            (builder, Some(session))
         }
         Err(e) => {
             tracing::error!(target: TARGET, error = %e, "Failed to start mDNS");

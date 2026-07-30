@@ -1,6 +1,7 @@
-# mDNS Integration Design
+# Service Discovery Design
 
-This document describes how mDNS is intended to fit into the OpenSOVD gateway architecture.
+This document describes the service discovery library delivered by OpenSOVD and
+its default mDNS implementation.
 
 ## Goal
 
@@ -20,7 +21,30 @@ Private HPC / ECU / service
 
 The public client should call the gateway. It should not need direct network access to private HPC addresses.
 
-## Roles
+## Service Discovery Library
+
+`opensovd-providers` exposes a transport-agnostic service discovery lifecycle
+for integrating the gateway with different platform mechanisms:
+
+| Type | Responsibility |
+|------|----------------|
+| `ServiceDiscovery` | Starts a transport-specific discovery mechanism |
+| `ServiceDiscoverySession` | Owns the running transport, supplies a `DiscoveryProvider`, and shuts it down |
+| `DiscoveryProvider` | Produces topology changes for services that appear or disappear |
+
+The contract does not prescribe the transport. An integrating project can
+implement `ServiceDiscovery` for mDNS, IPC, D-Bus, or another platform-specific
+mechanism. Each implementation converts its native events into the existing
+`DiscoveryProvider` topology stream.
+
+OpenSOVD uses `MdnsServiceDiscovery` as its default implementation. It is based
+on `mdns-sd` and provides both private-side service discovery and the mDNS
+operations required by the reference gateway.
+
+The architecture is shown in
+[service_discovery_architecture.puml](service_discovery_architecture.puml).
+
+## mDNS Roles
 
 ### Gateway Advertisement
 
@@ -60,16 +84,25 @@ Discovered private services are converted into topology components so the gatewa
 
 The mDNS provider filters out services registered by the same process to avoid adding the gateway as its own discovered component.
 
-## Current Implementation
+## Default Implementation
 
-The current implementation has two pieces:
+The default mDNS implementation has two pieces:
 
 | Location | Responsibility |
 |----------|----------------|
 | `opensovd-cli/gateway/src/mdns.rs` | Gateway-specific mDNS setup: choose advertised host, scheme, port, and base URL |
-| `opensovd-providers/src/mdns.rs` | Shared mDNS wrapper and discovery provider using `mdns-sd` |
+| `opensovd-providers/src/service_discovery.rs` | Transport-agnostic service discovery lifecycle traits |
+| `opensovd-providers/src/mdns.rs` | `MdnsServiceDiscovery`, mDNS wrapper, and discovery provider using `mdns-sd` |
 
-The gateway owns one `MdnsWrapper` for the process. It registers the gateway service and creates an `MdnsDiscoveryProvider` that shares the same wrapper. The wrapper stays alive for the lifetime of the server so the mDNS daemon remains active.
+The gateway starts `MdnsServiceDiscovery`, retains its
+`MdnsServiceDiscoverySession` for the server lifetime, and obtains an
+`MdnsDiscoveryProvider` through `ServiceDiscoverySession`. The session owns one
+`MdnsWrapper`, so registration and browsing share the same mDNS daemon.
+
+Gateway advertising is intentionally separate from generic discovery. mDNS can
+advertise the public gateway endpoint, while an IPC or D-Bus implementation may
+only discover private services. Alternative discovery mechanisms therefore do
+not need to implement an mDNS-style network advertisement.
 
 ## What mDNS Does Not Do Yet
 
