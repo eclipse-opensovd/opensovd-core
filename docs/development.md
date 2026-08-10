@@ -23,20 +23,30 @@ The repository includes a [Dev Container](.devcontainer/devcontainer.json) confi
 
 The container includes:
 
-- Python 3.14, Rust toolchain, and uv (via devenv)
+- Python, Rust toolchain, and uv (versions per [devcontainer.json](../.devcontainer/devcontainer.json))
 - Pre-configured VS Code extensions (rust-analyzer, ruff, gitlens, errorlens, etc.)
 - Docker-in-Docker and GitHub CLI
 - Port 7690 forwarded for the gateway
 
-## Option 2: devenv (local)
+## Option 2: Nix flake (local)
 
-Use [devenv](https://devenv.sh/) for a reproducible local environment.
+Use the [Nix flake](../flake.nix) for a reproducible local environment. It requires
+[Nix](https://nixos.org/download/) with the `nix-command` and `flakes`
+[experimental features](https://nixos.org/manual/nix/stable/command-ref/conf-file#conf-experimental-features) enabled.
 
 ```bash
-devenv shell
+nix develop
 ```
 
-Or with direnv (auto-activates when entering the directory):
+The Rust toolchain is pinned via `rust-toolchain.toml` (the single source of truth shared
+with `cargo`/`rustup`); changing it also requires updating the toolchain `sha256` in
+[`flake.nix`](../flake.nix); the comment there explains how. Python, uv, and the
+supporting CLI tools are provided by the flake. Run `uv sync` after entering the shell
+(and after `uv.lock` changes) to set up the Python integration-test environment.
+
+Or with [direnv](https://direnv.net/) (auto-activates when entering the directory).
+Install [nix-direnv](https://github.com/nix-community/nix-direnv) too, since it caches the
+environment between entries and protects it from garbage collection:
 
 ```bash
 direnv allow
