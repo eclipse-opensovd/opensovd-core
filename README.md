@@ -52,11 +52,26 @@ curl -s http://127.0.0.1:7690/sovd/version-info | jq
 # Build
 cargo build
 
+# Build through Bazel
+bazel build //:workspace
+
 # Run the gateway with mock data
 cargo run -p opensovd-gateway -- --mock
 ```
 
 For testing instructions, see the [Testing guide](docs/testing.md).
+
+The Bazel workspace uses `rules_rust` plus `crate_universe` to build the Rust packages as native Bazel targets. The root package keeps stable entrypoints such as `//:opensovd-core`, `//:opensovd-gateway`, and `//:tests`, while package-local targets live under their owning directories.
+
+Use Bazel 8.3.0 directly or through Bazelisk so the workspace stays on the pinned version from `.bazelversion`.
+
+For the Bazel-specific repository notes and instructions for adding new example targets, see [README.bazel.md](README.bazel.md).
+
+When Cargo dependencies change, repin crate-universe with:
+
+```bash
+CARGO_BAZEL_REPIN=1 bazel sync --only=crate_index
+```
 
 ## Examples
 
