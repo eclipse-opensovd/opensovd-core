@@ -1,11 +1,10 @@
-load("@crate_index//:defs.bzl", "aliases", "all_crate_deps")
-load("@rules_rust//rust:defs.bzl", "rust_binary")
+load("//bazel:rust_crate.bzl", "workspace_rust_binary")
 
 package(default_visibility = ["//visibility:public"])
 
 exports_files(["Cargo.toml"])
 
-COMMON_DEPS = all_crate_deps(normal = True) + [
+COMMON_DEPS = [
     "//opensovd-cli/lib:libcli",
     "//opensovd-core:opensovd_core",
     "//opensovd-extra:opensovd_extra",
@@ -15,36 +14,56 @@ COMMON_DEPS = all_crate_deps(normal = True) + [
     "//opensovd-server:opensovd_server",
 ]
 
-rust_binary(
+workspace_rust_binary(
     name = "simple_example",
     srcs = ["simple/simple.rs"],
-    aliases = aliases(normal = True, proc_macro = True),
+    crate_deps = [
+        "jsonwebtoken",
+        "sd-notify",
+        "sysinfo",
+        "tokio",
+        "tracing",
+    ],
     crate_features = ["tls"],
     crate_name = "simple",
     crate_root = "simple/simple.rs",
-    edition = "2024",
-    proc_macro_deps = all_crate_deps(proc_macro = True),
+    proc_macro_crate_deps = [
+        "async-trait",
+    ],
     version = "0.1.1",
     deps = COMMON_DEPS,
 )
 
-rust_binary(
+workspace_rust_binary(
     name = "systemd_example",
     srcs = ["systemd/systemd.rs"],
-    aliases = aliases(normal = True, proc_macro = True),
+    crate_deps = [
+        "jsonwebtoken",
+        "sd-notify",
+        "sysinfo",
+        "tokio",
+        "tracing",
+    ],
     crate_features = ["tls"],
     crate_name = "systemd",
     crate_root = "systemd/systemd.rs",
-    edition = "2024",
-    proc_macro_deps = all_crate_deps(proc_macro = True),
+    proc_macro_crate_deps = [
+        "async-trait",
+    ],
     version = "0.1.1",
     deps = COMMON_DEPS,
 )
 
-rust_binary(
+workspace_rust_binary(
     name = "auth_example",
     srcs = ["auth/auth.rs"],
-    aliases = aliases(normal = True, proc_macro = True),
+    crate_deps = [
+        "jsonwebtoken",
+        "sd-notify",
+        "sysinfo",
+        "tokio",
+        "tracing",
+    ],
     compile_data = [
         "auth/sovd_authz.rego",
         "auth/sovd_data.json",
@@ -52,21 +71,29 @@ rust_binary(
     crate_features = ["tls"],
     crate_name = "auth",
     crate_root = "auth/auth.rs",
-    edition = "2024",
-    proc_macro_deps = all_crate_deps(proc_macro = True),
+    proc_macro_crate_deps = [
+        "async-trait",
+    ],
     version = "0.1.1",
     deps = COMMON_DEPS,
 )
 
-rust_binary(
+workspace_rust_binary(
     name = "mtls_example",
     srcs = ["mtls/mtls.rs"],
-    aliases = aliases(normal = True, proc_macro = True),
+    crate_deps = [
+        "jsonwebtoken",
+        "sd-notify",
+        "sysinfo",
+        "tokio",
+        "tracing",
+    ],
     crate_features = ["tls"],
     crate_name = "mtls",
     crate_root = "mtls/mtls.rs",
-    edition = "2024",
-    proc_macro_deps = all_crate_deps(proc_macro = True),
+    proc_macro_crate_deps = [
+        "async-trait",
+    ],
     version = "0.1.1",
     deps = COMMON_DEPS + [
         "@crate_index//:rustls",

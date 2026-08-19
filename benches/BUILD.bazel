@@ -1,11 +1,10 @@
-load("@crate_index//:defs.bzl", "aliases", "all_crate_deps")
-load("@rules_rust//rust:defs.bzl", "rust_binary")
+load("//bazel:rust_crate.bzl", "workspace_rust_binary")
 
 package(default_visibility = ["//visibility:public"])
 
 exports_files(["Cargo.toml"])
 
-COMMON_DEPS = all_crate_deps(normal = True) + [
+COMMON_DEPS = [
     "//opensovd-core:opensovd_core",
     "//opensovd-extra:opensovd_extra",
     "//opensovd-models:opensovd_models",
@@ -13,26 +12,38 @@ COMMON_DEPS = all_crate_deps(normal = True) + [
     "//opensovd-server:opensovd_server",
 ]
 
-rust_binary(
+workspace_rust_binary(
     name = "auth_bench",
     srcs = ["src/main.rs"],
-    aliases = aliases(normal = True, proc_macro = True),
+    crate_deps = [
+        "axum",
+        "criterion",
+        "http",
+        "jsonwebtoken",
+        "rand",
+        "tokio",
+        "tower",
+    ],
     crate_name = "auth",
     crate_root = "src/main.rs",
-    edition = "2024",
-    proc_macro_deps = all_crate_deps(proc_macro = True),
     version = "0.1.1",
     deps = COMMON_DEPS,
 )
 
-rust_binary(
+workspace_rust_binary(
     name = "topology_bench",
     srcs = ["src/topology.rs"],
-    aliases = aliases(normal = True, proc_macro = True),
+    crate_deps = [
+        "axum",
+        "criterion",
+        "http",
+        "jsonwebtoken",
+        "rand",
+        "tokio",
+        "tower",
+    ],
     crate_name = "topology",
     crate_root = "src/topology.rs",
-    edition = "2024",
-    proc_macro_deps = all_crate_deps(proc_macro = True),
     version = "0.1.1",
     deps = COMMON_DEPS,
 )
