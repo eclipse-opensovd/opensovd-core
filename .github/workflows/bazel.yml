@@ -34,5 +34,11 @@ jobs:
       - name: Build opensovd-mcp
         run: bazel build //:opensovd-mcp
 
+      - name: Build Bazel workspace
+        run: bazel build //:workspace
+
       - name: Test Bazel suite
         run: bazel test //:tests
+
+      - name: Query Bazel targets
+        run: bazel query //...
