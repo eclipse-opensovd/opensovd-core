@@ -1,26 +1,23 @@
-load("@crate_index//:defs.bzl", "aliases", "all_crate_deps")
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("//bazel:rust_crate.bzl", "workspace_rust_library", "workspace_rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
 exports_files(["Cargo.toml"])
 
-rust_library(
+workspace_rust_library(
     name = "opensovd_mocks",
     srcs = glob(["src/**/*.rs"]),
-    aliases = aliases(normal = True, proc_macro = True),
     crate_name = "opensovd_mocks",
-    edition = "2024",
-    proc_macro_deps = all_crate_deps(proc_macro = True),
+    crate_root = "src/lib.rs",
     version = "0.1.1",
-    deps = all_crate_deps(normal = True) + [
+    deps = [
         "//opensovd-core:opensovd_core",
         "//opensovd-models:opensovd_models",
         "//opensovd-providers:opensovd_providers",
     ],
 )
 
-rust_test(
+workspace_rust_test(
     name = "unit_test",
     crate = ":opensovd_mocks",
 )
