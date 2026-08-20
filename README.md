@@ -46,7 +46,7 @@ curl -s http://127.0.0.1:7690/sovd/version-info | jq
 - [uv](https://docs.astral.sh/uv/) (optional) - Python package manager for running integration tests
 
 > [!TIP]
-> Open the project in a [Dev Container](https://containers.dev/) for a ready-to-use environment, or use [devenv](https://devenv.sh/) locally. See [Development docs](docs/development.md) for details.
+> Open the project in a [Dev Container](https://containers.dev/) for a ready-to-use environment, or use the [Nix flake](flake.nix) (`nix develop`) locally. See [Development docs](docs/development.md) for details.
 
 ```bash
 # Build
