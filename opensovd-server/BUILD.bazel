@@ -1,0 +1,180 @@
+load("//bazel:rust_crate.bzl", "workspace_rust_library", "workspace_rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files(["Cargo.toml"])
+
+COMMON_TEST_SRCS = glob(["tests/common/**/*.rs"])
+
+workspace_rust_library(
+    name = "opensovd_server",
+    srcs = glob(["src/**/*.rs"]),
+    crate_deps = [
+        "axum",
+        "axum-extra",
+        "bytes",
+        "futures",
+        "http",
+        "http-body",
+        "percent-encoding",
+        "rustls",
+        "schemars",
+        "serde",
+        "serde_json",
+        "thiserror",
+        "tokio",
+        "tokio-rustls",
+        "tower",
+        "tracing",
+    ],
+    crate_features = [
+        "default",
+        "http2",
+        "json-preserve-order",
+        "tls",
+    ],
+    crate_name = "opensovd_server",
+    crate_root = "src/lib.rs",
+    compile_data = ["README.md"],
+    version = "0.1.1",
+    deps = [
+        "//opensovd-core:opensovd_core",
+        "//opensovd-models:opensovd_models",
+    ],
+)
+
+workspace_rust_test(
+    name = "unit_test",
+    crate = ":opensovd_server",
+    crate_deps = [
+        "bytes",
+        "futures",
+        "http-body-util",
+        "hyper",
+        "hyper-util",
+        "libc",
+        "tokio",
+        "tower",
+    ],
+    proc_macro_crate_deps = [
+        "async-trait",
+    ],
+    deps = [
+        "//opensovd-mocks:opensovd_mocks",
+    ],
+)
+
+workspace_rust_test(
+    name = "auth_test",
+    srcs = ["tests/auth.rs"] + COMMON_TEST_SRCS,
+    crate_root = "tests/auth.rs",
+    crate_deps = [
+        "axum",
+        "axum-extra",
+        "bytes",
+        "futures",
+        "http",
+        "http-body",
+        "http-body-util",
+        "hyper",
+        "hyper-util",
+        "libc",
+        "percent-encoding",
+        "rustls",
+        "schemars",
+        "serde",
+        "serde_json",
+        "thiserror",
+        "tokio",
+        "tokio-rustls",
+        "tower",
+        "tracing",
+    ],
+    proc_macro_crate_deps = [
+        "async-trait",
+    ],
+    version = "0.1.1",
+    deps = [
+        "//opensovd-core:opensovd_core",
+        "//opensovd-models:opensovd_models",
+        ":opensovd_server",
+        "//opensovd-mocks:opensovd_mocks",
+    ],
+)
+
+workspace_rust_test(
+    name = "builder_test",
+    srcs = ["tests/builder.rs"] + COMMON_TEST_SRCS,
+    crate_root = "tests/builder.rs",
+    crate_deps = [
+        "axum",
+        "axum-extra",
+        "bytes",
+        "futures",
+        "http",
+        "http-body",
+        "http-body-util",
+        "hyper",
+        "hyper-util",
+        "libc",
+        "percent-encoding",
+        "rustls",
+        "schemars",
+        "serde",
+        "serde_json",
+        "thiserror",
+        "tokio",
+        "tokio-rustls",
+        "tower",
+        "tracing",
+    ],
+    proc_macro_crate_deps = [
+        "async-trait",
+    ],
+    version = "0.1.1",
+    deps = [
+        "//opensovd-core:opensovd_core",
+        "//opensovd-models:opensovd_models",
+        ":opensovd_server",
+        "//opensovd-mocks:opensovd_mocks",
+    ],
+)
+
+workspace_rust_test(
+    name = "routes_test",
+    srcs = ["tests/routes.rs"] + COMMON_TEST_SRCS,
+    crate_root = "tests/routes.rs",
+    crate_deps = [
+        "axum",
+        "axum-extra",
+        "bytes",
+        "futures",
+        "http",
+        "http-body",
+        "http-body-util",
+        "hyper",
+        "hyper-util",
+        "libc",
+        "percent-encoding",
+        "rustls",
+        "schemars",
+        "serde",
+        "serde_json",
+        "thiserror",
+        "tokio",
+        "tokio-rustls",
+        "tower",
+        "tracing",
+    ],
+    proc_macro_crate_deps = [
+        "async-trait",
+    ],
+    version = "0.1.1",
+    deps = [
+        "//opensovd-core:opensovd_core",
+        "//opensovd-models:opensovd_models",
+        ":opensovd_server",
+        "//opensovd-mocks:opensovd_mocks",
+    ],
+)
+

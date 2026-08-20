@@ -1,0 +1,57 @@
+load("//bazel:rust_crate.bzl", "workspace_rust_binary")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files(["Cargo.toml"])
+
+COMMON_DEPS = [
+    "//opensovd-core:opensovd_core",
+    "//opensovd-extra:opensovd_extra",
+    "//opensovd-models:opensovd_models",
+    "//opensovd-providers:opensovd_providers",
+    "//opensovd-server:opensovd_server",
+]
+
+workspace_rust_binary(
+    name = "auth_bench",
+    srcs = ["src/main.rs"],
+    crate_deps = [
+        "axum",
+        "criterion",
+        "http",
+        "jsonwebtoken",
+        "rand",
+        "tokio",
+        "tower",
+    ],
+    crate_name = "auth",
+    crate_root = "src/main.rs",
+    version = "0.1.1",
+    deps = COMMON_DEPS,
+)
+
+workspace_rust_binary(
+    name = "topology_bench",
+    srcs = ["src/topology.rs"],
+    crate_deps = [
+        "axum",
+        "criterion",
+        "http",
+        "jsonwebtoken",
+        "rand",
+        "tokio",
+        "tower",
+    ],
+    crate_name = "topology",
+    crate_root = "src/topology.rs",
+    version = "0.1.1",
+    deps = COMMON_DEPS,
+)
+
+filegroup(
+    name = "bench_binaries",
+    srcs = [
+        ":auth_bench",
+        ":topology_bench",
+    ],
+)

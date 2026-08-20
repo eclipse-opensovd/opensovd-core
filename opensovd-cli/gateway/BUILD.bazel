@@ -1,0 +1,48 @@
+load("//bazel:rust_crate.bzl", "workspace_cargo_build_script", "workspace_rust_binary")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files(["Cargo.toml"])
+
+workspace_cargo_build_script(
+    name = "build_script_build",
+    srcs = ["build.rs"],
+    crate_deps = [
+        "time",
+    ],
+    crate_name = "build_script_build",
+    crate_root = "build.rs",
+    pkg_name = "opensovd-gateway",
+    version = "0.1.1",
+)
+
+workspace_rust_binary(
+    name = "opensovd_gateway",
+    srcs = glob(["src/**/*.rs"]),
+    crate_deps = [
+        "anyhow",
+        "base64",
+        "clap",
+        "http",
+        "rustls",
+        "schemars",
+        "sd-notify",
+        "serde",
+        "tokio",
+        "tower",
+        "tower-http",
+        "tracing",
+    ],
+    crate_features = ["default"],
+    crate_name = "opensovd_gateway",
+    crate_root = "src/main.rs",
+    version = "0.1.1",
+    deps = [
+        ":build_script_build",
+        "//opensovd-cli/lib:libcli",
+        "//opensovd-core:opensovd_core",
+        "//opensovd-extra:opensovd_extra",
+        "//opensovd-mocks:opensovd_mocks",
+        "//opensovd-server:opensovd_server",
+    ],
+)

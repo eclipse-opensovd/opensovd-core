@@ -1,0 +1,30 @@
+load("//bazel:rust_crate.bzl", "workspace_rust_library", "workspace_rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files(["Cargo.toml"])
+
+workspace_rust_library(
+    name = "libcli",
+    srcs = glob(["src/**/*.rs"]),
+    crate_deps = [
+        "chrono",
+        "http",
+        "tokio",
+        "tower-http",
+        "tracing",
+        "tracing-subscriber",
+    ],
+    crate_name = "libcli",
+    crate_root = "src/lib.rs",
+    version = "0.1.1",
+)
+
+workspace_rust_test(
+    name = "unit_test",
+    crate = ":libcli",
+    crate_deps = [
+        "libc",
+        "tokio",
+    ],
+)

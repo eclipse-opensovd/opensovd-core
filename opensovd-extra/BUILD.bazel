@@ -1,0 +1,41 @@
+load("//bazel:rust_crate.bzl", "workspace_rust_library", "workspace_rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files(["Cargo.toml"])
+
+workspace_rust_library(
+    name = "opensovd_extra",
+    srcs = glob(["src/**/*.rs"]),
+    crate_deps = [
+        "http",
+        "jsonwebtoken",
+        "regorus",
+        "serde",
+        "serde_json",
+        "tracing",
+    ],
+    crate_features = [
+        "auth",
+        "unit",
+    ],
+    crate_name = "opensovd_extra",
+    crate_root = "src/lib.rs",
+    version = "0.1.1",
+    deps = [
+        "//opensovd-server:opensovd_server",
+    ],
+)
+
+workspace_rust_test(
+    name = "unit_test",
+    crate = ":opensovd_extra",
+    crate_deps = [
+        "aws-lc-rs",
+        "base64",
+        "http",
+        "rand",
+        "serde_json",
+        "tokio",
+    ],
+)

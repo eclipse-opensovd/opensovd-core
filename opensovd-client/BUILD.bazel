@@ -1,0 +1,215 @@
+load("//bazel:rust_crate.bzl", "workspace_rust_library", "workspace_rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files(["Cargo.toml"])
+
+COMMON_TEST_SRCS = glob(["tests/common/**/*.rs"])
+
+workspace_rust_library(
+    name = "opensovd_client",
+    srcs = glob(["src/**/*.rs"]),
+    crate_deps = [
+        "bytes",
+        "http",
+        "http-body",
+        "http-body-util",
+        "hyper",
+        "hyper-util",
+        "percent-encoding",
+        "serde",
+        "serde_json",
+        "thiserror",
+        "tokio",
+        "tower",
+        "tower-service",
+    ],
+    crate_name = "opensovd_client",
+    crate_root = "src/lib.rs",
+    compile_data = ["README.md"],
+    version = "0.1.1",
+    deps = [
+        "//opensovd-models:opensovd_models",
+    ],
+)
+
+workspace_rust_test(
+    name = "unit_test",
+    crate = ":opensovd_client",
+    crate_deps = [
+        "mock-http-connector",
+        "serde_json",
+        "tempfile",
+        "tokio",
+        "tower",
+    ],
+)
+
+workspace_rust_test(
+    name = "apps_test",
+    srcs = ["tests/apps.rs"] + COMMON_TEST_SRCS,
+    crate_root = "tests/apps.rs",
+    crate_deps = [
+        "bytes",
+        "http",
+        "http-body",
+        "http-body-util",
+        "hyper",
+        "hyper-util",
+        "mock-http-connector",
+        "percent-encoding",
+        "serde",
+        "serde_json",
+        "tempfile",
+        "thiserror",
+        "tokio",
+        "tower",
+        "tower-service",
+    ],
+    version = "0.1.1",
+    deps = [
+        "//opensovd-models:opensovd_models",
+        ":opensovd_client",
+    ],
+)
+
+workspace_rust_test(
+    name = "areas_test",
+    srcs = ["tests/areas.rs"] + COMMON_TEST_SRCS,
+    crate_root = "tests/areas.rs",
+    crate_deps = [
+        "bytes",
+        "http",
+        "http-body",
+        "http-body-util",
+        "hyper",
+        "hyper-util",
+        "mock-http-connector",
+        "percent-encoding",
+        "serde",
+        "serde_json",
+        "tempfile",
+        "thiserror",
+        "tokio",
+        "tower",
+        "tower-service",
+    ],
+    version = "0.1.1",
+    deps = [
+        "//opensovd-models:opensovd_models",
+        ":opensovd_client",
+    ],
+)
+
+workspace_rust_test(
+    name = "client_test",
+    srcs = ["tests/client.rs"] + COMMON_TEST_SRCS,
+    crate_root = "tests/client.rs",
+    crate_deps = [
+        "bytes",
+        "http",
+        "http-body",
+        "http-body-util",
+        "hyper",
+        "hyper-util",
+        "mock-http-connector",
+        "percent-encoding",
+        "serde",
+        "serde_json",
+        "tempfile",
+        "thiserror",
+        "tokio",
+        "tower",
+        "tower-service",
+    ],
+    version = "0.1.1",
+    deps = [
+        "//opensovd-models:opensovd_models",
+        ":opensovd_client",
+    ],
+)
+
+workspace_rust_test(
+    name = "components_test",
+    srcs = ["tests/components.rs"] + COMMON_TEST_SRCS,
+    crate_root = "tests/components.rs",
+    crate_deps = [
+        "bytes",
+        "http",
+        "http-body",
+        "http-body-util",
+        "hyper",
+        "hyper-util",
+        "mock-http-connector",
+        "percent-encoding",
+        "serde",
+        "serde_json",
+        "tempfile",
+        "thiserror",
+        "tokio",
+        "tower",
+        "tower-service",
+    ],
+    version = "0.1.1",
+    deps = [
+        "//opensovd-models:opensovd_models",
+        ":opensovd_client",
+    ],
+)
+
+workspace_rust_test(
+    name = "data_test",
+    srcs = ["tests/data.rs"] + COMMON_TEST_SRCS,
+    crate_root = "tests/data.rs",
+    crate_deps = [
+        "bytes",
+        "http",
+        "http-body",
+        "http-body-util",
+        "hyper",
+        "hyper-util",
+        "mock-http-connector",
+        "percent-encoding",
+        "serde",
+        "serde_json",
+        "tempfile",
+        "thiserror",
+        "tokio",
+        "tower",
+        "tower-service",
+    ],
+    version = "0.1.1",
+    deps = [
+        "//opensovd-models:opensovd_models",
+        ":opensovd_client",
+    ],
+)
+
+workspace_rust_test(
+    name = "unix_test",
+    srcs = ["tests/unix.rs"] + COMMON_TEST_SRCS,
+    crate_root = "tests/unix.rs",
+    crate_deps = [
+        "bytes",
+        "http",
+        "http-body",
+        "http-body-util",
+        "hyper",
+        "hyper-util",
+        "mock-http-connector",
+        "percent-encoding",
+        "serde",
+        "serde_json",
+        "tempfile",
+        "thiserror",
+        "tokio",
+        "tower",
+        "tower-service",
+    ],
+    version = "0.1.1",
+    deps = [
+        "//opensovd-models:opensovd_models",
+        ":opensovd_client",
+    ],
+)
+
