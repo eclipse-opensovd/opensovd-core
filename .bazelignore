@@ -1,0 +1,5 @@
+target
+dist
+.venv
+.direnv
+.pytest_cache
