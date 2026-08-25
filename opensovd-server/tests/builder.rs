@@ -13,18 +13,34 @@ use opensovd_core::{
 use opensovd_server::Server;
 use tokio::time::Duration;
 
-#[tokio::test]
-async fn test_base_path_slash() {
-    let server = common::TestServer::builder().base_uri("/").build().await;
+// not a #[test] fn, so the test-only unwrap allowance does not apply here
+#[allow(clippy::unwrap_used)]
+async fn advertised_base_uri(server: &common::TestServer, path: &str) -> String {
     let client = common::client();
-
     let request = Request::builder()
-        .uri(server.url("/version-info"))
+        .uri(server.url(path))
         .body(http_body_util::Empty::<bytes::Bytes>::new())
         .unwrap();
 
     let response = client.request(request).await.unwrap();
     assert!(response.status().is_success());
+
+    let body = response.into_body().collect().await.unwrap().to_bytes();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    json["sovd_info"][0]["base_uri"]
+        .as_str()
+        .unwrap()
+        .to_string()
+}
+
+#[tokio::test]
+async fn test_base_path_slash() {
+    let server = common::TestServer::builder().base_uri("/").build().await;
+
+    assert_eq!(
+        advertised_base_uri(&server, "/version-info").await,
+        format!("http://{}/v1", server.addr)
+    );
 }
 
 #[tokio::test]
@@ -33,15 +49,44 @@ async fn test_base_path_with_slash() {
         .base_uri("/sovd")
         .build()
         .await;
-    let client = common::client();
 
+    assert_eq!(
+        advertised_base_uri(&server, "/sovd/version-info").await,
+        format!("http://{}/sovd/v1", server.addr)
+    );
+}
+
+#[tokio::test]
+async fn test_non_default_base_path_is_advertised() {
+    let server = common::TestServer::builder()
+        .base_uri("/api/sovd")
+        .topology(opensovd_mocks::create_mock_topology().await)
+        .build()
+        .await;
+
+    assert_eq!(
+        advertised_base_uri(&server, "/api/sovd/version-info").await,
+        format!("http://{}/api/sovd/v1", server.addr)
+    );
+
+    // hrefs share the advertised prefix, so the links resolve
+    let client = common::client();
     let request = Request::builder()
-        .uri(server.url("/sovd/version-info"))
+        .uri(server.url("/api/sovd/v1/components"))
         .body(http_body_util::Empty::<bytes::Bytes>::new())
         .unwrap();
 
     let response = client.request(request).await.unwrap();
     assert!(response.status().is_success());
+
+    let body = response.into_body().collect().await.unwrap().to_bytes();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    let href = json["items"][0]["href"].as_str().unwrap();
+
+    assert!(
+        href.starts_with(&format!("http://{}/api/sovd/v1/components/", server.addr)),
+        "unexpected href {href}"
+    );
 }
 
 #[tokio::test]

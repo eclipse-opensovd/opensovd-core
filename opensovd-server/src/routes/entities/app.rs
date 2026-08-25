@@ -202,7 +202,9 @@ mod tests {
             vendor_info: None,
             topology: create_mock_topology().await,
         };
-        let app = routes::<()>().with_state(state);
+        let app = routes::<()>()
+            .with_state(state)
+            .layer(crate::routes::test_base_uri());
 
         let request = Request::builder()
             .uri("/apps/engine_control")
@@ -237,7 +239,9 @@ mod tests {
             vendor_info: None,
             topology: create_mock_topology().await,
         };
-        let app = routes::<()>().with_state(state);
+        let app = routes::<()>()
+            .with_state(state)
+            .layer(crate::routes::test_base_uri());
 
         let request = Request::builder().uri("/apps").body(Body::empty()).unwrap();
 

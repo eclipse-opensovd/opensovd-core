@@ -88,6 +88,37 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_version_info_advertises_configured_base_uri() {
+        let state = AppState::<VendorInfo> {
+            vendor_info: None,
+            topology: Topology::default(),
+        };
+        let app = routes::<VendorInfo>()
+            .with_state(state)
+            .layer(axum::Extension(crate::routes::BaseUri {
+                scheme: "https".to_string(),
+                path: "/api/sovd".to_string(),
+            }));
+
+        let request = Request::builder()
+            .uri("/version-info")
+            .header("host", "vehicle.example:8443")
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert!(response.status().is_success());
+
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(
+            json["sovd_info"][0]["base_uri"],
+            "https://vehicle.example:8443/api/sovd/v1"
+        );
+    }
+
+    #[tokio::test]
     async fn test_version_info_with_schema() {
         let state = AppState::<VendorInfo> {
             vendor_info: None,

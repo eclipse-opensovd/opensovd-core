@@ -121,7 +121,6 @@ where
         .url
         .parse()
         .with_context(|| format!("invalid --url {:?}", cli.url))?;
-    let base_uri = uri.path();
     let authority = uri
         .authority()
         .ok_or_else(|| {
@@ -173,7 +172,7 @@ where
     let server = builder
         .layer(libcli::trace::trace_layer())
         .layer(tower::util::option_layer(cors))
-        .base_uri(base_uri)?
+        .base_uri(uri)?
         .vendor_info(VENDOR_INFO)
         .build()?;
 

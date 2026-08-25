@@ -32,6 +32,14 @@ pub(crate) type Service = BoxCloneSyncService<
     std::convert::Infallible,
 >;
 
+/// Base URI as configured on the builder: the mount path, plus the scheme when
+/// one was supplied.
+#[derive(Clone, Default)]
+struct BaseConfig {
+    path: String,
+    scheme: Option<String>,
+}
+
 fn normalize_base(base: &str) -> Option<String> {
     match base.as_bytes() {
         b"" | b"/" => None,
@@ -96,6 +104,7 @@ impl From<UnixListener> for Listener {
 #[allow(clippy::too_many_arguments)]
 fn build_router<Vendor, Authn, Authz, Layer>(
     base: Option<&str>,
+    advertised: crate::routes::BaseUri,
     vendor_info: Option<Vendor>,
     authenticator: Authn,
     authorizer: Authz,
@@ -116,7 +125,7 @@ where
         Into<std::convert::Infallible> + 'static,
     <Layer::Service as TowerService<http::Request<axum::body::Body>>>::Future: Send + 'static,
 {
-    let inner = crate::routes::router(vendor_info, topology);
+    let inner = crate::routes::router(vendor_info, topology, advertised);
     let mut router = match base {
         Some(path) => Router::new().nest(path, inner),
         None => Router::new().merge(inner),
@@ -143,7 +152,7 @@ type ShutdownFuture = Shared<Pin<Box<dyn Future<Output = ()> + Send>>>;
 #[must_use]
 pub struct ServerBuilder<Vendor = VendorInfo, Authn = NoAuth, Authz = AllowAll, Layer = Identity> {
     listener: Option<Listener>,
-    base: String,
+    base: BaseConfig,
     shutdown: ShutdownFuture,
     vendor_info: Option<Vendor>,
     authenticator: Authn,
@@ -158,7 +167,7 @@ pub struct ServerBuilder<Vendor = VendorInfo, Authn = NoAuth, Authz = AllowAll, 
 
 pub struct Server<Vendor = VendorInfo, Authn = NoAuth, Authz = AllowAll, Layer = Identity> {
     listener: Listener,
-    base: String,
+    base: BaseConfig,
     shutdown: ShutdownFuture,
     vendor_info: Option<Vendor>,
     authenticator: Authn,
@@ -195,7 +204,7 @@ impl ServerBuilder<VendorInfo, NoAuth, AllowAll, Identity> {
             Box::pin(default_shutdown_signal());
         Self {
             listener: None,
-            base: String::new(),
+            base: BaseConfig::default(),
             shutdown: shutdown.shared(),
             vendor_info: Some(VendorInfo {
                 version: env!("CARGO_PKG_VERSION").into(),
@@ -219,7 +228,10 @@ impl<Vendor, Authn, Authz, Layer> ServerBuilder<Vendor, Authn, Authz, Layer> {
         self
     }
 
-    /// Set the base URI path for all SOVD routes.
+    /// Set the base URI for all SOVD routes.
+    ///
+    /// The path determines where the routes are mounted. A scheme, if given, is
+    /// the one advertised in generated URIs; local TLS takes precedence over it.
     ///
     /// # Errors
     ///
@@ -229,7 +241,10 @@ impl<Vendor, Authn, Authz, Layer> ServerBuilder<Vendor, Authn, Authz, Layer> {
         uri: impl TryInto<http::Uri>,
     ) -> std::result::Result<Self, BuilderError> {
         let uri: http::Uri = uri.try_into().map_err(|_| BuilderError::InvalidUri)?;
-        self.base = uri.path().to_string();
+        self.base = BaseConfig {
+            path: uri.path().to_string(),
+            scheme: uri.scheme_str().map(str::to_string),
+        };
         Ok(self)
     }
 
@@ -481,7 +496,24 @@ where
     ///
     /// Returns an error if the server cannot be started.
     pub async fn serve(self) -> std::io::Result<()> {
-        let base = normalize_base(&self.base);
+        let base = normalize_base(&self.base.path);
+
+        // local TLS wins over a configured scheme, which in turn wins over http
+        #[cfg(feature = "tls")]
+        let is_tls = self.tls_config.is_some();
+        #[cfg(not(feature = "tls"))]
+        let is_tls = false;
+        let advertised = crate::routes::BaseUri {
+            scheme: if is_tls {
+                "https".to_string()
+            } else {
+                self.base
+                    .scheme
+                    .clone()
+                    .unwrap_or_else(|| "http".to_string())
+            },
+            path: base.clone().unwrap_or_default(),
+        };
 
         if !self.discovery_providers.is_empty() {
             let topology = self.topology.clone();
@@ -491,6 +523,7 @@ where
 
         let router = build_router(
             base.as_deref(),
+            advertised,
             self.vendor_info,
             self.authenticator,
             self.authorizer,
