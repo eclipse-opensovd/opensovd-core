@@ -42,11 +42,40 @@ The `prepare` job compares the current SHA with the `nightly` tag. If unchanged,
 
 ## Release Tags
 
-| Tag       | Trigger            | Description                                     |
-|-----------|--------------------|-------------------------------------------------|
-| `latest`  | Push to main       | Latest successful main branch build             |
-| `nightly` | Daily at 02:00 UTC | Scheduled nightly build (skipped if no changes) |
-| `vX.Y.Z`  | Tag push           | Versioned production release                    |
+| Tag       | Trigger            | Channel   | Description                                     |
+|-----------|--------------------|-----------|-------------------------------------------------|
+| `latest`  | Push to main       | `dev`     | Latest successful main branch build             |
+| `nightly` | Daily at 02:00 UTC | `nightly` | Scheduled nightly build (skipped if no changes) |
+| `vX.Y.Z`  | Tag push           | `stable`  | Versioned production release                    |
+
+## Release Channels
+
+The channel determines the version suffix the binaries report through `--version`,
+the SOVD vendor info and the MCP handshake. Only `stable` ships unsuffixed:
+
+| Channel   | Version string  | Built by                             |
+|-----------|-----------------|--------------------------------------|
+| `stable`  | `0.1.1`         | Tag push, after the tag is validated |
+| `nightly` | `0.1.1-nightly` | Scheduled build                      |
+| `dev`     | `0.1.1-dev`     | main, pull requests, local builds    |
+
+The suffixes are semver pre-releases, so `0.1.1-dev` sorts before `0.1.1-nightly`,
+which sorts before `0.1.1`.
+
+The `prepare` job derives the channel from the release type and passes it to
+`build`. Downstream jobs test `channel != 'stable'` wherever they need to know
+whether a build is a prerelease. Three environment variables feed the build scripts, all optional and all
+defaulting to a dev build stamped from the local git checkout:
+
+| Variable              | Purpose                                                          |
+|-----------------------|------------------------------------------------------------------|
+| `OPENSOVD_CHANNEL`    | Release channel; an unrecognised value fails the build            |
+| `OPENSOVD_COMMIT_SHA` | Revision to stamp, for builds without a git checkout              |
+| `SOURCE_DATE_EPOCH`   | Build date to stamp, for reproducible builds                      |
+
+On a tag push `prepare` verifies that the tag matches the workspace version and
+fails the run on a mismatch, so a `v0.2.0` tag cannot ship binaries reporting
+`0.1.1`.
 
 ## Docker Tags
 

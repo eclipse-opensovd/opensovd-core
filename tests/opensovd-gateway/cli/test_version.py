@@ -7,9 +7,11 @@ import re
 
 import pytest
 
-# opensovd-gateway 0.1.1 (8ffa3f4-dirty 2025-12-16)
+# opensovd-gateway 0.1.1-dev (8ffa3f4-dirty 2025-12-16)
+# The channel suffix is absent on stable builds and present on every other channel.
 VERSION_PATTERN = re.compile(
-    r"opensovd-gateway (\d+\.\d+\.\d+) \(([a-f0-9]+(?:-dirty)?) (\d{4}-\d{2}-\d{2})\)"
+    r"opensovd-gateway (\d+\.\d+\.\d+(?:-(?:dev|nightly))?) "
+    r"\(([a-f0-9]+(?:-dirty)?) (\d{4}-\d{2}-\d{2})\)"
 )
 
 
