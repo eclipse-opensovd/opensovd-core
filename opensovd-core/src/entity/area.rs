@@ -9,7 +9,6 @@
 use std::collections::HashMap;
 use std::fmt;
 
-use crate::data::DataProvider;
 use crate::entity::EntityRef;
 
 /// Area entity representing a logical view of vehicle architecture
@@ -19,7 +18,6 @@ pub struct Area {
     metadata: HashMap<String, String>,
     tags: Vec<String>,
     translation_id: Option<String>,
-    data_provider: Option<Box<dyn DataProvider>>,
 }
 
 impl fmt::Debug for Area {
@@ -30,7 +28,6 @@ impl fmt::Debug for Area {
             .field("metadata", &self.metadata)
             .field("tags", &self.tags)
             .field("translation_id", &self.translation_id)
-            .field("data_provider", &self.data_provider.as_ref().map(|_| "..."))
             .finish()
     }
 }
@@ -45,7 +42,6 @@ impl Area {
             metadata: HashMap::new(),
             tags: Vec::new(),
             translation_id: None,
-            data_provider: None,
         }
     }
 
@@ -67,13 +63,6 @@ impl Area {
     #[must_use]
     pub fn with_translation_id(mut self, translation_id: impl Into<String>) -> Self {
         self.translation_id = Some(translation_id.into());
-        self
-    }
-
-    /// Set data provider
-    #[must_use]
-    pub fn with_data_provider(mut self, provider: impl DataProvider) -> Self {
-        self.data_provider = Some(Box::new(provider));
         self
     }
 
@@ -105,12 +94,6 @@ impl Area {
     #[must_use]
     pub fn translation_id(&self) -> Option<&str> {
         self.translation_id.as_deref()
-    }
-
-    /// Get data provider
-    #[must_use]
-    pub fn data_provider(&self) -> Option<&dyn DataProvider> {
-        self.data_provider.as_deref()
     }
 
     /// Returns a lightweight entity reference for this area.
