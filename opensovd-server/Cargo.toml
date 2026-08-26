@@ -23,10 +23,11 @@ tls = ["dep:rustls", "dep:tokio-rustls"]
 opensovd-core = { workspace = true }
 opensovd-models = { workspace = true }
 schemars = { workspace = true, optional = true }
-axum = { workspace = true, features = ["json", "matched-path", "query", "tokio", "http1"] }
+axum = { workspace = true, features = ["json", "matched-path", "query", "tokio", "http1", "multipart"] }
 bytes = { workspace = true }
+chrono = { workspace = true }
 http-body = { workspace = true }
-axum-extra = { workspace = true, features = ["query", "with-rejection"] }
+axum-extra = { workspace = true, features = ["query", "with-rejection", "typed-header"] }
 futures = { workspace = true, features = ["std", "async-await"] }
 http = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
@@ -38,6 +39,7 @@ tower = { workspace = true, features = ["util"] }
 tracing = { workspace = true }
 rustls = { workspace = true, optional = true }
 tokio-rustls = { workspace = true, optional = true }
+uuid = { workspace = true, features = ["v4"] }
 
 [dev-dependencies]
 async-trait = { workspace = true }

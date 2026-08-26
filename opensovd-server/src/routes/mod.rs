@@ -10,6 +10,14 @@
 //! - GET /components - List all components
 //! - GET /components/{component_id} - Query capabilities of a component
 //!
+//! ## Bulkdata
+//! - GET    /{entity-collection}/{entity-id}/bulk-data - List bulk-data categories
+//! - GET    /{entity-collection}/{entity-id}/bulk-data/{category} - List of BulkDataDescriptors for a specific category
+//! - POST   /{entity-collection}/{entity-id}/bulk-data/{category} - Upload bulk data to the SOVD server and create a resource for the bulk data
+//! - DELETE /{entity-collection}/{entity-id}/bulk-data/{category} - Delete all bulk data resources for a specific category
+//! - GET    /{entity-collection}/{entity-id}/bulk-data/{category}/{bulk-data-id} - Download a specific bulk data resource
+//! - DELETE /{entity-collection}/{entity-id}/bulk-data/{category}/{bulk-data-id} - Delete a specific bulk data resource
+//!
 //! ## Data
 //! - GET /components/{component_id}/data-categories - List data categories
 //! - GET /components/{component_id}/data-groups - List data groups
@@ -20,6 +28,7 @@
 //! ## Version
 //! - GET /version-info - Get SOVD server version information
 
+mod bulkdata;
 mod data;
 mod entities;
 mod error;
@@ -106,6 +115,7 @@ where
 
     let v1_routes = Router::new()
         .merge(entities::routes::<V>())
+        .merge(bulkdata::routes::<V>())
         .merge(data::routes::<V>());
 
     let router = Router::new()
