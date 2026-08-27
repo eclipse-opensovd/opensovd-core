@@ -1275,6 +1275,9 @@ name = "opensovd-examples-server"
 version = "0.1.1"
 dependencies = [
  "async-trait",
+ "bytes",
+ "chrono",
+ "futures",
  "jsonwebtoken",
  "libcli",
  "opensovd-core",
@@ -1286,6 +1289,7 @@ dependencies = [
  "rustls",
  "sd-notify",
  "sysinfo",
+ "tempfile",
  "tokio",
  "tracing",
 ]

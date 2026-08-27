@@ -9,6 +9,10 @@ license.workspace = true
 publish = false
 
 [[example]]
+name = "bulkdata"
+path = "bulkdata/bulkdata.rs"
+
+[[example]]
 name = "simple"
 path = "simple/simple.rs"
 
@@ -31,6 +35,9 @@ tls = ["opensovd-server/tls", "dep:rustls"]
 
 [dependencies]
 async-trait = { workspace = true }
+bytes = { workspace = true }
+chrono = { workspace = true }
+futures = { workspace = true, features = ["std", "async-await"] }
 jsonwebtoken = { workspace = true }
 libcli = { workspace = true }
 opensovd-core = { workspace = true }
@@ -41,7 +48,8 @@ opensovd-providers = { workspace = true }
 opensovd-server = { workspace = true }
 rustls = { workspace = true, optional = true }
 sysinfo = { workspace = true }
-tokio = { workspace = true, features = ["net", "rt-multi-thread", "macros", "fs"] }
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["net", "rt-multi-thread", "macros", "fs", "io-util"] }
 tracing = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
