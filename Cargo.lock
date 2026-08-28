@@ -1356,6 +1356,9 @@ dependencies = [
 name = "opensovd-mocks"
 version = "0.1.1"
 dependencies = [
+ "async-trait",
+ "bytes",
+ "futures",
  "opensovd-core",
  "opensovd-models",
  "opensovd-providers",
