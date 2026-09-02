@@ -46,7 +46,7 @@ rustls = { workspace = true, optional = true }
 sd-notify = { workspace = true }
 
 [build-dependencies]
-time = { workspace = true, features = ["formatting", "macros"] }
+libcli-build = { workspace = true }
 
 
 [lints]

@@ -10,7 +10,7 @@ use clap::Parser;
 pub const ABOUT: &str = env!("CARGO_PKG_DESCRIPTION");
 
 const VERSION_STRING: &str = concat!(
-    env!("CARGO_PKG_VERSION"),
+    env!("VERSION"),
     " (",
     env!("COMMIT_SHA"),
     " ",

@@ -31,7 +31,7 @@ struct OpenSovdInfo {
 const TARGET: &str = "gw";
 
 const VENDOR_INFO: OpenSovdInfo = OpenSovdInfo {
-    version: env!("CARGO_PKG_VERSION"),
+    version: env!("VERSION"),
     sha1: env!("COMMIT_SHA"),
     build_date: env!("BUILD_DATE"),
     name: "OpenSOVD",
@@ -59,6 +59,7 @@ async fn run(mut cli: cli::Cli) -> anyhow::Result<()> {
     tracing::info!(
         target: TARGET,
         version = %VENDOR_INFO.version,
+        channel = %env!("RELEASE_CHANNEL"),
         sha1 = %VENDOR_INFO.sha1,
         build_date = %VENDOR_INFO.build_date,
         "{}", cli::ABOUT);

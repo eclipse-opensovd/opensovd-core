@@ -31,32 +31,53 @@ jobs:
     outputs:
       should_run: ${{ steps.check.outputs.should_run }}
       release: ${{ steps.check.outputs.release }}
+      channel: ${{ steps.check.outputs.channel }}
+      sha: ${{ steps.check.outputs.sha }}
     steps:
       - uses: actions/checkout@v7
-        if: github.event_name == 'schedule'
+        if: github.event_name == 'schedule' || startsWith(github.ref, 'refs/tags/v')
         with:
           fetch-depth: 0
           fetch-tags: true
 
       - id: check
+        env:
+          EVENT: ${{ github.event_name }}
+          SHA: ${{ github.sha }}
         run: |
-          if [[ "${{ github.event_name }}" == "schedule" ]]; then
-            LAST_SHA=$(git rev-parse nightly 2>/dev/null || echo "")
-            if [[ "$LAST_SHA" == "${{ github.sha }}" ]]; then
+          should_run=true
+          release=none
+          if [[ "$EVENT" == "schedule" ]]; then
+            if [[ "$(git rev-parse nightly 2>/dev/null || true)" == "$SHA" ]]; then
               echo "No changes since last nightly, skipping"
-              echo "should_run=false" >> "$GITHUB_OUTPUT"
-              echo "release=none" >> "$GITHUB_OUTPUT"
-              exit 0
+              should_run=false
+            else
+              release=nightly
             fi
-            echo "release=nightly" >> "$GITHUB_OUTPUT"
           elif [[ "$GITHUB_REF" == refs/tags/v* ]]; then
-            echo "release=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+            version=$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -1)
+            if [[ "$GITHUB_REF_NAME" != "v$version" ]]; then
+              echo "::error::tag $GITHUB_REF_NAME does not match workspace version $version"
+              exit 1
+            fi
+            release=$GITHUB_REF_NAME
           elif [[ "$GITHUB_REF" == "refs/heads/main" ]]; then
-            echo "release=latest" >> "$GITHUB_OUTPUT"
-          else
-            echo "release=none" >> "$GITHUB_OUTPUT"
+            release=latest
           fi
-          echo "should_run=true" >> "$GITHUB_OUTPUT"
+
+          # The channel follows from the release type: only a version tag is stable.
+          case "$release" in
+            v*)      channel=stable ;;
+            nightly) channel=nightly ;;
+            *)       channel=dev ;;
+          esac
+
+          {
+            echo "should_run=$should_run"
+            echo "release=$release"
+            echo "channel=$channel"
+            echo "sha=${SHA::7}"
+          } >> "$GITHUB_OUTPUT"
 
   git-lint:
     if: github.event_name == 'pull_request'
@@ -74,6 +95,9 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
+    env:
+      OPENSOVD_CHANNEL: ${{ needs.prepare.outputs.channel }}
+      OPENSOVD_COMMIT_SHA: ${{ needs.prepare.outputs.sha }}
     strategy:
       fail-fast: false
       matrix:
@@ -219,6 +243,11 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
+    # Runs the CLI version tests too, so it needs the same stamping as build:
+    # on a tag push git describe would otherwise report the tag, not a sha.
+    env:
+      OPENSOVD_CHANNEL: ${{ needs.prepare.outputs.channel }}
+      OPENSOVD_COMMIT_SHA: ${{ needs.prepare.outputs.sha }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions-rust-lang/setup-rust-toolchain@v1
@@ -357,7 +386,7 @@ jobs:
 
       - run: |
           VERSION="${{ needs.prepare.outputs.release }}"
-          if [[ "$VERSION" == "nightly" || "$VERSION" == "latest" ]]; then
+          if [[ "${{ needs.prepare.outputs.channel }}" != "stable" ]]; then
             git cliff --unreleased -o CHANGELOG.md
           else
             git cliff --current -o CHANGELOG.md
@@ -386,7 +415,7 @@ jobs:
           subject-path: 'artifacts/release/*'
 
       - name: Delete existing prerelease
-        if: needs.prepare.outputs.release == 'nightly' || needs.prepare.outputs.release == 'latest'
+        if: needs.prepare.outputs.channel != 'stable'
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release delete "${{ needs.prepare.outputs.release }}" --yes --cleanup-tag || true
@@ -397,7 +426,7 @@ jobs:
           gh release create "${{ needs.prepare.outputs.release }}" \
             --title "${{ needs.prepare.outputs.release }}" \
             --notes-file CHANGELOG.md \
-            ${{ !startsWith(needs.prepare.outputs.release, 'v') && '--prerelease' || '' }} \
+            ${{ needs.prepare.outputs.channel != 'stable' && '--prerelease' || '' }} \
             artifacts/release/*
 
   gate:

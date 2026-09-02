@@ -13,7 +13,7 @@ pub const ABOUT: &str = "OpenSOVD Gateway Server";
 const DEFAULT_URL: &str = "http://localhost:7690/sovd";
 
 const VERSION_STRING: &str = concat!(
-    env!("CARGO_PKG_VERSION"),
+    env!("VERSION"),
     " (",
     env!("COMMIT_SHA"),
     " ",
