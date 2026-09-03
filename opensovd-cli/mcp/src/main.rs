@@ -115,7 +115,7 @@ impl ServerHandler for McpServer {
             .enable_resources()
             .enable_prompts()
             .build();
-        let server_info = Implementation::new("opensovd-mcp", env!("CARGO_PKG_VERSION"))
+        let server_info = Implementation::new("opensovd-mcp", env!("VERSION"))
             .with_description(env!("CARGO_PKG_DESCRIPTION"));
         ServerInfo::new(capabilities)
             .with_server_info(server_info)
@@ -215,7 +215,8 @@ async fn main() -> ExitCode {
 async fn serve(url: &str) -> anyhow::Result<()> {
     tracing::info!(
         target: TARGET,
-        version = %env!("CARGO_PKG_VERSION"),
+        version = %env!("VERSION"),
+        channel = %env!("RELEASE_CHANNEL"),
         sha1 = %env!("COMMIT_SHA"),
         build_date = %env!("BUILD_DATE"),
         "{}", cli::ABOUT

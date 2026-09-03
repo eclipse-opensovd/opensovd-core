@@ -28,7 +28,7 @@ rmcp = { workspace = true, features = ["client", "transport-io"] }
 serde_json = { workspace = true }
 
 [build-dependencies]
-time = { workspace = true, features = ["formatting", "macros"] }
+libcli-build = { workspace = true }
 
 [lints]
 workspace = true
