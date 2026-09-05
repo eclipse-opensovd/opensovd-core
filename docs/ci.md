@@ -8,6 +8,7 @@ This document describes the GitHub Actions CI/CD pipeline for opensovd.
 |----------------|------------------------|---------------------------------------------------------------------------------------|
 | **prepare**    | Always                 | Entry point; determines release type and whether to run (skips nightly if no changes) |
 | **build**      | When `should_run=true` | Builds for Linux, Windows, macOS; runs tests and pytest                               |
+| **bazel**      | When `should_run=true` | Builds the Bazel targets; fails if a pull request's crate index is stale               |
 | **licenses**   | When `should_run=true` | Checks licenses and sources with cargo-deny                                           |
 | **advisories** | When `should_run=true` | Checks security advisories; uploads SARIF on main/nightly                             |
 | **lint**       | When `should_run=true` | Runs rustfmt, clippy, and pre-commit hooks (prek)                                     |
@@ -24,17 +25,19 @@ flowchart TB
     subgraph parallel[ ]
         direction LR
         build
+        bazel
         licenses
         advisories
         lint
         coverage
     end
-    prepare --> build & licenses & advisories & lint & coverage
+    prepare --> build & bazel & licenses & advisories & lint & coverage
     build --> docker & release
-    docker & release & licenses & advisories & lint & coverage --> gate
+    docker & release & bazel & licenses & advisories & lint & coverage --> gate
 ```
 
-Jobs `build`, `licenses`, `advisories`, `lint`, and `coverage` run in parallel after `prepare`.
+Jobs `build`, `bazel`, `licenses`, `advisories`, `lint`, and `coverage` run in parallel after
+`prepare`.
 
 ## Nightly Skip Logic
 

@@ -1,0 +1,60 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 Contributors to the Eclipse Foundation
+# SPDX-License-Identifier: Apache-2.0
+
+name: Bazel repin
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Cargo.lock'
+      - '**/Cargo.toml'
+      - 'MODULE.bazel'
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: bazel-repin
+  cancel-in-progress: true
+
+jobs:
+  repin:
+    timeout-minutes: 30
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      CARGO_BAZEL_REPIN: 'true'
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: bazel-contrib/setup-bazel@0.15.0
+        with:
+          bazelisk-cache: true
+          disk-cache: true
+          repository-cache: true
+
+      - name: Repin
+        run: bazel query //... > /dev/null
+
+      - name: Assert Cargo.lock was not rewritten
+        run: git diff --exit-code -- Cargo.lock
+
+      - name: Open resync pull request
+        uses: peter-evans/create-pull-request@v8.1.1
+        with:
+          branch: chore/bazel-repin
+          delete-branch: true
+          add-paths: cargo-bazel-lock.json
+          commit-message: |
+            build(bazel): repin the crate index
+
+            Regenerated after a dependency change on main. Cargo.lock is
+            unchanged; only the Bazel crate index moves.
+          title: 'build(bazel): repin the crate index'
+          body: |
+            Regenerated `cargo-bazel-lock.json` after a dependency change on
+            `main`. Only the Bazel crate index moves; `Cargo.lock` is unchanged.
+          labels: dependencies

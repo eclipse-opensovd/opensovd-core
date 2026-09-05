@@ -136,6 +136,29 @@ jobs:
           name: opensovd-mcp-${{ matrix.target }}
           path: target/${{ matrix.target }}/${{ matrix.profile }}/opensovd-mcp${{ runner.os == 'Windows' && '.exe' || '' }}
 
+  bazel:
+    needs: prepare
+    if: needs.prepare.outputs.should_run == 'true'
+    timeout-minutes: 30
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    env:
+      CARGO_BAZEL_REPIN: ${{ (github.event_name == 'pull_request' && github.event.pull_request.user.login != 'dependabot[bot]') && 'false' || 'true' }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - uses: bazel-contrib/setup-bazel@0.15.0
+        with:
+          bazelisk-cache: true
+          disk-cache: true
+          repository-cache: true
+
+      - name: Build
+        run: bazel build --config=ci //...
+
   licenses:
     needs: prepare
     if: needs.prepare.outputs.should_run == 'true'
@@ -401,7 +424,7 @@ jobs:
             artifacts/release/*
 
   gate:
-    needs: [prepare, git-lint, build, licenses, advisories, lint, coverage, pages, docker, release]
+    needs: [prepare, git-lint, build, bazel, licenses, advisories, lint, coverage, pages, docker, release]
     if: always()
     runs-on: ubuntu-24.04
     permissions: {}

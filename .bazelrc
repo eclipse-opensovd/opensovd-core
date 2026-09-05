@@ -1,0 +1,16 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 Contributors to the Eclipse Foundation
+# SPDX-License-Identifier: Apache-2.0
+
+common --experimental_isolated_extension_usages
+
+build --verbose_failures
+build --incompatible_strict_action_env
+test --test_output=errors
+
+build:ci --announce_rc
+build:ci --color=yes
+build:ci --show_timestamps
+build:ci --keep_going
+build:ci --lockfile_mode=error
+
+try-import %workspace%/user.bazelrc
