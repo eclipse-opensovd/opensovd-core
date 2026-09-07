@@ -1144,6 +1144,8 @@ name = "opensovd-core"
 version = "0.1.1"
 dependencies = [
  "async-trait",
+ "bytes",
+ "chrono",
  "futures-core",
  "indexmap",
  "serde_json",

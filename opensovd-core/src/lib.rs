@@ -5,11 +5,13 @@
 
 #![cfg_attr(all(test, coverage_nightly), feature(coverage_attribute))]
 
+mod bulkdata;
 mod data;
 mod discovery;
 mod entity;
 mod topology;
 
+pub use bulkdata::{BulkData, BulkDataError, BulkDataMetadata, BulkDataProvider, CategoryFilter};
 pub use data::{
     CategoryInfo, Data, DataError, DataFilter, DataProvider, DataScope, GroupInfo, Metadata,
     TagInfo,
