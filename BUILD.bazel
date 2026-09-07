@@ -1,0 +1,118 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 Contributors to the Eclipse Foundation
+# SPDX-License-Identifier: Apache-2.0
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files([
+    "Cargo.lock",
+    "Cargo.toml",
+    "rust-toolchain.toml",
+])
+
+alias(
+    name = "opensovd-core",
+    actual = "//opensovd-core:opensovd_core",
+)
+
+alias(
+    name = "opensovd-extra",
+    actual = "//opensovd-extra:opensovd_extra",
+)
+
+alias(
+    name = "opensovd-models",
+    actual = "//opensovd-models:opensovd_models",
+)
+
+alias(
+    name = "opensovd-providers",
+    actual = "//opensovd-providers:opensovd_providers",
+)
+
+alias(
+    name = "opensovd-client",
+    actual = "//opensovd-client:opensovd_client",
+)
+
+alias(
+    name = "opensovd-server",
+    actual = "//opensovd-server:opensovd_server",
+)
+
+alias(
+    name = "opensovd-mocks",
+    actual = "//opensovd-mocks:opensovd_mocks",
+)
+
+alias(
+    name = "libcli",
+    actual = "//opensovd-cli/lib:libcli",
+)
+
+alias(
+    name = "opensovd-gateway",
+    actual = "//opensovd-cli/gateway:opensovd_gateway",
+)
+
+alias(
+    name = "opensovd-mcp",
+    actual = "//opensovd-cli/mcp:opensovd_mcp",
+)
+
+alias(
+    name = "opensovd-examples-client",
+    actual = "//examples/client:client_example",
+)
+
+alias(
+    name = "opensovd-examples-server",
+    actual = "//examples/server:server_examples",
+)
+
+alias(
+    name = "opensovd-benches",
+    actual = "//benches:bench_binaries",
+)
+
+filegroup(
+    name = "workspace",
+    srcs = [
+        ":opensovd-core",
+        ":opensovd-extra",
+        ":opensovd-models",
+        ":opensovd-providers",
+        ":opensovd-client",
+        ":opensovd-server",
+        ":opensovd-mocks",
+        ":libcli",
+        ":opensovd-gateway",
+        ":opensovd-mcp",
+        ":opensovd-examples-client",
+        ":opensovd-examples-server",
+        ":opensovd-benches",
+    ],
+)
+
+test_suite(
+    name = "tests",
+    tests = [
+        "//opensovd-core:unit_test",
+        "//opensovd-extra:unit_test",
+        "//opensovd-models:unit_test",
+        "//opensovd-providers:unit_test",
+        "//opensovd-mocks:unit_test",
+        "//opensovd-server:unit_test",
+        "//opensovd-server:auth_test",
+        "//opensovd-server:builder_test",
+        "//opensovd-server:routes_test",
+        "//opensovd-client:unit_test",
+        "//opensovd-client:apps_test",
+        "//opensovd-client:areas_test",
+        "//opensovd-client:client_test",
+        "//opensovd-client:components_test",
+        "//opensovd-client:data_test",
+        "//opensovd-client:unix_test",
+        "//opensovd-cli/lib:unit_test",
+        "//opensovd-cli/mcp:unit_test",
+    ],
+)

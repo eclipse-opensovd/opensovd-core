@@ -1,0 +1,49 @@
+load("//bazel:rust_crate.bzl", "workspace_cargo_build_script", "workspace_rust_binary", "workspace_rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files(["Cargo.toml"])
+
+workspace_cargo_build_script(
+    name = "build_script_build",
+    srcs = ["build.rs"],
+    crate_deps = [
+        "time",
+    ],
+    crate_name = "build_script_build",
+    crate_root = "build.rs",
+    pkg_name = "opensovd-mcp",
+    version = "0.1.1",
+)
+
+workspace_rust_binary(
+    name = "opensovd_mcp",
+    srcs = glob(["src/**/*.rs"]),
+    crate_deps = [
+        "anyhow",
+        "clap",
+        "rmcp",
+        "serde_json",
+        "tokio",
+        "tracing",
+    ],
+    crate_name = "opensovd_mcp",
+    crate_root = "src/main.rs",
+    version = "0.1.1",
+    deps = [
+        ":build_script_build",
+        "//opensovd-cli/lib:libcli",
+        "//opensovd-client:opensovd_client",
+        "//opensovd-models:opensovd_models",
+    ],
+)
+
+workspace_rust_test(
+    name = "unit_test",
+    crate = ":opensovd_mcp",
+    crate_deps = [
+        "mock-http-connector",
+        "rmcp",
+        "serde_json",
+    ],
+)

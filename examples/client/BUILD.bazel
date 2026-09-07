@@ -1,0 +1,28 @@
+load("//bazel:rust_crate.bzl", "workspace_rust_binary")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files(["Cargo.toml"])
+
+workspace_rust_binary(
+    name = "client_example",
+    srcs = ["src/client.rs"],
+    crate_deps = [
+        "bytes",
+        "clap",
+        "http",
+        "http-body-util",
+        "hyper",
+        "serde_json",
+        "tokio",
+        "tower-http",
+        "tracing",
+    ],
+    crate_name = "client",
+    crate_root = "src/client.rs",
+    version = "0.1.1",
+    deps = [
+        "//opensovd-cli/lib:libcli",
+        "//opensovd-client:opensovd_client",
+    ],
+)
