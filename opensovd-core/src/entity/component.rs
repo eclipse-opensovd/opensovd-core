@@ -6,6 +6,7 @@
 use std::collections::HashMap;
 use std::fmt;
 
+use crate::bulkdata::BulkDataProvider;
 use crate::data::DataProvider;
 use crate::entity::EntityRef;
 
@@ -17,6 +18,7 @@ pub struct Component {
     tags: Vec<String>,
     translation_id: Option<String>,
     data_provider: Option<Box<dyn DataProvider>>,
+    bulkdata_provider: Option<Box<dyn BulkDataProvider>>,
 }
 
 impl fmt::Debug for Component {
@@ -29,6 +31,10 @@ impl fmt::Debug for Component {
             .field("tags", &self.tags)
             .field("translation_id", &self.translation_id)
             .field("data_provider", &self.data_provider.as_ref().map(|_| "..."))
+            .field(
+                "bulkdata_provider",
+                &self.bulkdata_provider.as_ref().map(|_| "..."),
+            )
             .finish()
     }
 }
@@ -44,6 +50,7 @@ impl Component {
             tags: Vec::new(),
             translation_id: None,
             data_provider: None,
+            bulkdata_provider: None,
         }
     }
 
@@ -68,6 +75,12 @@ impl Component {
     #[must_use]
     pub fn with_data_provider(mut self, provider: impl DataProvider) -> Self {
         self.data_provider = Some(Box::new(provider));
+        self
+    }
+
+    #[must_use]
+    pub fn with_bulkdata_provider(mut self, provider: impl BulkDataProvider) -> Self {
+        self.bulkdata_provider = Some(Box::new(provider));
         self
     }
 
@@ -107,6 +120,11 @@ impl Component {
     #[must_use]
     pub fn data_provider(&self) -> Option<&dyn DataProvider> {
         self.data_provider.as_deref()
+    }
+
+    #[must_use]
+    pub fn bulkdata_provider(&self) -> Option<&dyn BulkDataProvider> {
+        self.bulkdata_provider.as_deref()
     }
 
     #[must_use]
