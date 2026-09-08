@@ -5,6 +5,7 @@
 
 use std::collections::HashMap;
 use std::fmt;
+use std::sync::Arc;
 
 use crate::bulkdata::BulkDataProvider;
 use crate::data::DataProvider;
@@ -19,7 +20,7 @@ pub struct App {
     tags: Vec<String>,
     translation_id: Option<String>,
     data_provider: Option<Box<dyn DataProvider>>,
-    bulkdata_provider: Option<Box<dyn BulkDataProvider>>,
+    bulkdata_provider: Option<Arc<dyn BulkDataProvider>>,
 }
 
 impl fmt::Debug for App {
@@ -88,7 +89,7 @@ impl App {
 
     #[must_use]
     pub fn with_bulkdata_provider(mut self, provider: impl BulkDataProvider) -> Self {
-        self.bulkdata_provider = Some(Box::new(provider));
+        self.bulkdata_provider = Some(Arc::new(provider));
         self
     }
 
@@ -136,8 +137,8 @@ impl App {
     }
 
     #[must_use]
-    pub fn bulkdata_provider(&self) -> Option<&dyn BulkDataProvider> {
-        self.bulkdata_provider.as_deref()
+    pub fn bulkdata_provider(&self) -> Option<Arc<dyn BulkDataProvider>> {
+        self.bulkdata_provider.clone()
     }
 
     #[must_use]

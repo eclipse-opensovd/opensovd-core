@@ -11,6 +11,8 @@
 //! - GET /{entity-collection}/{entity-id}/bulk-data/{category}/{bulk-data-id} - Download a specific bulk data resource
 //! - DELETE /{entity-collection}/{entity-id}/bulk-data/{category}/{bulk-data-id} - Delete a specific bulk data resource
 
+use std::sync::Arc;
+
 use axum::{
     Json, Router,
     body::Body,
@@ -24,7 +26,7 @@ use axum_extra::{
     headers::{ContentLength, ContentType, Header},
 };
 use futures::StreamExt;
-use http::{HeaderName, HeaderValue, StatusCode};
+use http::{HeaderMap, HeaderName, HeaderValue, StatusCode, request::Parts};
 use opensovd_core::{BulkDataError, BulkDataProvider, CategoryFilter, Topology, TopologyReadGuard};
 use opensovd_models::{
     Response,
@@ -72,7 +74,7 @@ async fn bulk_data_categories(
     WithRejection(Query(query), _): WithRejection<Query<BulkDataCategoriesQuery>, Error>,
 ) -> Result<Json<Response<AvailableBulkDataCategories>>> {
     let topo = topology.read().await;
-    let provider = get_provider(&topo, &entity_collection, &entity_id)?;
+    let provider = get_provider(topo, &entity_collection, &entity_id)?;
     Ok(Json(Response {
         data: AvailableBulkDataCategories {
             items: provider
@@ -120,7 +122,7 @@ async fn bulk_data_descriptors(
     WithRejection(Query(query), _): WithRejection<Query<BulkDataDescriptorsQuery>, Error>,
 ) -> Result<Json<Response<BulkDataMetadata>>> {
     let topo = topology.read().await;
-    let provider = get_provider(&topo, &entity_collection, &entity_id)?;
+    let provider = get_provider(topo, &entity_collection, &entity_id)?;
 
     Ok(Json(Response {
         data: BulkDataMetadata {
@@ -211,6 +213,7 @@ impl Header for ContentDisposition {
 
 async fn upload_bulk_data(
     State(topology): State<Topology>,
+    parts: Parts,
     Path((entity_collection, entity_id, category)): Path<(String, String, String)>,
     WithRejection(TypedHeader(content_type), _): WithRejection<TypedHeader<ContentType>, Error>,
     WithRejection(TypedHeader(content_disposition), _): WithRejection<
@@ -219,15 +222,23 @@ async fn upload_bulk_data(
     >,
     WithRejection(TypedHeader(content_length), _): WithRejection<TypedHeader<ContentLength>, Error>,
     req: Request,
-) -> Result<(StatusCode, Json<Response<BulkDataUpload>>)> {
+) -> Result<(StatusCode, HeaderMap, Json<Response<BulkDataUpload>>)> {
     let topo = topology.read().await;
-    let provider = get_provider(&topo, &entity_collection, &entity_id)?;
+    let provider = get_provider(topo, &entity_collection, &entity_id)?;
 
+    let base_uri = super::base_uri(&parts);
     let filename = content_disposition
         .filename
         .clone()
         .or_else(|| content_disposition.name.clone())
         .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+
+    if content_length.0 > MAX_BULKDATA_BODY_BYTES as u64 {
+        return Err(BulkDataError::InvalidRequest(format!(
+            "Content-Length exceeds maximum allowed size of {MAX_BULKDATA_BODY_BYTES} bytes",
+        ))
+        .into());
+    }
 
     if content_type == ContentType::octet_stream() {
         let mut stream = req
@@ -242,6 +253,7 @@ async fn upload_bulk_data(
             .await
             .map_err(|e| BulkDataError::InvalidRequest(e.to_string()))?;
         let mut sig = None;
+        let mut file_content_received = false;
         while let Some(field) = multipart
             .next_field()
             .await
@@ -262,18 +274,24 @@ async fn upload_bulk_data(
                     }
                 }
                 Some("application/octet-stream") => {
+                    // if the field has its own Content-Length header, we can
+                    // get a better estimate of the size of the data being
+                    // uploaded. Otherwise, we fall back to the Content-Length
+                    // header of the entire request.
+                    let length = field
+                        .headers()
+                        .get("Content-Length")
+                        .and_then(|v| v.to_str().ok())
+                        .and_then(|s| s.parse::<u64>().ok())
+                        .unwrap_or(content_length.0);
                     let mut data_stream = field.map(|chunk| {
                         chunk.map_err(|e| BulkDataError::InvalidRequest(e.to_string()))
                     });
                     provider
-                        .upload(
-                            &category,
-                            &filename,
-                            content_length.0,
-                            &mut data_stream,
-                            sig.as_ref(),
-                        )
+                        .upload(&category, &filename, length, &mut data_stream, sig.as_ref())
                         .await?;
+                    file_content_received = true;
+                    break;
                 }
                 _ => {
                     return Err(BulkDataError::InvalidRequest(
@@ -283,13 +301,26 @@ async fn upload_bulk_data(
                 }
             }
         }
+        if !file_content_received {
+            return Err(
+                BulkDataError::InvalidRequest("no file content received".to_string()).into(),
+            );
+        }
     }
+
+    let mut headers = HeaderMap::new();
+    let location = HeaderValue::from_str(&format!(
+        "{base_uri}/{entity_collection}/{entity_id}/bulk-data/{category}/{filename}"
+    ))
+    .map_err(|e| BulkDataError::Internal(e.to_string()))?;
+    headers.insert("Location", location);
 
     Ok((
         StatusCode::CREATED,
+        headers,
         Json(Response {
-            data: BulkDataUpload { id: entity_id },
-            schema: Some(Vec::<BulkDataUpload>::schema()),
+            data: BulkDataUpload { id: filename },
+            schema: Some(BulkDataUpload::schema()),
         }),
     ))
 }
@@ -299,7 +330,7 @@ async fn delete_bulk_data_category(
     Path((entity_collection, entity_id, category)): Path<(String, String, String)>,
 ) -> Result<StatusCode> {
     let topo = topology.read().await;
-    let provider = get_provider(&topo, &entity_collection, &entity_id)?;
+    let provider = get_provider(topo, &entity_collection, &entity_id)?;
 
     provider.delete(&category, None).await?;
 
@@ -316,7 +347,7 @@ async fn download_bulk_data(
     )>,
 ) -> Result<impl IntoResponse> {
     let topo = topology.read().await;
-    let provider = get_provider(&topo, &entity_collection, &entity_id)?;
+    let provider = get_provider(topo, &entity_collection, &entity_id)?;
 
     let bulkdata = provider.download(&category, &bulk_data_id).await?;
 
@@ -347,19 +378,19 @@ async fn delete_bulk_data(
     )>,
 ) -> Result<StatusCode> {
     let topo = topology.read().await;
-    let provider = get_provider(&topo, &entity_collection, &entity_id)?;
+    let provider = get_provider(topo, &entity_collection, &entity_id)?;
 
     provider.delete(&category, Some(&bulk_data_id)).await?;
 
     Ok(StatusCode::NO_CONTENT)
 }
 
-fn get_provider<'a>(
-    topo: &'a TopologyReadGuard<'a>,
+fn get_provider(
+    topo: TopologyReadGuard,
     entity_collection: &str,
     entity_id: &str,
-) -> Result<&'a dyn BulkDataProvider> {
-    match entity_collection {
+) -> Result<Arc<dyn BulkDataProvider>> {
+    let provider = match entity_collection {
         "components" => {
             let component = topo
                 .get_component(entity_id)
@@ -376,5 +407,7 @@ fn get_provider<'a>(
                 .ok_or_else(|| Error::ProviderNotAvailable("bulkdata".into()))
         }
         _ => Err(Error::EntityNotFound(entity_collection.to_string())),
-    }
+    };
+    drop(topo);
+    provider
 }

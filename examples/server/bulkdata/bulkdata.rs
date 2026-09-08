@@ -246,18 +246,22 @@ impl BulkDataProvider for TempFsBulkDataProvider {
     ) -> std::result::Result<(), BulkDataError> {
         let _category_path = self.ensure_category_dir(category_id).await?;
         let path = self.data_path(category_id, data_id)?;
-        let mut file = tokio::fs::File::create(&path)
+        let temp_path = self.data_path(category_id, &format!("{data_id}.tmp"))?;
+        let mut file = tokio::fs::File::create(&temp_path)
             .await
             .map_err(|error| BulkDataError::Internal(error.to_string()))?;
 
         while let Some(chunk) = data.next().await {
             let chunk = chunk?;
-            file.write_all(&chunk)
-                .await
-                .map_err(|error| BulkDataError::Internal(error.to_string()))?;
+            if let Err(e) = file.write_all(&chunk).await {
+                let _ = tokio::fs::remove_file(&temp_path).await;
+                return Err(BulkDataError::Internal(e.to_string()));
+            }
         }
 
-        file.flush()
+        let _ = file.flush().await;
+        drop(file);
+        tokio::fs::rename(&temp_path, &path)
             .await
             .map_err(|error| BulkDataError::Internal(error.to_string()))?;
 

@@ -18,7 +18,7 @@ pub enum BulkDataError {
     DeletionFailed(String),
     #[error("{0}")]
     Internal(String),
-    #[error("bulk data upload failed: {0}")]
+    #[error("bulk data not found: {0}")]
     NotFound(String),
 }
 
@@ -66,7 +66,7 @@ pub trait BulkDataProvider: Send + Sync + std::fmt::Debug + 'static {
         &self,
         category_id: &str,
         data_id: &str,
-        size: u64,
+        size_upper_bound: u64,
         data: &mut (dyn Stream<Item = Result<Bytes>> + Send + Unpin),
         signature: Option<&String>,
     ) -> Result<()>;
