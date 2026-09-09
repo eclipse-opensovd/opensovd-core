@@ -217,7 +217,9 @@ pub async fn create_mock_topology() -> Topology {
             "stable".to_string(),
         )]))
         .with_data_provider(ota_provider)
-        .with_bulkdata_provider(InMemoryBulkDataProvider::default());
+        .with_bulkdata_provider(
+            InMemoryBulkDataProvider::default().with_permanent_entry("logs", "cannot_delete"),
+        );
     // Note: NO with_area_id() - tests optional belongs-to
 
     // Areas

@@ -192,6 +192,43 @@ def test_delete_category_removes_all_entries(client):
 
 
 # ---------------------------------------------------------------------------
+# Tests: undeletable (permanent) entries
+# ---------------------------------------------------------------------------
+
+PERMANENT_CATEGORY = "logs"
+PERMANENT_ID = "cannot_delete"
+
+
+def test_delete_permanent_entry_returns_409(client):
+    """Deleting the protected logs entry is rejected with 409 Conflict."""
+    resp = client.delete(f"{BASE}/{PERMANENT_CATEGORY}/{PERMANENT_ID}")
+    assert resp.status_code == 409, f"unexpected status: {resp.status_code} {resp.text}"
+
+    ids = [item["id"] for item in client.get(f"{BASE}/{PERMANENT_CATEGORY}").json()["items"]]
+    assert PERMANENT_ID in ids, f"protected entry disappeared: {ids}"
+
+
+def test_delete_permanent_category_is_partial_success(client):
+    """Deleting the logs category removes uploads but reports the protected entry."""
+    _upload(client, PERMANENT_CATEGORY, "boot.log", b"boot")
+    _upload(client, PERMANENT_CATEGORY, "kernel.log", b"kernel")
+
+    resp = client.delete(f"{BASE}/{PERMANENT_CATEGORY}")
+    assert resp.status_code == 200
+    body = resp.json()
+
+    assert sorted(body["deleted_ids"]) == ["boot.log", "kernel.log"], (
+        f"unexpected deleted ids: {body['deleted_ids']}"
+    )
+    errors = {err["id"]: err["error"] for err in body["errors"]}
+    assert PERMANENT_ID in errors, f"expected error for {PERMANENT_ID}: {body['errors']}"
+    assert errors[PERMANENT_ID].get("vendor_code") == "unable-to-delete"
+
+    ids = [item["id"] for item in client.get(f"{BASE}/{PERMANENT_CATEGORY}").json()["items"]]
+    assert ids == [PERMANENT_ID], f"expected only the protected entry, got {ids}"
+
+
+# ---------------------------------------------------------------------------
 # Tests: error paths
 # ---------------------------------------------------------------------------
 

@@ -3,7 +3,7 @@
 
 //! In-memory bulk-data provider for tests.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
 
 use async_trait::async_trait;
@@ -22,6 +22,37 @@ type BulkDataMap = HashMap<String, HashMap<String, Vec<u8>>>;
 #[derive(Clone, Default, Debug)]
 pub struct InMemoryBulkDataProvider {
     store: Arc<RwLock<BulkDataMap>>,
+    permanent: Arc<RwLock<HashSet<(String, String)>>>,
+}
+
+#[allow(clippy::unwrap_used)]
+impl InMemoryBulkDataProvider {
+    /// Adds an entry that is always present and can never be deleted.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal locks are poisoned.
+    #[must_use]
+    pub fn with_permanent_entry(self, category_id: &str, data_id: &str) -> Self {
+        self.store
+            .write()
+            .unwrap()
+            .entry(category_id.to_string())
+            .or_default()
+            .insert(data_id.to_string(), Vec::new());
+        self.permanent
+            .write()
+            .unwrap()
+            .insert((category_id.to_string(), data_id.to_string()));
+        self
+    }
+
+    fn is_permanent(&self, category_id: &str, data_id: &str) -> bool {
+        self.permanent
+            .read()
+            .unwrap()
+            .contains(&(category_id.to_string(), data_id.to_string()))
+    }
 }
 
 #[async_trait]
@@ -115,6 +146,12 @@ impl BulkDataProvider for InMemoryBulkDataProvider {
     }
 
     async fn delete(&self, category_id: &str, data_id: &str) -> Result<(), BulkDataError> {
+        if self.is_permanent(category_id, data_id) {
+            return Err(BulkDataError::DeletionFailed(format!(
+                "entry is protected: {category_id}/{data_id}"
+            )));
+        }
+
         let mut store = self.store.write().unwrap();
 
         store
@@ -128,16 +165,34 @@ impl BulkDataProvider for InMemoryBulkDataProvider {
         &self,
         category_id: &str,
     ) -> Result<Vec<DeletedBulkDataItem>, BulkDataError> {
+        let permanent = self.permanent.read().unwrap();
         let mut store = self.store.write().unwrap();
 
-        store
-            .remove(category_id)
-            .ok_or_else(|| BulkDataError::NotFound(format!("not found: {category_id}")))
-            .map(|items| {
-                items
-                    .into_keys()
-                    .map(|id| DeletedBulkDataItem { id, error: None })
-                    .collect()
-            })
+        let entries = store
+            .get_mut(category_id)
+            .ok_or_else(|| BulkDataError::NotFound(format!("not found: {category_id}")))?;
+
+        let ids: Vec<String> = entries.keys().cloned().collect();
+        let mut deleted = Vec::with_capacity(ids.len());
+        for id in ids {
+            if permanent.contains(&(category_id.to_string(), id.clone())) {
+                deleted.push(DeletedBulkDataItem {
+                    error: Some(BulkDataError::DeletionFailed(format!(
+                        "entry is protected: {category_id}/{id}"
+                    ))),
+                    id,
+                });
+            } else {
+                entries.remove(&id);
+                deleted.push(DeletedBulkDataItem { id, error: None });
+            }
+        }
+
+        if entries.is_empty() {
+            store.remove(category_id);
+        }
+
+        deleted.sort_by(|a, b| a.id.cmp(&b.id));
+        Ok(deleted)
     }
 }
