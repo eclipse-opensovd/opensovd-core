@@ -39,7 +39,9 @@ use opensovd_models::{
 
 use crate::routes::{
     AppState,
+    entities::encode_path_segment,
     error::{Error, Result},
+    versioned_uri,
 };
 use crate::schema::JsonSchema;
 
@@ -208,7 +210,6 @@ async fn upload_bulk_data(
     let topo = topology.read().await;
     let provider = get_provider(topo, &entity_collection, &entity_id)?;
 
-    let base_uri = super::base_uri(&parts);
     let filename = content_disposition
         .filename
         .clone()
@@ -292,7 +293,12 @@ async fn upload_bulk_data(
 
     let mut headers = HeaderMap::new();
     let location = HeaderValue::from_str(&format!(
-        "{base_uri}/{entity_collection}/{entity_id}/bulk-data/{category}/{filename}"
+        "{}/{}/{}/bulk-data/{}/{}",
+        versioned_uri(&parts),
+        encode_path_segment(&entity_collection),
+        encode_path_segment(&entity_id),
+        encode_path_segment(&category),
+        encode_path_segment(&filename),
     ))
     .map_err(|e| BulkDataError::Internal(e.to_string()))?;
     headers.insert("Location", location);
@@ -302,7 +308,7 @@ async fn upload_bulk_data(
         headers,
         Json(Response {
             data: BulkDataUpload { id: filename },
-            schema: Some(BulkDataUpload::schema()),
+            schema: None,
         }),
     ))
 }
