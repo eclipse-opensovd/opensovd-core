@@ -19,6 +19,7 @@ use tower::{
     util::{BoxCloneSyncService, MapErrLayer, MapResponseLayer},
 };
 
+use crate::auth::Auth;
 use crate::discovery::Discovery;
 use crate::entities::{App, Area, Component};
 use crate::error::{Error, Result};
@@ -45,6 +46,9 @@ pub enum BuilderError {
     /// Invalid base URI.
     #[error("invalid base URI")]
     InvalidUri,
+    /// Invalid authentication token.
+    #[error("invalid authentication token")]
+    InvalidToken,
 }
 
 /// Builder for constructing a [`Client`] with custom configuration.
@@ -52,6 +56,7 @@ pub enum BuilderError {
 pub struct ClientBuilder<Conn = HttpConnector, Layers = Identity> {
     base_uri: Option<http::Uri>,
     timeout: Option<Duration>,
+    auth: Option<Auth>,
     connector: Conn,
     layer: Layers,
 }
@@ -61,6 +66,7 @@ impl ClientBuilder<HttpConnector, Identity> {
         Self {
             base_uri: None,
             timeout: None,
+            auth: None,
             connector: HttpConnector::new(),
             layer: Identity::new(),
         }
@@ -90,6 +96,7 @@ impl<Conn, Layers> ClientBuilder<Conn, Layers> {
         ClientBuilder {
             base_uri: self.base_uri,
             timeout: self.timeout,
+            auth: self.auth,
             connector,
             layer: self.layer,
         }
@@ -101,6 +108,14 @@ impl<Conn, Layers> ClientBuilder<Conn, Layers> {
         self
     }
 
+    /// Set authentication to apply to every request.
+    ///
+    /// The credential is validated when calling [`Self::build`] or [`Self::discovery`].
+    pub fn auth(mut self, auth: impl Into<Auth>) -> Self {
+        self.auth = Some(auth.into());
+        self
+    }
+
     /// Add a Tower layer to the HTTP client stack.
     ///
     /// Layers are applied in order: the first layer added is the outermost.
@@ -108,6 +123,7 @@ impl<Conn, Layers> ClientBuilder<Conn, Layers> {
         ClientBuilder {
             base_uri: self.base_uri,
             timeout: self.timeout,
+            auth: self.auth,
             connector: self.connector,
             layer: Stack::new(layer, self.layer),
         }
@@ -118,6 +134,8 @@ impl<Conn, Layers> ClientBuilder<Conn, Layers> {
     /// # Errors
     ///
     /// Returns [`BuilderError::NoBaseUri`] if the base URI has not been set.
+    /// Returns [`BuilderError::InvalidToken`] if the configured authentication token cannot be
+    /// encoded as an HTTP header value.
     pub fn build<ResBody>(self) -> std::result::Result<Client, BuilderError>
     where
         Conn: hyper_util::client::legacy::connect::Connect + Clone + Send + Sync + 'static,
@@ -133,6 +151,17 @@ impl<Conn, Layers> ClientBuilder<Conn, Layers> {
         ResBody::Error: Into<BoxError>,
     {
         let base_uri = self.base_uri.ok_or(BuilderError::NoBaseUri)?;
+        let auth = self
+            .auth
+            .map(|auth| match auth {
+                Auth::Bearer(token) => http::HeaderValue::from_str(&format!("Bearer {token}")),
+            })
+            .transpose()
+            .map_err(|_| BuilderError::InvalidToken)?
+            .map(|mut header| {
+                header.set_sensitive(true);
+                header
+            });
         let http = legacy::Client::builder(TokioExecutor::new()).build(self.connector);
         let service = self.layer.layer(http);
         // Map response body to BoxBody and service error to BoxError
@@ -145,6 +174,7 @@ impl<Conn, Layers> ClientBuilder<Conn, Layers> {
         Ok(Client {
             base_uri,
             timeout: self.timeout,
+            auth,
             http: BoxCloneSyncService::new(service),
         })
     }
@@ -159,6 +189,8 @@ impl<Conn, Layers> ClientBuilder<Conn, Layers> {
     /// # Errors
     ///
     /// Returns [`BuilderError::NoBaseUri`] if the base URI has not been set.
+    /// Returns [`BuilderError::InvalidToken`] if the configured authentication token cannot be
+    /// encoded as an HTTP header value.
     pub fn discovery<ResBody>(self) -> std::result::Result<Discovery, BuilderError>
     where
         Conn: hyper_util::client::legacy::connect::Connect + Clone + Send + Sync + 'static,
@@ -213,6 +245,7 @@ impl<Conn, Layers> ClientBuilder<Conn, Layers> {
 pub struct Client {
     pub(crate) base_uri: http::Uri,
     pub(crate) timeout: Option<Duration>,
+    pub(crate) auth: Option<http::HeaderValue>,
     pub(crate) http: HttpService,
 }
 
@@ -323,7 +356,12 @@ impl Client {
     /// Send an HTTP request and return the response body bytes.
     ///
     /// Returns an [`Error::ApiError`] if the server responds with a non-success status.
-    pub(crate) async fn request(&self, req: http::Request<Full<Bytes>>) -> Result<Bytes> {
+    pub(crate) async fn request(&self, mut req: http::Request<Full<Bytes>>) -> Result<Bytes> {
+        if let Some(auth) = &self.auth {
+            req.headers_mut()
+                .insert(http::header::AUTHORIZATION, auth.clone());
+        }
+
         let request = async {
             let resp = self
                 .http
