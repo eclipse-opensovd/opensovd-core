@@ -16,9 +16,10 @@ categories.workspace = true
 jsonschema = ["dep:schemars"]
 
 [dependencies]
-schemars = { workspace = true, optional = true, features = ["derive", "std"] }
+schemars = { workspace = true, optional = true, features = ["derive", "std", "chrono04"] }
 serde = { workspace = true, features = ["derive", "std"] }
 serde_json = { workspace = true, features = ["std"] }
+chrono = { workspace = true, features = ["serde"] }
 
 [lints]
 workspace = true

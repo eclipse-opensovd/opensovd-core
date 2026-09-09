@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 Contributors to the Eclipse Foundation
 // SPDX-License-Identifier: Apache-2.0
 
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::{GenericError, types::SupportedTags};
@@ -15,8 +16,8 @@ pub struct BulkDataCategoriesQuery {
 #[serde(default, rename_all = "kebab-case")]
 pub struct BulkDataDescriptorsQuery {
     pub include_schema: bool,
-    pub created_before: Option<String>,
-    pub created_after: Option<String>,
+    pub created_before: Option<DateTime<Utc>>,
+    pub created_after: Option<DateTime<Utc>>,
     pub tags: Option<Vec<String>>,
 }
 
@@ -36,9 +37,9 @@ pub struct BulkDataDescriptor {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub size: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub creation_date: Option<String>,
+    pub creation_date: Option<DateTime<Utc>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub last_modified: Option<String>,
+    pub last_modified: Option<DateTime<Utc>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hash: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -108,8 +109,8 @@ mod tests {
             name: Some("picture.png".into()),
             translation_id: Some("t.id.1".into()),
             size: Some(1024),
-            creation_date: Some("2026-01-01T00:00:00Z".into()),
-            last_modified: Some("2026-06-01T00:00:00Z".into()),
+            creation_date: Some("2026-01-01T00:00:00Z".parse::<DateTime<Utc>>().unwrap()),
+            last_modified: Some("2026-06-01T00:00:00Z".parse::<DateTime<Utc>>().unwrap()),
             hash: Some("abc123".into()),
             hash_algorithm: Some("sha256".into()),
             tags: Some(SupportedTags(vec!["sensor".into(), "camera".into()])),
@@ -190,10 +191,13 @@ mod tests {
         let query: BulkDataDescriptorsQuery = serde_json::from_str(json).unwrap();
         assert!(query.include_schema);
         assert_eq!(
-            query.created_before.as_deref(),
-            Some("2026-01-01T00:00:00Z")
+            query.created_before,
+            Some("2026-01-01T00:00:00Z".parse::<DateTime<Utc>>().unwrap())
         );
-        assert_eq!(query.created_after.as_deref(), Some("2025-01-01T00:00:00Z"));
+        assert_eq!(
+            query.created_after,
+            Some("2025-01-01T00:00:00Z".parse::<DateTime<Utc>>().unwrap())
+        );
         assert_eq!(
             query.tags.as_deref(),
             Some(&["sensor".to_string(), "camera".to_string()][..])

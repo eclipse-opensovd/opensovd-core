@@ -90,30 +90,12 @@ async fn bulk_data_categories(
     }))
 }
 
-fn category_filter(query: &BulkDataDescriptorsQuery) -> Result<CategoryFilter> {
-    let created_before = query
-        .created_before
-        .as_ref()
-        .map(|date| {
-            date.parse::<chrono::DateTime<chrono::Utc>>()
-                .map_err(|e| BulkDataError::InvalidRequest(format!("Invalid date format: {e}")))
-        })
-        .transpose()?;
-
-    let created_after = query
-        .created_after
-        .as_ref()
-        .map(|date| {
-            date.parse::<chrono::DateTime<chrono::Utc>>()
-                .map_err(|e| BulkDataError::InvalidRequest(format!("Invalid date format: {e}")))
-        })
-        .transpose()?;
-
-    Ok(CategoryFilter {
-        created_before,
-        created_after,
+fn category_filter(query: &BulkDataDescriptorsQuery) -> CategoryFilter {
+    CategoryFilter {
+        created_before: query.created_before,
+        created_after: query.created_after,
         tags: query.tags.clone(),
-    })
+    }
 }
 
 async fn bulk_data_descriptors(
@@ -127,7 +109,7 @@ async fn bulk_data_descriptors(
     Ok(Json(Response {
         data: BulkDataMetadata {
             items: provider
-                .list(&category, category_filter(&query)?)
+                .list(&category, category_filter(&query))
                 .await?
                 .iter()
                 .map(|metadata| BulkDataDescriptor {
@@ -136,8 +118,8 @@ async fn bulk_data_descriptors(
                     name: metadata.name.clone(),
                     translation_id: metadata.translation_id.clone(),
                     size: metadata.size,
-                    creation_date: metadata.creation_date.clone(),
-                    last_modified: metadata.last_modified.clone(),
+                    creation_date: metadata.creation_date,
+                    last_modified: metadata.last_modified,
                     hash: metadata.hash.clone(),
                     hash_algorithm: metadata.hash_algorithm.clone(),
                     tags: metadata

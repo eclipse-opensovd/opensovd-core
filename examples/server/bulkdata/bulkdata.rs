@@ -14,7 +14,6 @@
 //! Run with: `cargo run -p opensovd-examples-server --example bulkdata`
 
 use std::path::PathBuf;
-use std::time::SystemTime;
 
 use async_trait::async_trait;
 use bytes::Bytes;
@@ -79,29 +78,25 @@ impl TempFsBulkDataProvider {
         Ok(category_path)
     }
 
-    fn timestamp_string(time: SystemTime) -> String {
-        let timestamp: DateTime<Utc> = time.into();
-        timestamp.to_rfc3339()
-    }
-
     fn include_metadata(metadata: &BulkDataMetadata, filter: &CategoryFilter) -> bool {
         if filter.tags.as_ref().is_some_and(|tags| !tags.is_empty()) {
             return false;
         }
 
-        let created = metadata
-            .creation_date
-            .as_ref()
-            .and_then(|value| value.parse::<DateTime<Utc>>().ok());
-
         if let Some(created_before) = filter.created_before
-            && created.is_some_and(|created_at| created_at >= created_before)
+            && metadata
+                .creation_date
+                .as_ref()
+                .is_some_and(|created_at| created_at >= &created_before)
         {
             return false;
         }
 
         if let Some(created_after) = filter.created_after
-            && created.is_some_and(|created_at| created_at <= created_after)
+            && metadata
+                .creation_date
+                .as_ref()
+                .is_some_and(|created_at| created_at <= &created_after)
         {
             return false;
         }
@@ -127,8 +122,8 @@ impl TempFsBulkDataProvider {
             .await
             .map_err(|error| BulkDataError::Internal(error.to_string()))?;
 
-        let creation_date = stats.created().ok().map(Self::timestamp_string);
-        let last_modified = stats.modified().ok().map(Self::timestamp_string);
+        let creation_date = stats.created().ok().map(Into::<DateTime<Utc>>::into);
+        let last_modified = stats.modified().ok().map(Into::<DateTime<Utc>>::into);
 
         Ok(Some(BulkDataMetadata {
             id: data_id.clone(),

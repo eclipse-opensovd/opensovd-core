@@ -35,8 +35,8 @@ pub struct BulkDataMetadata {
     pub name: Option<String>,
     pub translation_id: Option<String>,
     pub size: Option<u64>,
-    pub creation_date: Option<String>,
-    pub last_modified: Option<String>,
+    pub creation_date: Option<DateTime<Utc>>,
+    pub last_modified: Option<DateTime<Utc>>,
     pub hash: Option<String>,
     pub hash_algorithm: Option<String>,
     pub tags: Option<Vec<String>>,
@@ -47,7 +47,7 @@ pub struct BulkData {
     pub data: Box<dyn Stream<Item = Result<Bytes>> + Send + Unpin>,
 }
 
-/// A `Result` alias where the `Err` variant is [`DataError`].
+/// A `Result` alias where the `Err` variant is [`BulkDataError`].
 pub type Result<T> = std::result::Result<T, BulkDataError>;
 
 #[async_trait]

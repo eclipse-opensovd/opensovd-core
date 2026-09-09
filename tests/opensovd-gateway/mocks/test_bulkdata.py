@@ -206,7 +206,7 @@ def test_upload_malformed_missing_content_type_returns_400(client):
     assert resp.status_code == 400
 
 
-def test_download_nonexistent_file_returns_400(client):
+def test_download_nonexistent_file_returns_404(client):
     """Downloading a file that does not exist returns 404 (Not Found)."""
     resp = client.get(f"{BASE}/any-cat/no-such-file.bin")
     assert resp.status_code == 404
