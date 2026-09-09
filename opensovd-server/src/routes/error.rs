@@ -9,8 +9,8 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Json, Response},
 };
-use axum_extra::extract::QueryRejection;
-use opensovd_core::{DataError, TopologyError};
+use axum_extra::{extract::QueryRejection, typed_header::TypedHeaderRejection};
+use opensovd_core::{BulkDataError, DataError, TopologyError};
 use opensovd_models::{ErrorCode, GenericError};
 
 /// A `Result` alias where the `Err` variant is [`Error`].
@@ -25,8 +25,12 @@ pub enum Error {
     ProviderNotAvailable(String),
     #[error(transparent)]
     Data(#[from] DataError),
+    #[error(transparent)]
+    BulkData(#[from] BulkDataError),
     #[error("{0}")]
     BadQuery(#[from] QueryRejection),
+    #[error("{0}")]
+    InvalidHeader(#[from] TypedHeaderRejection),
     #[error(transparent)]
     Topology(#[from] TopologyError),
 }
@@ -66,9 +70,32 @@ impl IntoResponse for Error {
 
                 (status, GenericError::new(ErrorCode::ErrorResponse, message))
             }
+            Self::BulkData(e) => {
+                let status = match e {
+                    BulkDataError::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
+                    BulkDataError::DeletionFailed(_) => StatusCode::CONFLICT,
+                    BulkDataError::InvalidRequest(_) => StatusCode::BAD_REQUEST,
+                    BulkDataError::NotFound(_) => StatusCode::NOT_FOUND,
+                };
+
+                // Sanitize internal errors - log details, return generic message
+                let message = match e {
+                    BulkDataError::Internal(msg) => {
+                        tracing::error!(target: "srv", error = %msg, "Internal error");
+                        "An internal error occurred".to_string()
+                    }
+                    _ => e.to_string(),
+                };
+
+                (status, GenericError::new(ErrorCode::ErrorResponse, message))
+            }
             Self::BadQuery(_) => (
                 StatusCode::BAD_REQUEST,
                 GenericError::new(ErrorCode::IncompleteRequest, "Bad request"),
+            ),
+            Self::InvalidHeader(_) => (
+                StatusCode::BAD_REQUEST,
+                GenericError::new(ErrorCode::IncompleteRequest, "Bad request headers"),
             ),
             Self::Topology(e) => {
                 let status = match e {

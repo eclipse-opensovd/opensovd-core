@@ -14,6 +14,9 @@ categories.workspace = true
 publish = false
 
 [dependencies]
+async-trait = { workspace = true }
+bytes = { workspace = true }
+futures = { workspace = true, features = ["std", "async-await"] }
 opensovd-core = { workspace = true }
 opensovd-models = { workspace = true }
 opensovd-providers = { workspace = true }
