@@ -11,6 +11,7 @@ use bytes::Bytes;
 use futures::{Stream, StreamExt as _};
 use opensovd_core::{
     BulkData, BulkDataError, BulkDataMetadata, BulkDataProvider, CategoryFilter, CategoryInfo,
+    DeletedBulkDataItem,
 };
 
 type BulkDataMap = HashMap<String, HashMap<String, Vec<u8>>>;
@@ -113,15 +114,30 @@ impl BulkDataProvider for InMemoryBulkDataProvider {
         Ok(())
     }
 
-    async fn delete(&self, category_id: &str, data_id: Option<&str>) -> Result<(), BulkDataError> {
+    async fn delete(&self, category_id: &str, data_id: &str) -> Result<(), BulkDataError> {
         let mut store = self.store.write().unwrap();
-        if let Some(id) = data_id {
-            if let Some(cat) = store.get_mut(category_id) {
-                cat.remove(id);
-            }
-        } else {
-            store.remove(category_id);
-        }
-        Ok(())
+
+        store
+            .get_mut(category_id)
+            .and_then(|cat| cat.remove(data_id))
+            .ok_or_else(|| BulkDataError::NotFound(format!("not found: {category_id}/{data_id}")))
+            .map(|_| ())
+    }
+
+    async fn delete_category(
+        &self,
+        category_id: &str,
+    ) -> Result<Vec<DeletedBulkDataItem>, BulkDataError> {
+        let mut store = self.store.write().unwrap();
+
+        store
+            .remove(category_id)
+            .ok_or_else(|| BulkDataError::NotFound(format!("not found: {category_id}")))
+            .map(|items| {
+                items
+                    .into_keys()
+                    .map(|id| DeletedBulkDataItem { id, error: None })
+                    .collect()
+            })
     }
 }

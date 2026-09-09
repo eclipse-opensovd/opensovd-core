@@ -22,6 +22,7 @@ pub enum BulkDataError {
     NotFound(String),
 }
 
+#[derive(Debug, Default)]
 pub struct CategoryFilter {
     pub created_before: Option<DateTime<Utc>>,
     pub created_after: Option<DateTime<Utc>>,
@@ -50,6 +51,12 @@ pub struct BulkData {
 /// A `Result` alias where the `Err` variant is [`BulkDataError`].
 pub type Result<T> = std::result::Result<T, BulkDataError>;
 
+#[derive(Debug)]
+pub struct DeletedBulkDataItem {
+    pub id: String,
+    pub error: Option<BulkDataError>,
+}
+
 #[async_trait]
 pub trait BulkDataProvider: Send + Sync + std::fmt::Debug + 'static {
     async fn categories(&self) -> Result<Vec<CategoryInfo>>;
@@ -71,5 +78,7 @@ pub trait BulkDataProvider: Send + Sync + std::fmt::Debug + 'static {
         signature: Option<&String>,
     ) -> Result<()>;
 
-    async fn delete(&self, category_id: &str, data_id: Option<&str>) -> Result<()>;
+    async fn delete(&self, category_id: &str, data_id: &str) -> Result<()>;
+
+    async fn delete_category(&self, category_id: &str) -> Result<Vec<DeletedBulkDataItem>>;
 }

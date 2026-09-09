@@ -11,7 +11,7 @@
 //! - GET /{entity-collection}/{entity-id}/bulk-data/{category}/{bulk-data-id} - Download a specific bulk data resource
 //! - DELETE /{entity-collection}/{entity-id}/bulk-data/{category}/{bulk-data-id} - Delete a specific bulk data resource
 
-use std::sync::Arc;
+use std::{sync::Arc, vec};
 
 use axum::{
     Json, Router,
@@ -29,10 +29,11 @@ use futures::StreamExt;
 use http::{HeaderMap, HeaderName, HeaderValue, StatusCode, request::Parts};
 use opensovd_core::{BulkDataError, BulkDataProvider, CategoryFilter, Topology, TopologyReadGuard};
 use opensovd_models::{
-    Response,
+    GenericError, Response,
     bulkdata::{
         AvailableBulkDataCategories, BulkDataCategoriesQuery, BulkDataCategory, BulkDataDescriptor,
-        BulkDataDescriptorsQuery, BulkDataMetadata, BulkDataUpload,
+        BulkDataDescriptorsQuery, BulkDataMetadata, BulkDataUpload, DeleteBulkDataError,
+        DeleteBulkDataResult,
     },
     types::SupportedTags,
 };
@@ -316,13 +317,30 @@ async fn upload_bulk_data(
 async fn delete_bulk_data_category(
     State(topology): State<Topology>,
     Path((entity_collection, entity_id, category)): Path<(String, String, String)>,
-) -> Result<StatusCode> {
+) -> Result<Json<Response<DeleteBulkDataResult>>> {
     let topo = topology.read().await;
     let provider = get_provider(topo, &entity_collection, &entity_id)?;
 
-    provider.delete(&category, None).await?;
+    let deleted = provider.delete_category(&category).await?;
+    let mut result = DeleteBulkDataResult {
+        deleted_ids: vec![],
+        errors: vec![],
+    };
+    for item in deleted {
+        if let Some(error) = item.error {
+            result.errors.push(DeleteBulkDataError {
+                id: item.id.clone(),
+                error: GenericError::with_vendor_code("unable-to-delete", error.to_string()),
+            });
+        } else {
+            result.deleted_ids.push(item.id.clone());
+        }
+    }
 
-    Ok(StatusCode::OK)
+    Ok(Json(Response {
+        data: result,
+        schema: None,
+    }))
 }
 
 async fn download_bulk_data(
@@ -368,7 +386,7 @@ async fn delete_bulk_data(
     let topo = topology.read().await;
     let provider = get_provider(topo, &entity_collection, &entity_id)?;
 
-    provider.delete(&category, Some(&bulk_data_id)).await?;
+    provider.delete(&category, &bulk_data_id).await?;
 
     Ok(StatusCode::NO_CONTENT)
 }

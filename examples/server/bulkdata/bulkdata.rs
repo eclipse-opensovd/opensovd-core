@@ -21,7 +21,7 @@ use chrono::{DateTime, Utc};
 use futures::{Stream, StreamExt, stream};
 use opensovd_core::{
     App, BulkData, BulkDataError, BulkDataMetadata, BulkDataProvider, CategoryFilter, CategoryInfo,
-    Component,
+    Component, DeletedBulkDataItem,
 };
 use opensovd_server::{Server, Topology};
 use tempfile::TempDir;
@@ -266,28 +266,47 @@ impl BulkDataProvider for TempFsBulkDataProvider {
     async fn delete(
         &self,
         category_id: &str,
-        data_id: Option<&str>,
+        data_id: &str,
     ) -> std::result::Result<(), BulkDataError> {
-        if let Some(data_id) = data_id {
-            let path = self.data_path(category_id, data_id)?;
-            tokio::fs::remove_file(&path).await.map_err(|error| {
-                if error.kind() == std::io::ErrorKind::NotFound {
-                    BulkDataError::DeletionFailed(format!(
-                        "bulk data not found: {category_id}/{data_id}"
-                    ))
-                } else {
-                    BulkDataError::DeletionFailed(error.to_string())
-                }
-            })?;
-        } else {
-            let category_path = self.category_path(category_id)?;
-            if let Err(error) = tokio::fs::remove_dir_all(&category_path).await
-                && error.kind() != std::io::ErrorKind::NotFound
-            {
-                return Err(BulkDataError::DeletionFailed(error.to_string()));
+        let path = self.data_path(category_id, data_id)?;
+        tokio::fs::remove_file(&path).await.map_err(|error| {
+            if error.kind() == std::io::ErrorKind::NotFound {
+                BulkDataError::DeletionFailed(format!(
+                    "bulk data not found: {category_id}/{data_id}"
+                ))
+            } else {
+                BulkDataError::DeletionFailed(error.to_string())
             }
-        }
+        })?;
         Ok(())
+    }
+
+    async fn delete_category(
+        &self,
+        category_id: &str,
+    ) -> Result<Vec<DeletedBulkDataItem>, BulkDataError> {
+        let category_path = self.category_path(category_id)?;
+        let mut items = Vec::new();
+        let mut no_errors = true;
+        for data in self.list(category_id, CategoryFilter::default()).await? {
+            let error = self.delete(category_id, &data.id).await.err();
+            if error.is_some() {
+                no_errors = false;
+            }
+            items.push(DeletedBulkDataItem { id: data.id, error });
+        }
+        if no_errors {
+            tokio::fs::remove_dir(&category_path)
+                .await
+                .map_err(|error| {
+                    if error.kind() == std::io::ErrorKind::NotFound {
+                        BulkDataError::DeletionFailed(format!("category not found: {category_id}"))
+                    } else {
+                        BulkDataError::DeletionFailed(error.to_string())
+                    }
+                })?;
+        }
+        Ok(items)
     }
 }
 

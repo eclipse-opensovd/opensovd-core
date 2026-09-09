@@ -75,9 +75,16 @@ pub struct BulkDataUpload {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "jsonschema", derive(schemars::JsonSchema))]
+pub struct DeleteBulkDataError {
+    pub id: String,
+    pub error: GenericError,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "jsonschema", derive(schemars::JsonSchema))]
 pub struct DeleteBulkDataResult {
     pub deleted_ids: Vec<String>,
-    pub errors: Vec<GenericError>,
+    pub errors: Vec<DeleteBulkDataError>,
 }
 
 #[cfg(test)]
@@ -169,15 +176,16 @@ mod tests {
     fn delete_bulk_data_result_mixed_deleted_and_errors() {
         let result = DeleteBulkDataResult {
             deleted_ids: vec!["a".into(), "b".into()],
-            errors: vec![GenericError::new(
-                ErrorCode::ErrorResponse,
-                "could not delete c",
-            )],
+            errors: vec![DeleteBulkDataError {
+                id: "c".into(),
+                error: GenericError::new(ErrorCode::ErrorResponse, "could not delete c"),
+            }],
         };
         let json = serde_json::to_value(&result).unwrap();
         assert_eq!(json["deleted_ids"][0], "a");
         assert_eq!(json["deleted_ids"][1], "b");
-        assert_eq!(json["errors"][0]["message"], "could not delete c");
+        assert_eq!(json["errors"][0]["id"], "c");
+        assert_eq!(json["errors"][0]["error"]["message"], "could not delete c");
     }
 
     #[test]
