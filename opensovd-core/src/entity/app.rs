@@ -45,9 +45,8 @@ impl fmt::Debug for App {
 impl App {
     #[must_use]
     pub fn new(id: impl Into<String>, name: impl Into<String>) -> Self {
-        let id_str = id.into();
         Self {
-            entity_ref: EntityRef::app(&id_str),
+            entity_ref: EntityRef::app(id),
             name: name.into(),
             component_id: None,
             area_id: None,
