@@ -191,7 +191,7 @@ A SOVD component entity. Fields: `entity_ref`, `name`, `area_id` (optional link 
 
 ### App
 
-A SOVD app entity representing software running on a component. Fields: `entity_ref`, `name`, `is_located_on` (component ID, the "is-located-on" relationship), `area_id` (optional), `metadata`, `tags`, `translation_id`, and an optional `Arc<dyn DataProvider>`. Constructed via `App::new(id, name, is_located_on)` with builder methods.
+A SOVD app entity representing software running on a component. Fields: `entity_ref`, `name`, `is_located_on` (optional component ID, the "is-located-on" relationship), `area_id` (optional), `metadata`, `tags`, `translation_id`, and an optional `Arc<dyn DataProvider>`. Constructed via `App::new(id, name)` with builder methods such as `with_component_id`.
 
 **Crate:** `opensovd-core`
 

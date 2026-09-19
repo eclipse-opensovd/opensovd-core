@@ -14,7 +14,7 @@ use crate::entity::EntityRef;
 pub struct App {
     entity_ref: EntityRef,
     name: String,
-    is_located_on: String,
+    is_located_on: Option<String>,
     area_id: Option<String>,
     metadata: HashMap<String, String>,
     tags: Vec<String>,
@@ -44,16 +44,12 @@ impl fmt::Debug for App {
 
 impl App {
     #[must_use]
-    pub fn new(
-        id: impl Into<String>,
-        name: impl Into<String>,
-        is_located_on: impl Into<String>,
-    ) -> Self {
+    pub fn new(id: impl Into<String>, name: impl Into<String>) -> Self {
         let id_str = id.into();
         Self {
             entity_ref: EntityRef::app(&id_str),
             name: name.into(),
-            is_located_on: is_located_on.into(),
+            is_located_on: None,
             area_id: None,
             metadata: HashMap::new(),
             tags: Vec::new(),
@@ -98,6 +94,13 @@ impl App {
         self.area_id = Some(area_id.into());
         self
     }
+
+    /// Records the component this app is located on.
+    #[must_use]
+    pub fn with_component_id(mut self, component_id: impl Into<String>) -> Self {
+        self.is_located_on = Some(component_id.into());
+        self
+    }
 }
 
 impl App {
@@ -111,9 +114,11 @@ impl App {
         &self.name
     }
 
+    /// Returns the id of the hosting component, or `None` if the app is not
+    /// located on one.
     #[must_use]
     pub fn component_id(&self) -> Option<&str> {
-        Some(&self.is_located_on)
+        self.is_located_on.as_deref()
     }
 
     #[must_use]
