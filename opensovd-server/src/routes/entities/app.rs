@@ -130,7 +130,7 @@ pub(super) async fn app_is_located_on(
     let component = topo
         .component_of_app(&app_id)
         .map_err(|_| Error::EntityNotFound(app_id.clone()))?
-        .ok_or_else(|| Error::EntityNotFound(app_id.clone()))?;
+        .ok_or_else(|| Error::EntityNotFound(format!("{app_id}/is-located-on")))?;
 
     let base = super::super::versioned_uri(&parts);
     let tags = component.tags();
