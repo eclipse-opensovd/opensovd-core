@@ -14,7 +14,7 @@ use crate::entity::EntityRef;
 pub struct App {
     entity_ref: EntityRef,
     name: String,
-    is_located_on: Option<String>,
+    component_id: Option<String>,
     area_id: Option<String>,
     metadata: HashMap<String, String>,
     tags: Vec<String>,
@@ -28,7 +28,7 @@ impl fmt::Debug for App {
         f.debug_struct("App")
             .field("entity_ref", &self.entity_ref)
             .field("name", &self.name)
-            .field("is_located_on", &self.is_located_on)
+            .field("component_id", &self.component_id)
             .field("area_id", &self.area_id)
             .field("metadata", &self.metadata)
             .field("tags", &self.tags)
@@ -49,7 +49,7 @@ impl App {
         Self {
             entity_ref: EntityRef::app(&id_str),
             name: name.into(),
-            is_located_on: None,
+            component_id: None,
             area_id: None,
             metadata: HashMap::new(),
             tags: Vec::new(),
@@ -95,10 +95,11 @@ impl App {
         self
     }
 
-    /// Records the component this app is located on.
+    /// Records the component this app is located on, the SOVD
+    /// "is-located-on" relationship.
     #[must_use]
     pub fn with_component_id(mut self, component_id: impl Into<String>) -> Self {
-        self.is_located_on = Some(component_id.into());
+        self.component_id = Some(component_id.into());
         self
     }
 }
@@ -114,11 +115,11 @@ impl App {
         &self.name
     }
 
-    /// Returns the id of the hosting component, or `None` if the app is not
-    /// located on one.
+    /// Returns the id of the hosting component for the SOVD "is-located-on"
+    /// relationship, or `None` if the app is not located on one.
     #[must_use]
     pub fn component_id(&self) -> Option<&str> {
-        self.is_located_on.as_deref()
+        self.component_id.as_deref()
     }
 
     #[must_use]
