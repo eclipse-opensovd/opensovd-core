@@ -186,29 +186,28 @@ pub(super) async fn component_belongs_to(
     axum_extra::extract::Query(query): axum_extra::extract::Query<EntitiesQuery>,
 ) -> Result<Json<Response<Entities>>> {
     let topo = topology.read().await;
-    let mut items = Vec::new();
-
-    if let Some(area) = topo
+    let area = topo
         .area_of_component(&component_id)
         .map_err(|_| Error::EntityNotFound(component_id.clone()))?
-    {
-        let tags = area.tags();
-        let translation_id = area.translation_id().map(String::from);
+        .ok_or_else(|| Error::EntityNotFound(format!("{component_id}/belongs-to")))?;
 
-        // Check tag filter if provided
-        let matches_tags = query.tags.is_empty()
-            || (!tags.is_empty() && query.tags.iter().any(|t| tags.contains(t)));
+    let tags = area.tags();
+    let translation_id = area.translation_id().map(String::from);
 
-        if matches_tags {
-            let base = super::super::versioned_uri(&parts);
-            items.push(EntityReference {
-                id: area.id().to_string(),
-                name: area.name().to_string(),
-                translation_id,
-                href: format!("{base}/areas/{}", encode_path_segment(area.id())).into(),
-                tags: (!tags.is_empty()).then_some(tags.to_vec()),
-            });
-        }
+    // Check tag filter if provided
+    let matches_tags =
+        query.tags.is_empty() || (!tags.is_empty() && query.tags.iter().any(|t| tags.contains(t)));
+
+    let mut items = Vec::new();
+    if matches_tags {
+        let base = super::super::versioned_uri(&parts);
+        items.push(EntityReference {
+            id: area.id().to_string(),
+            name: area.name().to_string(),
+            translation_id,
+            href: format!("{base}/areas/{}", encode_path_segment(area.id())).into(),
+            tags: (!tags.is_empty()).then_some(tags.to_vec()),
+        });
     }
 
     Ok(Json(Response {
