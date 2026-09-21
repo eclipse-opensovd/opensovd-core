@@ -2,6 +2,22 @@
 
 This document describes the GitHub Actions CI/CD pipeline for opensovd.
 
+## Build Environment
+
+The Linux and macOS jobs run inside the [Nix flake](../flake.nix) dev shell
+(`nix develop --command ...`), so CI and local development share one set of tool
+versions. Every in-shell command goes through the `RUN` variable, which holds
+`nix develop --command`. Windows has no Nix port and keeps `setup-rust-toolchain`,
+so the build job overrides `RUN` to empty there and each command still exists once.
+
+`.github/actions/nix-setup` installs Nix and restores the cargo cache. The store
+itself is served by cache.nixos.org; a 3.2 GB closure does not fit the Actions
+cache budget alongside the cargo caches.
+
+Each Nix leg of `build` runs `nix flake check` for its own system, since
+`nix-setup` has already realised the shell there. `nix fmt --check` runs once in
+`lint`.
+
 ## Jobs
 
 | Job            | Runs On                | Description                                                                           |
@@ -9,7 +25,7 @@ This document describes the GitHub Actions CI/CD pipeline for opensovd.
 | **prepare**    | Always                 | Entry point; determines release type and whether to run (skips nightly if no changes) |
 | **build**      | When `should_run=true` | Builds for Linux, Windows, macOS; runs tests and pytest                               |
 | **licenses**   | When `should_run=true` | Checks licenses and sources with cargo-deny                                           |
-| **advisories** | When `should_run=true` | Checks security advisories; uploads SARIF on main/nightly                             |
+| **advisories** | When `should_run=true` | Checks security advisories with cargo-deny                                            |
 | **lint**       | When `should_run=true` | Runs rustfmt, clippy, and pre-commit hooks (prek)                                     |
 | **coverage**   | When `should_run=true` | Generates coverage report, deploys to GitHub Pages on main                            |
 | **docker**     | main/tags/schedule     | Builds and pushes Docker images (gateway, mcp) to GHCR                                |
