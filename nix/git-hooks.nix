@@ -37,6 +37,7 @@ in
       mixed-line-endings.enable = true;
       yamlfmt.enable = true;
       markdownlint.enable = true;
+      nixfmt.enable = true;
       shellcheck.enable = true;
       ruff.enable = true;
       ruff-format.enable = true;

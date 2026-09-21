@@ -221,7 +221,6 @@ jobs:
             prek-${{ runner.os }}-
 
       - run: $RUN prek run --all-files --show-diff-on-failure
-      - run: nix fmt -- --check flake.nix
 
       - name: Validate commit subjects (Conventional Commits)
         if: github.event_name == 'pull_request'

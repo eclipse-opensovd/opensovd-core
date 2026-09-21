@@ -23,8 +23,8 @@ step that realises the shell fetches the same one, and overrides `RUN` to
 floor is the Rust toolchain the rustfmt and clippy hooks need.
 
 Each Nix leg of `build` runs `nix flake check` for its own system, since
-`nix-setup` has already realised the shell there. `nix fmt --check` runs once in
-`lint`.
+`nix-setup` has already realised the shell there. The `.nix` files go through the
+nixfmt hook, like every other file type.
 
 The git hooks are defined in [`nix/git-hooks.nix`](../nix/git-hooks.nix)
 and run through [git-hooks.nix](https://github.com/cachix/git-hooks.nix), which
