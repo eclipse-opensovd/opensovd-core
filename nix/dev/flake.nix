@@ -5,8 +5,15 @@
   description = "Development-only inputs. Used by the dev partition of the top level flake, so they stay out of consumers' lock files.";
 
   inputs = {
-    git-hooks.url = "github:cachix/git-hooks.nix";
-    rust-overlay.url = "github:oxalica/rust-overlay";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    git-hooks = {
+      url = "github:cachix/git-hooks.nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    rust-overlay = {
+      url = "github:oxalica/rust-overlay";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   # This flake exists only for its inputs.
