@@ -1,17 +1,16 @@
-
 {
   "name": "OpenSOVD Core",
-  "image": "mcr.microsoft.com/devcontainers/rust:1-1-bookworm",
-  "overrideCommand": false,
+  "image": "mcr.microsoft.com/devcontainers/base:bookworm",
   "remoteUser": "vscode",
   "features": {
-    "ghcr.io/devcontainers/features/docker-in-docker": {},
-    "ghcr.io/devcontainers/features/github-cli": {},
-    "ghcr.io/devcontainers/features/python:1": {
-      "version": "3.13",
-      "toolsToInstall": "uv"
+    "ghcr.io/devcontainers/features/nix:1": {
+      "packages": "direnv,nix-direnv",
+      "extraNixConfig": "experimental-features = nix-command flakes"
     }
   },
+  "mounts": [
+    "source=opensovd-core-nix,target=/nix,type=volume"
+  ],
   "customizations": {
     "vscode": {
       "extensions": [
@@ -30,7 +29,6 @@
         "editor.formatOnSave": true,
         "rust-analyzer.check.command": "clippy",
         "rust-analyzer.cargo.allFeatures": true,
-        "terminal.integrated.defaultProfile.linux": "fish",
         "files.associations": {
           ".clippy.toml": "toml",
           "*.toml.j2": "toml"
@@ -39,5 +37,5 @@
     }
   },
   "forwardPorts": [7690],
-  "postCreateCommand": "uv sync"
+  "postCreateCommand": "bash .devcontainer/post-create.sh"
 }

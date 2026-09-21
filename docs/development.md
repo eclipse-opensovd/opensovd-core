@@ -21,12 +21,18 @@ The repository includes a [Dev Container](.devcontainer/devcontainer.json) confi
 1. Install the [Dev Containers](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers) extension in VS Code.
 2. Open the project and select **Dev Containers: Reopen in Container**.
 
-The container includes:
+The container installs Nix and takes every tool from the same [flake](../flake.nix)
+that CI and local development use, so there is no separate list of versions to keep in
+step. `direnv` activates the dev shell on entry and the `mkhl.direnv` extension exports
+it to VS Code, which is how `rust-analyzer` finds the pinned toolchain.
 
-- Python, Rust toolchain, and uv (versions per [devcontainer.json](../.devcontainer/devcontainer.json))
-- Pre-configured VS Code extensions (rust-analyzer, ruff, gitlens, errorlens, etc.)
-- Docker-in-Docker and GitHub CLI
-- Port 7690 forwarded for the gateway
+The container also provides pre-configured VS Code extensions (rust-analyzer, ruff,
+gitlens, errorlens, etc.) and forwards port 7690 for the gateway. It has no Docker, so
+run the published-image workflow in [Testing](testing.md) from the host.
+
+The first start realises the dev shell, which downloads roughly 3 GB. `/nix` is a named
+volume, so later rebuilds reuse it. Remove the volume with
+`docker volume rm opensovd-core-nix` if the Nix installation itself needs refreshing.
 
 ## Option 2: Nix flake (local)
 
