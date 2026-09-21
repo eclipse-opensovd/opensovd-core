@@ -19,9 +19,7 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
-  CARGO_DENY_VERSION: 0.18.9
-  CARGO_LLVM_COV_VERSION: 0.6.21
-  GIT_CLIFF_VERSION: 2.11.0
+  RUN: nix develop --command
 
 jobs:
   prepare:
@@ -98,42 +96,49 @@ jobs:
     env:
       OPENSOVD_CHANNEL: ${{ needs.prepare.outputs.channel }}
       OPENSOVD_COMMIT_SHA: ${{ needs.prepare.outputs.sha }}
+      # The flake covers everything but windows, which keeps rustup.
+      RUN: ${{ matrix.nix && 'nix develop --command' || '' }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - {os: ubuntu-24.04, target: x86_64-unknown-linux-gnu, profile: release-small, tests: [unittest, pytest]}
-          - {os: ubuntu-24.04-arm, target: aarch64-unknown-linux-gnu, profile: release-small, tests: [unittest]}
+          - {os: ubuntu-24.04, target: x86_64-unknown-linux-gnu, profile: release-small, tests: [unittest, pytest], nix: true}
+          - {os: ubuntu-24.04-arm, target: aarch64-unknown-linux-gnu, profile: release-small, tests: [unittest], nix: true}
           - {os: windows-2025-vs2026, target: x86_64-pc-windows-msvc, profile: release-small, tests: [unittest]}
-          - {os: macos-15, target: aarch64-apple-darwin, profile: release-small, tests: [unittest]}
+          - {os: macos-15, target: aarch64-apple-darwin, profile: release-small, tests: [unittest], nix: true}
     runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v7
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
+
+      - if: matrix.nix
+        uses: ./.github/actions/nix-setup
+        with:
+          cargo-cache: 'true'
+
+      - if: ${{ !matrix.nix }}
+        uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           target: ${{ matrix.target }}
           cache-shared-key: ci
 
-      - run: cargo build --locked --profile ${{ matrix.profile }} --target ${{ matrix.target }}
+      - if: matrix.nix
+        run: nix flake check
+
+      - run: $RUN cargo build --locked --profile ${{ matrix.profile }} --target ${{ matrix.target }}
 
       - if: contains(matrix.tests, 'unittest')
-        run: cargo test --locked --all-features
+        run: $RUN cargo test --locked --all-features
 
-      - uses: astral-sh/setup-uv@v7
       - if: contains(matrix.tests, 'pytest')
         name: opensovd-e2e plugin self-tests
-        run: uv run --locked pytest opensovd-e2e/tests
-
-      - if: contains(matrix.tests, 'pytest')
-        uses: actions/setup-node@v7
-        with:
-          node-version: '22'
-      - if: contains(matrix.tests, 'pytest')
-        run: npm install -g @usebruno/cli
+        run: $RUN uv run --locked pytest opensovd-e2e/tests
 
       - if: contains(matrix.tests, 'pytest')
         run: |
-          uv run --locked pytest tests/ \
+          $RUN uv run --locked pytest tests/ \
             --opensovd-target=${{ matrix.target }} \
             --opensovd-profile=${{ matrix.profile }} \
             --html=pytest-report.html \
@@ -168,10 +173,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v7
-      - uses: taiki-e/install-action@v2.85.4
-        with:
-          tool: cargo-deny@${{ env.CARGO_DENY_VERSION }}
-      - run: cargo deny check licenses sources
+      - uses: ./.github/actions/nix-setup
+      - run: $RUN cargo deny check licenses sources
 
   advisories:
     needs: prepare
@@ -181,10 +184,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v7
-      - uses: taiki-e/install-action@v2.85.4
-        with:
-          tool: cargo-deny@${{ env.CARGO_DENY_VERSION }}
-      - run: cargo deny check advisories
+      - uses: ./.github/actions/nix-setup
+      - run: $RUN cargo deny check advisories
 
   lint:
     needs: prepare
@@ -196,17 +197,11 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - uses: ./.github/actions/nix-setup
         with:
-          cache-shared-key: ci
-      # Required for gitleaks hook
-      - uses: actions/setup-go@v7
-        with:
-          go-version: '1.25'
-          cache: false
-      - uses: astral-sh/setup-uv@v7
+          cargo-cache: 'true'
       # Install Python dependencies and tools (prek, ruff, ty)
-      - run: uv sync --locked --group tools
+      - run: $RUN uv sync --locked --group tools
       # Cache prek hooks
       - uses: actions/cache@v6
         with:
@@ -215,7 +210,8 @@ jobs:
           restore-keys: |
             prek-${{ runner.os }}-
 
-      - run: uv run --locked prek run --all-files --show-diff-on-failure
+      - run: $RUN uv run --locked prek run --all-files --show-diff-on-failure
+      - run: nix fmt -- --check flake.nix
 
       - name: Validate commit subjects (Conventional Commits)
         if: github.event_name == 'pull_request'
@@ -227,7 +223,7 @@ jobs:
           fail=0
           for sha in $(git rev-list "$BASE_SHA..$HEAD_SHA"); do
             git log -1 --format=%B "$sha" > /tmp/commit-msg
-            if ! uv run --locked prek run --hook-stage commit-msg \
+            if ! $RUN uv run --locked prek run --hook-stage commit-msg \
                 --commit-msg-filename /tmp/commit-msg conventional-pre-commit; then
               echo "::error::Non-conventional commit subject: $(git log -1 --format='%h %s' "$sha")"
               fail=1
@@ -250,24 +246,16 @@ jobs:
       OPENSOVD_COMMIT_SHA: ${{ needs.prepare.outputs.sha }}
     steps:
       - uses: actions/checkout@v7
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - uses: ./.github/actions/nix-setup
         with:
-          cache-shared-key: ci
-      - uses: taiki-e/install-action@v2.85.4
-        with:
-          tool: cargo-llvm-cov@${{ env.CARGO_LLVM_COV_VERSION }}
-      - uses: astral-sh/setup-uv@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: '22'
-      - run: npm install -g @usebruno/cli
+          cargo-cache: 'true'
 
       # --opensovd-coverage sets up cargo-llvm-cov instrumentation and writes the
       # merged report (coverage.json + HTML + Cobertura). test_rust.py runs the
       # Rust unit/integration/doc tests (--all-features) and the e2e tests spawn
       # the gateway, which inherits LLVM_PROFILE_FILE, so all of it is one report.
       - name: Collect coverage (Rust + e2e)
-        run: uv run pytest tests/ --opensovd-coverage
+        run: $RUN uv run pytest tests/ --opensovd-coverage
 
       - id: cov
         run: |
@@ -348,15 +336,15 @@ jobs:
       fail-fast: false
       matrix:
         image:
-          - {binary: opensovd-gateway, dockerfile: docker/Dockerfile.gateway, smoke: 'uv run --locked pytest tests/opensovd-gateway/cli/test_version.py --opensovd-run="docker run --rm opensovd-gateway:test"'}
-          - {binary: opensovd-mcp, dockerfile: docker/Dockerfile.mcp, smoke: 'uv run --locked pytest tests/opensovd-mcp/cli/test_version.py --opensovd-run="docker run --rm opensovd-mcp:test"'}
+          - {binary: opensovd-gateway, dockerfile: docker/Dockerfile.gateway, smoke: 'nix develop --command uv run --locked pytest tests/opensovd-gateway/cli/test_version.py --opensovd-run="docker run --rm opensovd-gateway:test"'}
+          - {binary: opensovd-mcp, dockerfile: docker/Dockerfile.mcp, smoke: 'nix develop --command uv run --locked pytest tests/opensovd-mcp/cli/test_version.py --opensovd-run="docker run --rm opensovd-mcp:test"'}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/download-artifact@v8
         with:
           path: dist
           pattern: ${{ matrix.image.binary }}-*
-      - uses: astral-sh/setup-uv@v7
+      - uses: ./.github/actions/nix-setup
       - uses: ./.github/actions/docker-publish
         with:
           binary: ${{ matrix.image.binary }}
@@ -376,9 +364,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: taiki-e/install-action@v2.85.4
-        with:
-          tool: git-cliff@${{ env.GIT_CLIFF_VERSION }}
+      - uses: ./.github/actions/nix-setup
 
       - uses: actions/download-artifact@v8
         with:
@@ -387,9 +373,9 @@ jobs:
       - run: |
           VERSION="${{ needs.prepare.outputs.release }}"
           if [[ "${{ needs.prepare.outputs.channel }}" != "stable" ]]; then
-            git cliff --unreleased -o CHANGELOG.md
+            $RUN git cliff --unreleased -o CHANGELOG.md
           else
-            git cliff --current -o CHANGELOG.md
+            $RUN git cliff --current -o CHANGELOG.md
           fi
           mkdir -p artifacts/release
           for binary in opensovd-gateway opensovd-mcp; do

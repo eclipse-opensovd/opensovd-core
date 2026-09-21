@@ -60,7 +60,7 @@ runs:
       id: cargo
       shell: bash
       run: |
-        PKG=$(cargo metadata --format-version 1 --no-deps \
+        PKG=$(nix develop --command cargo metadata --format-version 1 --no-deps \
           | jq --arg name "${{ inputs.binary }}" '.packages[] | select(.name == $name)')
         echo "version=$(jq -r '.version' <<<"$PKG")"           >> "$GITHUB_OUTPUT"
         echo "description=$(jq -r '.description' <<<"$PKG")"   >> "$GITHUB_OUTPUT"
