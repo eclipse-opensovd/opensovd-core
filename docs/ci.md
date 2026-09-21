@@ -11,8 +11,16 @@ versions. Every in-shell command goes through the `RUN` variable, which holds
 so the build job overrides `RUN` to empty there and each command still exists once.
 
 `.github/actions/nix-setup` installs Nix and restores the cargo cache. The store
-itself is served by cache.nixos.org; a 3.2 GB closure does not fit the Actions
+itself is served by cache.nixos.org; a 3.3 GB closure does not fit the Actions
 cache budget alongside the cargo caches.
+
+Since the store is fetched per job, the flake exposes a second, smaller shell.
+`licenses`, `advisories` and `lint` run static checks only, so they enter
+`.#lint`, which leaves out the tools those jobs never call: 2.3 GB against the
+3.3 GB of the default shell. Each passes `shell: '.#lint'` to `nix-setup`, so the
+step that realises the shell fetches the same one, and overrides `RUN` to
+`nix develop .#lint --command`. The shell carries the whole hook set, so the
+floor is the Rust toolchain the rustfmt and clippy hooks need.
 
 Each Nix leg of `build` runs `nix flake check` for its own system, since
 `nix-setup` has already realised the shell there. `nix fmt --check` runs once in

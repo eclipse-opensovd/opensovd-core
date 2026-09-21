@@ -2,13 +2,17 @@
 # SPDX-License-Identifier: Apache-2.0
 
 name: Nix setup
-description: Install nix, restore the cargo cache, and realise the dev shell from flake.nix.
+description: Install nix, restore the cargo cache, and realise a dev shell from flake.nix.
 
 inputs:
   cargo-cache:
     description: Restore the cargo build cache. Enable for jobs that invoke cargo.
     required: false
     default: 'false'
+  shell:
+    description: Flake reference of the shell to realise. Jobs that only run static checks pass '.#lint'.
+    required: false
+    default: '.'
 
 runs:
   using: composite
@@ -23,4 +27,4 @@ runs:
 
     # Fail here rather than inside the job's first real step.
     - shell: bash
-      run: nix develop --no-update-lock-file --command true
+      run: nix develop '${{ inputs.shell }}' --no-update-lock-file --command true

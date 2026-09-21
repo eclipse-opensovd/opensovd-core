@@ -171,9 +171,13 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: read
+    env:
+      RUN: nix develop .#lint --command
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/nix-setup
+        with:
+          shell: '.#lint'
       - run: $RUN cargo deny check licenses sources
 
   advisories:
@@ -182,9 +186,13 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: read
+    env:
+      RUN: nix develop .#lint --command
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/nix-setup
+        with:
+          shell: '.#lint'
       - run: $RUN cargo deny check advisories
 
   lint:
@@ -193,6 +201,8 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: read
+    env:
+      RUN: nix develop .#lint --command
     steps:
       - uses: actions/checkout@v7
         with:
@@ -200,6 +210,7 @@ jobs:
       - uses: ./.github/actions/nix-setup
         with:
           cargo-cache: 'true'
+          shell: '.#lint'
       - run: $RUN uv sync --locked
       # Cache prek hooks
       - uses: actions/cache@v6
