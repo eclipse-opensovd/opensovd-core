@@ -9,6 +9,8 @@
       rustBin = inputs.rust-overlay.lib.mkRustBin { } pkgs;
       rustToolchain = rustBin.fromRustupToolchainFile ../../rust-toolchain.toml;
       rustChannel = (builtins.fromTOML (builtins.readFile ../../rust-toolchain.toml)).toolchain.channel;
+
+      python = pkgs.python313;
     in
     {
       formatter = pkgs.nixfmt;
@@ -35,7 +37,7 @@
             git-cliff # changelog generation
 
             # Python integration tests
-            python313
+            python
             uv
             prek # the hook runner itself
 
@@ -49,7 +51,7 @@
           ++ config.pre-commit.settings.enabledPackages;
 
         RUST_BACKTRACE = "1";
-        UV_PYTHON = "${pkgs.python313}/bin/python3";
+        UV_PYTHON = "${python}/bin/python3";
         UV_PYTHON_DOWNLOADS = "never";
 
         # Interactive `nix develop` only. The banner would otherwise land on the
@@ -60,7 +62,7 @@
             *i*)
               echo "OpenSOVD Core Development Environment"
               echo "  Rust:   ${rustChannel}"
-              echo "  Python: ${pkgs.python313.version}"
+              echo "  Python: ${python.version}"
               echo "  uv:     ${pkgs.uv.version}"
               echo ""
               echo "Common commands:"
