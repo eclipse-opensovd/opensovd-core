@@ -57,7 +57,7 @@
               markdownlint-cli
               yamlfmt
               gitleaks
-              prek # pre-commit alternative
+              go # prek builds the gitleaks hook; without it prek fetches its own
               curl
               jq
               gh # GitHub CLI
@@ -65,23 +65,28 @@
             ];
 
             RUST_BACKTRACE = "1";
+            UV_PYTHON = "${pkgs.python313}/bin/python3";
+            UV_PYTHON_DOWNLOADS = "never";
 
+            # Interactive `nix develop` only. The banner would otherwise land on the
+            # stdout of `nix develop --command`, corrupting anything parsed from it.
             shellHook = ''
-              echo "OpenSOVD Core Development Environment"
-              echo "  Rust:   ${rustChannel}"
-              echo "  Python: ${pkgs.python313.version}"
-              echo "  uv:     ${pkgs.uv.version}"
-              echo ""
-              echo "Common commands:"
-              echo "  uv sync              - Sync Python integration-test dependencies"
-              echo "  cargo build          - Build the project"
-              echo "  cargo test           - Run Rust tests"
-              echo "  uv run pytest        - Run Python integration tests"
-              echo "  prek run -a          - Run pre-commit hooks"
-
-              # Interactive `nix develop` only. direnv and `nix develop -c` skip this.
               case "$-" in
-                *i*) command -v fish >/dev/null && exec fish ;;
+                *i*)
+                  echo "OpenSOVD Core Development Environment"
+                  echo "  Rust:   ${rustChannel}"
+                  echo "  Python: ${pkgs.python313.version}"
+                  echo "  uv:     ${pkgs.uv.version}"
+                  echo ""
+                  echo "Common commands:"
+                  echo "  uv sync                          - Sync Python integration-test dependencies"
+                  echo "  cargo build                      - Build the project"
+                  echo "  cargo test                       - Run Rust tests"
+                  echo "  uv run pytest                    - Run Python integration tests"
+                  echo "  uv run --group tools prek run -a - Run pre-commit hooks"
+
+                  command -v fish >/dev/null && exec fish
+                  ;;
               esac
             '';
           };

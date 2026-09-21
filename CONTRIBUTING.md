@@ -57,7 +57,7 @@ This project follows these conventions:
   the git hooks once so they run automatically on every commit:
 
   ```bash
-  uv run prek install --hook-type pre-commit --hook-type commit-msg
+  uv run --group tools prek install --hook-type pre-commit --hook-type commit-msg
   ```
 
 ## Legal considerations
