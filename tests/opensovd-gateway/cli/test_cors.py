@@ -4,6 +4,7 @@
 """Tests for the --cors-* CLI options (CORS validation)."""
 
 import pytest
+from fixtures import default_binary_args
 
 
 @pytest.fixture(
@@ -25,7 +26,7 @@ import pytest
 )
 def binary_args(request):
     """Invalid CORS config (exits with error)."""
-    return request.param
+    return default_binary_args(request.config, *request.param)
 
 
 @pytest.fixture(scope="module")
