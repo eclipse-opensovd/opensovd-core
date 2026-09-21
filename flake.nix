@@ -6,14 +6,14 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    fenix = {
-      url = "github:nix-community/fenix";
+    rust-overlay = {
+      url = "github:oxalica/rust-overlay";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
 
   outputs =
-    { nixpkgs, fenix, ... }:
+    { nixpkgs, rust-overlay, ... }:
     let
       forAllSystems = nixpkgs.lib.genAttrs [
         "x86_64-linux"
@@ -28,15 +28,12 @@
       devShells = forAllSystems (
         system:
         let
-          pkgs = nixpkgs.legacyPackages.${system};
-
-          # sha256 covers the resolved rust-toolchain.toml manifest. Regenerate after
-          # toolchain or fenix changes: set it to pkgs.lib.fakeHash, run `nix develop`,
-          # copy the "got:" hash.
-          rustToolchain = fenix.packages.${system}.fromToolchainFile {
-            file = ./rust-toolchain.toml;
-            sha256 = "sha256-yrnQpNRN/qYf9KiMrN5g01WhjUTobuAcrMupwvYnGos=";
+          pkgs = import nixpkgs {
+            inherit system;
+            overlays = [ rust-overlay.overlays.default ];
           };
+
+          rustToolchain = pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
         in
         {
           default = pkgs.mkShell {

@@ -39,8 +39,10 @@ nix develop
 ```
 
 The Rust toolchain is pinned via `rust-toolchain.toml` (the single source of truth shared
-with `cargo`/`rustup`); changing it also requires updating the toolchain `sha256` in
-[`flake.nix`](../flake.nix); the comment there explains how. Python, uv, and the
+with `cargo`/`rustup`); [`flake.nix`](../flake.nix) reads that file through
+[rust-overlay](https://github.com/oxalica/rust-overlay), so bumping the toolchain needs no
+other change. Note that rust-overlay must be new enough to know the pinned nightly; run
+`nix flake update rust-overlay` when moving to a recent one. Python, uv, and the
 supporting CLI tools are provided by the flake. Run `uv sync` after entering the shell
 (and after `uv.lock` changes) to set up the Python integration-test environment.
 
