@@ -8,6 +8,8 @@ on:
     types: [opened]
   # pull_request_target gives a read-write token for fork PRs (plain
   # pull_request is read-only there, so commenting fails with 403).
+  # zizmor: ignore[dangerous-triggers] This job only posts a comment and never
+  # checks out or runs the fork's code.
   pull_request_target:
     types: [opened]
 

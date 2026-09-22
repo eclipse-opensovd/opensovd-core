@@ -1,0 +1,19 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 Contributors to the Eclipse Foundation
+# SPDX-License-Identifier: Apache-2.0
+
+rules:
+  unpinned-uses:
+    config:
+      policies:
+        actions/*: ref-pin
+        '*': hash-pin
+
+  # The `$/` form is not established yet and `./` resolves correctly here.
+  self-repository:
+    disable: true
+
+  # This is accurate, but fixing it means splitting release out of the build
+  # workflow.
+  cache-poisoning:
+    ignore:
+      - ci.yaml

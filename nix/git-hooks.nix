@@ -42,6 +42,10 @@ in
       ruff.enable = true;
       ruff-format.enable = true;
       convco.enable = true;
+      zizmor = {
+        enable = true;
+        files = "^\\.github/.*\\.ya?ml$";
+      };
 
       rustfmt = {
         enable = true;

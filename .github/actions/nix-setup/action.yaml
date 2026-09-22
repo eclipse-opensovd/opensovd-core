@@ -17,14 +17,16 @@ inputs:
 runs:
   using: composite
   steps:
-    - uses: cachix/install-nix-action@v31
+    - uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31
 
     - if: inputs.cargo-cache == 'true'
-      uses: Swatinem/rust-cache@v2
+      uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
       with:
         shared-key: ci
         prefix-key: rust-${{ hashFiles('rust-toolchain.toml', 'flake.lock') }}
 
     # Fail here rather than inside the job's first real step.
     - shell: bash
-      run: nix develop '${{ inputs.shell }}' --no-update-lock-file --command true
+      env:
+        SHELL_REF: ${{ inputs.shell }}
+      run: nix develop "$SHELL_REF" --no-update-lock-file --command true
