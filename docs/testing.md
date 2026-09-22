@@ -9,8 +9,23 @@ pytest serves as the unified test driver, orchestrating tests across different t
 Run all tests:
 
 ```bash
-uv run pytest
+just test
 ```
+
+`just test` takes a suite when you want a subset, and forwards anything after it
+to the underlying tool:
+
+```bash
+just test rust           # cargo test --locked --all-features
+just test e2e -k version # the Python integration tests, filtered
+just test harness        # self-tests for the opensovd-e2e harness itself
+just test bruno          # the Bruno conformance tests
+```
+
+Bare `just test` runs `rust`, `harness` and `e2e`, which is what CI runs. The
+Bruno suite is separate there too, so ask for it explicitly. The rest of this
+guide uses the underlying commands directly, which is what the recipes expand to
+and what you want when driving the harness with its own options.
 
 ## Testing with pytest
 
@@ -74,6 +89,10 @@ Run all tests:
 cd tests/bruno
 bru run --env local
 ```
+
+This form expects a gateway already listening on the environment's URL. Running
+them through pytest instead (`just test bruno`) spawns one for the session, and
+skips cleanly when the `bru` CLI is missing.
 
 Run a single test:
 

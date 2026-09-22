@@ -58,7 +58,7 @@ This project follows these conventions:
   tree before submitting a PR:
 
   ```bash
-  prek run --all-files
+  just lint
   ```
 
   The hooks are defined in [`nix/git-hooks.nix`](nix/git-hooks.nix), not in

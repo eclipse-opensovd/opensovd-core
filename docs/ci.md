@@ -10,6 +10,14 @@ versions. Every in-shell command goes through the `RUN` variable, which holds
 `nix develop --command`. Windows has no Nix port and keeps `setup-rust-toolchain`,
 so the build job overrides `RUN` to empty there and each command still exists once.
 
+The commands themselves are [just](https://just.systems/) recipes from the
+[`justfile`](../justfile), so a CI step and a local invocation run the same
+flags. Windows takes `just` from `extractions/setup-just` rather than the flake,
+and that pin has to move in step with the version nixpkgs provides, or a recipe
+can behave differently per leg. The justfile names bash explicitly for both
+`shell` and `script-interpreter`, because that leg has neither a dependable `sh`
+nor the cygpath a `#!/usr/bin/env` recipe would need to resolve its interpreter.
+
 `.github/actions/nix-setup` installs Nix and restores the cargo cache. The store
 itself is served by cache.nixos.org; a 3.3 GB closure does not fit the Actions
 cache budget alongside the cargo caches.

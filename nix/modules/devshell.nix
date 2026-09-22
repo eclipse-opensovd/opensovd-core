@@ -21,6 +21,7 @@
           python
           uv
           prek # the hook runner itself
+          just # task runner
           git
         ]
         ++ config.pre-commit.settings.enabledPackages;
@@ -67,12 +68,7 @@
                 echo "  Python: ${python.version}"
                 echo "  uv:     ${pkgs.uv.version}"
                 echo ""
-                echo "Common commands:"
-                echo "  uv sync       - Sync Python integration-test dependencies"
-                echo "  cargo build   - Build the project"
-                echo "  cargo test    - Run Rust tests"
-                echo "  uv run pytest - Run Python integration tests"
-                echo "  prek run -a   - Run pre-commit hooks"
+                just --list --unsorted || true
 
                 command -v fish >/dev/null && exec fish
                 ;;

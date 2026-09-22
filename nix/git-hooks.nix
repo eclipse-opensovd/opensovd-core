@@ -71,6 +71,15 @@ in
         };
       };
 
+      just-fmt = {
+        enable = true;
+        name = "just fmt";
+        entry = "${pkgs.just}/bin/just --fmt --check";
+        extraPackages = [ pkgs.just ];
+        files = "^justfile$";
+        pass_filenames = false;
+      };
+
       cargo-machete = {
         enable = true;
         name = "cargo machete";

@@ -56,6 +56,10 @@ cargo build
 cargo run -p opensovd-gateway -- --mock
 ```
 
+> [!TIP]
+> Inside the dev shell these have shorthands. Run `just` for the list of common
+> tasks (`just build`, `just test`, `just run`).
+
 For testing instructions, see the [Testing guide](docs/testing.md).
 
 ## Examples
