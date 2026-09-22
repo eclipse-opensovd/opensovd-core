@@ -18,6 +18,13 @@ Each Nix leg of `build` runs `nix flake check` for its own system, since
 `nix-setup` has already realised the shell there. `nix fmt --check` runs once in
 `lint`.
 
+The git hooks are defined in [`nix/git-hooks.nix`](../nix/git-hooks.nix)
+and run through [git-hooks.nix](https://github.com/cachix/git-hooks.nix), which
+generates `.pre-commit-config.yaml` on shell entry. The hooks take their tools
+from the shell, so nothing is fetched per hook. They are kept out of
+`nix flake check`, because the cargo and ty hooks need the crates.io registry
+and a synced virtualenv that the sandbox does not provide.
+
 ## Jobs
 
 | Job            | Runs On                | Description                                                                           |
@@ -26,7 +33,7 @@ Each Nix leg of `build` runs `nix flake check` for its own system, since
 | **build**      | When `should_run=true` | Builds for Linux, Windows, macOS; runs tests and pytest                               |
 | **licenses**   | When `should_run=true` | Checks licenses and sources with cargo-deny                                           |
 | **advisories** | When `should_run=true` | Checks security advisories with cargo-deny                                            |
-| **lint**       | When `should_run=true` | Runs rustfmt, clippy, and pre-commit hooks (prek)                                     |
+| **lint**       | When `should_run=true` | Runs the git hooks (prek), including rustfmt and clippy                               |
 | **coverage**   | When `should_run=true` | Generates coverage report, deploys to GitHub Pages on main                            |
 | **docker**     | main/tags/schedule     | Builds and pushes Docker images (gateway, mcp) to GHCR                                |
 | **release**    | main/tags/schedule     | Creates GitHub release with artifacts and changelog                                   |

@@ -53,12 +53,17 @@ This project follows these conventions:
 
   * Reference the related issue in the footer
   * See git commit message [template](.gitmessage)
-* Run [prek](https://prek.j178.dev/) before submitting a PR. Install
-  the git hooks once so they run automatically on every commit:
+* The [dev shell](docs/development.md) installs the git hooks on entry, so
+  [prek](https://prek.j178.dev/) runs them on every commit. To check the whole
+  tree before submitting a PR:
 
   ```bash
-  uv run --group tools prek install --hook-type pre-commit --hook-type commit-msg
+  prek run --all-files
   ```
+
+  The hooks are defined in [`nix/git-hooks.nix`](nix/git-hooks.nix), not in
+  `.pre-commit-config.yaml`; that file is generated into the working tree and is
+  git-ignored.
 
 ## Legal considerations
 

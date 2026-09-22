@@ -200,17 +200,16 @@ jobs:
       - uses: ./.github/actions/nix-setup
         with:
           cargo-cache: 'true'
-      # Install Python dependencies and tools (prek, ruff, ty)
-      - run: $RUN uv sync --locked --group tools
+      - run: $RUN uv sync --locked
       # Cache prek hooks
       - uses: actions/cache@v6
         with:
           path: ~/.cache/prek
-          key: prek-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml', 'pyproject.toml') }}
+          key: prek-${{ runner.os }}-${{ hashFiles('nix/git-hooks.nix', 'nix/dev/flake.lock', 'flake.lock') }}
           restore-keys: |
             prek-${{ runner.os }}-
 
-      - run: $RUN uv run --locked prek run --all-files --show-diff-on-failure
+      - run: $RUN prek run --all-files --show-diff-on-failure
       - run: nix fmt -- --check flake.nix
 
       - name: Validate commit subjects (Conventional Commits)
@@ -223,8 +222,8 @@ jobs:
           fail=0
           for sha in $(git rev-list "$BASE_SHA..$HEAD_SHA"); do
             git log -1 --format=%B "$sha" > /tmp/commit-msg
-            if ! $RUN uv run --locked prek run --hook-stage commit-msg \
-                --commit-msg-filename /tmp/commit-msg conventional-pre-commit; then
+            if ! $RUN prek run --hook-stage commit-msg \
+                --commit-msg-filename /tmp/commit-msg convco; then
               echo "::error::Non-conventional commit subject: $(git log -1 --format='%h %s' "$sha")"
               fail=1
             fi
