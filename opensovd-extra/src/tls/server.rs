@@ -10,6 +10,15 @@ use rustls::server::WebPkiClientVerifier;
 
 use super::{TlsError, load_certs, load_private_key, load_roots, provider_or_default};
 
+/// Whether a client must present a certificate once a client CA is set.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum ClientAuth {
+    #[default]
+    Required,
+    /// Anonymous clients are accepted; presented certificates are still verified.
+    Optional,
+}
+
 /// Builds a [`ServerConfig`] from PEM files; any client CA enables mTLS.
 #[derive(Debug, Clone)]
 #[must_use]
@@ -17,6 +26,7 @@ pub struct ServerTlsConfig {
     cert: PathBuf,
     key: PathBuf,
     client_cas: Vec<PathBuf>,
+    client_auth: ClientAuth,
     provider: Option<Arc<CryptoProvider>>,
 }
 
@@ -26,6 +36,7 @@ impl ServerTlsConfig {
             cert: cert.into(),
             key: key.into(),
             client_cas: Vec::new(),
+            client_auth: ClientAuth::default(),
             provider: None,
         }
     }
@@ -41,6 +52,11 @@ impl ServerTlsConfig {
         P: Into<PathBuf>,
     {
         self.client_cas.extend(paths.into_iter().map(Into::into));
+        self
+    }
+
+    pub fn client_auth(mut self, mode: ClientAuth) -> Self {
+        self.client_auth = mode;
         self
     }
 
@@ -67,8 +83,12 @@ impl ServerTlsConfig {
             WebPkiClientVerifier::no_client_auth()
         } else {
             let roots = load_roots(&self.client_cas)?;
-            WebPkiClientVerifier::builder_with_provider(Arc::new(roots), Arc::clone(&provider))
-                .build()?
+            let builder =
+                WebPkiClientVerifier::builder_with_provider(Arc::new(roots), Arc::clone(&provider));
+            match self.client_auth {
+                ClientAuth::Required => builder.build()?,
+                ClientAuth::Optional => builder.allow_unauthenticated().build()?,
+            }
         };
 
         Ok(ServerConfig::builder_with_provider(provider)
@@ -103,6 +123,19 @@ mod tests {
         let config = ServerTlsConfig::new(cert.path(), key.path()).client_ca(ca.path());
         assert!(config.is_mtls());
         config.build().unwrap();
+    }
+
+    #[test]
+    fn builds_with_optional_client_auth() {
+        let server = server();
+        let cert = pem_file(&server.cert);
+        let key = pem_file(&server.key);
+        let ca = pem_file(&ca().cert);
+        ServerTlsConfig::new(cert.path(), key.path())
+            .client_ca(ca.path())
+            .client_auth(ClientAuth::Optional)
+            .build()
+            .unwrap();
     }
 
     #[test]

@@ -49,6 +49,17 @@ Mock data comes from the shared `opensovd-mocks` crate used across examples and 
 | `--cors-credentials` | Allow credentials                  |
 | `--cors-max-age`     | Preflight cache duration (seconds) |
 
+### TLS Options
+
+| Option              | Description                                                        |
+|---------------------|--------------------------------------------------------------------|
+| `--tls-cert`        | Server certificate chain (PEM); requires an `https://` `--url`     |
+| `--tls-key`         | Server private key (PEM)                                           |
+| `--tls-client-ca`   | Client CA bundle (PEM), repeatable; enables mTLS                   |
+| `--tls-client-auth` | `required` (default) rejects clients without a certificate; `optional` accepts them |
+
+An `https://` `--url` without `--tls-cert` only advertises https, for a TLS-terminating proxy in front of the gateway.
+
 ## Contributing
 
 See [CONTRIBUTING.md](../../CONTRIBUTING.md) for guidelines.

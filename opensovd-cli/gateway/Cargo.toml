@@ -39,7 +39,7 @@ http = { workspace = true }
 tower = { workspace = true, features = ["util"] }
 tower-http = { workspace = true, features = ["cors", "fs"] }
 tracing = { workspace = true }
-clap = { workspace = true, features = ["cargo", "derive", "env", "help", "std", "usage"] }
+clap = { workspace = true, features = ["cargo", "derive", "env", "error-context", "help", "std", "usage"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 sd-notify = { workspace = true }

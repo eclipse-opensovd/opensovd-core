@@ -132,18 +132,20 @@ where
         .authenticator(authenticator)
         .authorizer(authorizer);
 
+    #[cfg(feature = "tls")]
+    if let Some(tls) = cli.tls.config() {
+        anyhow::ensure!(
+            uri.scheme_str() == Some("https"),
+            "--tls-cert requires an https:// --url"
+        );
+        let mtls = tls.is_mtls();
+        let config = tls.build().context("failed to configure TLS")?;
+        tracing::info!(target: TARGET, mtls, "TLS enabled");
+        builder = builder.tls(config);
+    }
+
     builder = configure_listener(builder, &cli, authority).await?;
     builder = configure_topology(builder, &cli).await;
-
-    #[cfg(feature = "tls")]
-    {
-        if let Some(tls) = cli.tls.config()? {
-            let mtls = tls.is_mtls();
-            let config = tls.build().context("failed to configure TLS")?;
-            tracing::info!(target: TARGET, mtls, "TLS enabled");
-            builder = builder.tls(config);
-        }
-    }
 
     let cors = cors::create_cors_layer(
         &cli.cors.origins,

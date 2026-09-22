@@ -19,4 +19,4 @@ pub use auth::{JwtAlgorithm, JwtAuthenticator, RegorusAuthorizer};
 pub mod tls;
 
 #[cfg(feature = "tls")]
-pub use tls::{ServerTlsConfig, TlsError};
+pub use tls::{ClientAuth, ServerTlsConfig, TlsError};

@@ -12,7 +12,7 @@ use rustls::RootCertStore;
 use rustls::crypto::CryptoProvider;
 use rustls::pki_types::pem::{self, PemObject};
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
-pub use server::ServerTlsConfig;
+pub use server::{ClientAuth, ServerTlsConfig};
 
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]

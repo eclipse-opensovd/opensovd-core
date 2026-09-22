@@ -5,6 +5,8 @@
 
 use std::path::PathBuf;
 
+#[cfg(feature = "tls")]
+use clap::ValueEnum;
 use clap::{Args, Parser};
 
 pub const ABOUT: &str = "OpenSOVD Gateway Server";
@@ -42,7 +44,8 @@ pub struct Cli {
     ///
     /// The host:port is used for TCP binding (ignored when using --unix-socket
     /// or systemd socket activation). The path is used as the base URI for all
-    /// API routes.
+    /// API routes. An https:// scheme is required with --tls-cert and is
+    /// otherwise only advertised, e.g. behind a TLS-terminating proxy.
     #[arg(long, env = "SOVD_URL", default_value = DEFAULT_URL)]
     pub url: String,
 
@@ -102,34 +105,70 @@ pub struct CorsArgs {
 #[derive(Args)]
 #[command(next_help_heading = "TLS Options")]
 pub struct TlsArgs {
-    /// Server TLS certificate chain (PEM).
-    #[arg(long = "tls-cert", value_name = "FILE", env = "SOVD_TLS_CERT")]
+    /// Server TLS certificate chain (PEM). Requires an https:// --url.
+    #[arg(
+        long = "tls-cert",
+        value_name = "FILE",
+        env = "SOVD_TLS_CERT",
+        requires = "key"
+    )]
     pub cert: Option<PathBuf>,
 
     /// Server TLS private key (PEM).
-    #[arg(long = "tls-key", value_name = "FILE", env = "SOVD_TLS_KEY")]
+    #[arg(
+        long = "tls-key",
+        value_name = "FILE",
+        env = "SOVD_TLS_KEY",
+        requires = "cert"
+    )]
     pub key: Option<PathBuf>,
 
     /// Client CA certificate bundle (PEM). Setting at least one enables mTLS.
     #[arg(
         long = "tls-client-ca",
         value_name = "FILE",
-        env = "SOVD_TLS_CLIENT_CA"
+        env = "SOVD_TLS_CLIENT_CA",
+        requires = "cert"
     )]
     pub client_ca: Vec<PathBuf>,
+
+    /// Whether mTLS clients must present a certificate.
+    #[arg(
+        long = "tls-client-auth",
+        value_name = "MODE",
+        default_value = "required",
+        requires = "client_ca"
+    )]
+    pub client_auth: ClientAuthMode,
+}
+
+#[cfg(feature = "tls")]
+#[derive(Clone, Copy, ValueEnum)]
+pub enum ClientAuthMode {
+    Required,
+    /// Accept anonymous clients; verify any certificate that is presented.
+    Optional,
+}
+
+#[cfg(feature = "tls")]
+impl From<ClientAuthMode> for opensovd_extra::ClientAuth {
+    fn from(mode: ClientAuthMode) -> Self {
+        match mode {
+            ClientAuthMode::Required => Self::Required,
+            ClientAuthMode::Optional => Self::Optional,
+        }
+    }
 }
 
 #[cfg(feature = "tls")]
 impl TlsArgs {
-    pub fn config(self) -> anyhow::Result<Option<opensovd_extra::ServerTlsConfig>> {
-        let (cert, key) = match (self.cert, self.key) {
-            (Some(c), Some(k)) => (c, k),
-            (None, None) => return Ok(None),
-            _ => anyhow::bail!("--tls-cert and --tls-key must both be provided"),
-        };
-        Ok(Some(
-            opensovd_extra::ServerTlsConfig::new(cert, key).client_cas(self.client_ca),
-        ))
+    pub fn config(&self) -> Option<opensovd_extra::ServerTlsConfig> {
+        let (cert, key) = (self.cert.as_ref()?, self.key.as_ref()?);
+        Some(
+            opensovd_extra::ServerTlsConfig::new(cert, key)
+                .client_cas(&self.client_ca)
+                .client_auth(self.client_auth.into()),
+        )
     }
 }
 

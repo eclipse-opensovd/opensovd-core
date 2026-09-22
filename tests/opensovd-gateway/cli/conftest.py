@@ -12,10 +12,8 @@ import pytest
 _MKCERTS = Path(__file__).parents[3] / "scripts" / "mkcerts.sh"
 
 
-@pytest.fixture(scope="session")
-def tls_certs(tmp_path_factory):
-    """Generate CA, server, and client certs once per session via scripts/mkcerts.sh."""
-    tmp = tmp_path_factory.mktemp("tls_certs")
+def _mkcerts(tmp_path_factory, name):
+    tmp = tmp_path_factory.mktemp(name)
     bash = shutil.which("bash")
     if bash is None:
         pytest.fail("bash not found on PATH -- required to run scripts/mkcerts.sh")
@@ -39,3 +37,15 @@ def tls_certs(tmp_path_factory):
         "client_crt": tmp / "client.crt",
         "client_key": tmp / "client.key",
     }
+
+
+@pytest.fixture(scope="session")
+def tls_certs(tmp_path_factory):
+    """Generate CA, server, and client certs once per session via scripts/mkcerts.sh."""
+    return _mkcerts(tmp_path_factory, "tls_certs")
+
+
+@pytest.fixture(scope="session")
+def untrusted_tls_certs(tmp_path_factory):
+    """A second, unrelated PKI whose certs the gateway must not trust."""
+    return _mkcerts(tmp_path_factory, "untrusted_tls_certs")
