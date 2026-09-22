@@ -23,7 +23,7 @@ runs:
       uses: Swatinem/rust-cache@v2
       with:
         shared-key: ci
-        prefix-key: rust-${{ hashFiles('rust-toolchain.toml') }}
+        prefix-key: rust-${{ hashFiles('rust-toolchain.toml', 'flake.lock') }}
 
     # Fail here rather than inside the job's first real step.
     - shell: bash
