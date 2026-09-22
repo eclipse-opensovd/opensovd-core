@@ -3,6 +3,9 @@
 # SPDX-License-Identifier: Apache-2.0
 set -euo pipefail
 
+# An empty volume mounts as root, so hand it to the remote user.
+sudo chown "$(id -u):$(id -g)" .venv target
+
 # The nix feature installs into the default profile, not ~/.nix-profile.
 nix_direnv=/nix/var/nix/profiles/default/share/nix-direnv/direnvrc
 test -f "$nix_direnv"

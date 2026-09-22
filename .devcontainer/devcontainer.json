@@ -9,7 +9,9 @@
     }
   },
   "mounts": [
-    "source=opensovd-core-nix,target=/nix,type=volume"
+    "source=opensovd-core-nix,target=/nix,type=volume",
+    "source=${localWorkspaceFolderBasename}-venv,target=${containerWorkspaceFolder}/.venv,type=volume",
+    "source=${localWorkspaceFolderBasename}-target,target=${containerWorkspaceFolder}/target,type=volume"
   ],
   "customizations": {
     "vscode": {

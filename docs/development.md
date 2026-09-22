@@ -30,9 +30,12 @@ The container also provides pre-configured VS Code extensions (rust-analyzer, ru
 gitlens, errorlens, etc.) and forwards port 7690 for the gateway. It has no Docker, so
 run the published-image workflow in [Testing](testing.md) from the host.
 
-The first start realises the dev shell, which downloads roughly 3 GB. `/nix` is a named
-volume, so later rebuilds reuse it. Remove the volume with
-`docker volume rm opensovd-core-nix` if the Nix installation itself needs refreshing.
+The first start realises the dev shell, which downloads roughly 3 GB. The container
+keeps its state in the `opensovd-core-nix`, `opensovd-core-venv` and
+`opensovd-core-target` volumes, so later rebuilds reuse it; remove one to start that
+piece over. `.venv` and `target` are volumes because both bake in absolute paths and
+the workspace sits at a different path inside the container, so neither side can use
+the other's copy.
 
 ## Option 2: Nix flake (local)
 
