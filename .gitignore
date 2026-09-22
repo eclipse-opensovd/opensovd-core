@@ -1,5 +1,6 @@
 target/
 coverage.json
+*.profraw
 dist/
 __pycache__/
 *.pyc
