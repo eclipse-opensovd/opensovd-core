@@ -22,9 +22,9 @@ step that realises the shell fetches the same one, and overrides `RUN` to
 `nix develop .#lint --command`. The shell carries the whole hook set, so the
 floor is the Rust toolchain the rustfmt and clippy hooks need.
 
-Each Nix leg of `build` runs `nix flake check` for its own system, since
-`nix-setup` has already realised the shell there. The `.nix` files go through the
-nixfmt hook, like every other file type.
+The `.nix` files go through the nixfmt hook, like every other file type. `lint`
+also runs `nix flake check --all-systems`, which evaluates the outputs for every
+system in about a second and builds none of them.
 
 The git hooks are defined in [`nix/git-hooks.nix`](../nix/git-hooks.nix)
 and run through [git-hooks.nix](https://github.com/cachix/git-hooks.nix), which
