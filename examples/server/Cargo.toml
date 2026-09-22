@@ -31,7 +31,7 @@ path = "mtls/mtls.rs"
 required-features = ["tls"]
 
 [features]
-tls = ["opensovd-server/tls", "dep:rustls"]
+tls = ["opensovd-server/tls", "opensovd-extra/tls"]
 
 [dependencies]
 async-trait = { workspace = true }
@@ -46,7 +46,6 @@ opensovd-mocks = { workspace = true }
 opensovd-models = { workspace = true }
 opensovd-providers = { workspace = true }
 opensovd-server = { workspace = true }
-rustls = { workspace = true, optional = true }
 sysinfo = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["net", "rt-multi-thread", "macros", "fs", "io-util"] }

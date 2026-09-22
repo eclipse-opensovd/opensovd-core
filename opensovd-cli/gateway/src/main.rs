@@ -137,9 +137,11 @@ where
 
     #[cfg(feature = "tls")]
     {
-        if let Some(tls_config) = cli.tls.build()? {
-            tracing::info!(target: TARGET, "TLS enabled");
-            builder = builder.tls(tls_config);
+        if let Some(tls) = cli.tls.config()? {
+            let mtls = tls.is_mtls();
+            let config = tls.build().context("failed to configure TLS")?;
+            tracing::info!(target: TARGET, mtls, "TLS enabled");
+            builder = builder.tls(config);
         }
     }
 
