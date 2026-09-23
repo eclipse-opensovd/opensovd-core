@@ -107,6 +107,10 @@ impl IntoResponse for Error {
                         )
                             .into_response();
                     }
+                    DataError::InvalidValue { path, message } => {
+                        let details = data_error(format!("/data{path}"), message);
+                        return (StatusCode::BAD_REQUEST, Json(details)).into_response();
+                    }
                     DataError::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
                 };
 
@@ -224,6 +228,23 @@ mod tests {
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["error_code"], "vendor-specific");
         assert_eq!(json["vendor_code"], "read-only");
+    }
+
+    #[tokio::test]
+    async fn test_error_data_invalid_value() {
+        let error = Error::Data(DataError::InvalidValue {
+            path: "/level".into(),
+            message: "expected u8".into(),
+        });
+        let response = error.into_response();
+
+        assert_eq!(response.status(), 400);
+
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["path"], "/data/level");
+        assert_eq!(json["error"]["error_code"], "incomplete-request");
+        assert_eq!(json["error"]["message"], "expected u8");
     }
 
     #[tokio::test]

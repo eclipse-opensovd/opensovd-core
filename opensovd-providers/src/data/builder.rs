@@ -11,7 +11,9 @@ use opensovd_core::{
     CategoryInfo, Data, DataError, DataFilter, DataProvider, DataScope, GroupInfo, Metadata,
     TagInfo,
 };
+use opensovd_models::JsonPointer;
 use opensovd_models::data::DataCategory;
+use serde::de::DeserializeOwned;
 use serde_json::Value;
 use thiserror::Error;
 
@@ -68,6 +70,13 @@ impl<T: ReadableDataResource> DataResourceDyn for ReadOnlyAdapter<T> {
     }
 }
 
+fn deserialize_value<T: DeserializeOwned>(value: Value) -> Result<T, DataError> {
+    serde_path_to_error::deserialize(value).map_err(|e| DataError::InvalidValue {
+        path: JsonPointer::from(&e).0,
+        message: e.into_inner().to_string(),
+    })
+}
+
 struct WriteOnlyAdapter<T>(T);
 
 #[async_trait]
@@ -77,8 +86,7 @@ impl<T: WriteableDataResource> DataResourceDyn for WriteOnlyAdapter<T> {
     }
 
     async fn write(&self, value: Value) -> Result<(), DataError> {
-        let typed: T::Value =
-            serde_json::from_value(value).map_err(|e| DataError::Internal(e.to_string()))?;
+        let typed: T::Value = deserialize_value(value)?;
         WriteableDataResource::write(&self.0, &typed).await
     }
 }
@@ -93,8 +101,7 @@ impl<T: DataResource> DataResourceDyn for ReadWriteAdapter<T> {
     }
 
     async fn write(&self, value: Value) -> Result<(), DataError> {
-        let typed: <T as WriteableDataResource>::Value =
-            serde_json::from_value(value).map_err(|e| DataError::Internal(e.to_string()))?;
+        let typed: <T as WriteableDataResource>::Value = deserialize_value(value)?;
         WriteableDataResource::write(&self.0, &typed).await
     }
 }
@@ -538,6 +545,31 @@ mod tests {
             .write("sw.version", json!({"value": "2.0.0"}))
             .await;
         assert!(matches!(result, Err(DataError::ReadOnly)));
+    }
+
+    #[tokio::test]
+    async fn test_write_of_wrong_type_is_invalid_value() {
+        struct Level;
+
+        #[async_trait]
+        impl WriteableDataResource for Level {
+            type Value = Vec<u8>;
+
+            async fn write(&self, _value: &Vec<u8>) -> Result<(), DataError> {
+                Ok(())
+            }
+        }
+
+        let provider = DataProviderBuilder::new()
+            .write_data("level", "Level", &DataCategory::StoredData, Level)
+            .build()
+            .unwrap();
+
+        assert!(provider.write("level", json!([7])).await.is_ok());
+        let result = provider.write("level", json!([7, "high"])).await;
+        assert!(matches!(result, Err(DataError::InvalidValue { path, .. }) if path == "/1"));
+        let result = provider.write("level", json!("high")).await;
+        assert!(matches!(result, Err(DataError::InvalidValue { path, .. }) if path.is_empty()));
     }
 
     #[tokio::test]

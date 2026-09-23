@@ -20,6 +20,7 @@ indexmap = { workspace = true }
 schemars = { workspace = true, features = ["derive", "std"] }
 serde = { workspace = true }
 serde_json = { workspace = true, features = ["std"] }
+serde_path_to_error = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]
