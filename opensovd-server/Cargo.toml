@@ -31,6 +31,7 @@ futures = { workspace = true, features = ["std", "async-await"] }
 http = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true, features = ["std"] }
+serde_path_to_error = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["net", "rt", "signal", "time"] }
 percent-encoding = { workspace = true }

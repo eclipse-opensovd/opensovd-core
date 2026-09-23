@@ -6,12 +6,13 @@
 //! Defines error types that convert to SOVD-compliant HTTP error responses.
 
 use axum::{
-    http::StatusCode,
+    extract::rejection::JsonRejection,
+    http::{StatusCode, header},
     response::{IntoResponse, Json, Response},
 };
 use axum_extra::{extract::QueryRejection, typed_header::TypedHeaderRejection};
 use opensovd_core::{BulkDataError, DataError, TopologyError};
-use opensovd_models::{ErrorCode, GenericError};
+use opensovd_models::{ErrorCode, ErrorDetails, GenericError, JsonPointer};
 
 /// A `Result` alias where the `Err` variant is [`Error`].
 pub type Result<T> = std::result::Result<T, Error>;
@@ -31,31 +32,81 @@ pub enum Error {
     BadQuery(#[from] QueryRejection),
     #[error("{0}")]
     InvalidHeader(#[from] TypedHeaderRejection),
+    #[error("{0}")]
+    BadBody(#[from] JsonRejection),
     #[error(transparent)]
     Topology(#[from] TopologyError),
 }
 
+/// A `DataError` naming the erroneous element of the request body.
+fn data_error(path: impl Into<String>, message: impl Into<String>) -> ErrorDetails {
+    opensovd_models::DataError {
+        path: path.into().into(),
+        error: Some(GenericError::new(ErrorCode::IncompleteRequest, message)),
+    }
+    .into()
+}
+
+/// The JSON pointer to the element of the request body that failed to
+/// deserialize, or the whole body if it is unknown.
+fn rejection_path(rejection: &JsonRejection) -> String {
+    let mut source = std::error::Error::source(rejection);
+    while let Some(error) = source {
+        if let Some(error) = error.downcast_ref::<serde_path_to_error::Error<serde_json::Error>>() {
+            return JsonPointer::from(error).0;
+        }
+        source = error.source();
+    }
+    String::new()
+}
+
+/// A malformed body names the erroneous element; other rejections keep
+/// their status.
+fn body_rejection(rejection: &JsonRejection) -> (StatusCode, ErrorDetails) {
+    let message = rejection.body_text();
+    match rejection {
+        JsonRejection::JsonDataError(_) => (
+            StatusCode::BAD_REQUEST,
+            data_error(rejection_path(rejection), message),
+        ),
+        JsonRejection::JsonSyntaxError(_) => (StatusCode::BAD_REQUEST, data_error("", message)),
+        _ => (
+            rejection.status(),
+            GenericError::new(ErrorCode::IncompleteRequest, message).into(),
+        ),
+    }
+}
+
 impl IntoResponse for Error {
     fn into_response(self) -> Response {
-        let (status, error) = match &self {
+        let (status, details): (_, ErrorDetails) = match &self {
             Self::EntityNotFound(id) => (
                 StatusCode::NOT_FOUND,
                 GenericError::with_vendor_code(
                     "entity-not-found",
                     format!("Entity not found: {id}"),
-                ),
+                )
+                .into(),
             ),
             Self::ProviderNotAvailable(provider) => (
                 StatusCode::NOT_FOUND,
                 GenericError::with_vendor_code(
                     "provider-not-available",
                     format!("Component has no {provider}"),
-                ),
+                )
+                .into(),
             ),
             Self::Data(e) => {
                 let status = match e {
                     DataError::NotFound(_) => StatusCode::NOT_FOUND,
-                    DataError::ReadOnly => StatusCode::BAD_REQUEST,
+                    DataError::ReadOnly => {
+                        return (
+                            StatusCode::METHOD_NOT_ALLOWED,
+                            [(header::ALLOW, "GET")],
+                            Json(GenericError::with_vendor_code("read-only", e.to_string())),
+                        )
+                            .into_response();
+                    }
                     DataError::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
                 };
 
@@ -68,7 +119,10 @@ impl IntoResponse for Error {
                     _ => e.to_string(),
                 };
 
-                (status, GenericError::new(ErrorCode::ErrorResponse, message))
+                (
+                    status,
+                    GenericError::new(ErrorCode::ErrorResponse, message).into(),
+                )
             }
             Self::BulkData(e) => {
                 let status = match e {
@@ -87,26 +141,33 @@ impl IntoResponse for Error {
                     _ => e.to_string(),
                 };
 
-                (status, GenericError::new(ErrorCode::ErrorResponse, message))
+                (
+                    status,
+                    GenericError::new(ErrorCode::ErrorResponse, message).into(),
+                )
             }
             Self::BadQuery(_) => (
                 StatusCode::BAD_REQUEST,
-                GenericError::new(ErrorCode::IncompleteRequest, "Bad request"),
+                GenericError::new(ErrorCode::IncompleteRequest, "Bad request").into(),
             ),
             Self::InvalidHeader(_) => (
                 StatusCode::BAD_REQUEST,
-                GenericError::new(ErrorCode::IncompleteRequest, "Bad request headers"),
+                GenericError::new(ErrorCode::IncompleteRequest, "Bad request headers").into(),
             ),
+            Self::BadBody(rejection) => body_rejection(rejection),
             Self::Topology(e) => {
                 let status = match e {
                     TopologyError::NotFound(_) => StatusCode::NOT_FOUND,
                 };
                 tracing::error!(target: "srv", error = %e, "Topology error");
                 let message = e.to_string();
-                (status, GenericError::new(ErrorCode::ErrorResponse, message))
+                (
+                    status,
+                    GenericError::new(ErrorCode::ErrorResponse, message).into(),
+                )
             }
         };
-        (status, Json(error)).into_response()
+        (status, Json(details)).into_response()
     }
 }
 
@@ -156,7 +217,13 @@ mod tests {
         let error = Error::Data(DataError::ReadOnly);
         let response = error.into_response();
 
-        assert_eq!(response.status(), 400);
+        assert_eq!(response.status(), 405);
+        assert_eq!(response.headers()[header::ALLOW], "GET");
+
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["error_code"], "vendor-specific");
+        assert_eq!(json["vendor_code"], "read-only");
     }
 
     #[tokio::test]
@@ -229,5 +296,70 @@ mod tests {
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["error_code"], "incomplete-request");
         assert_eq!(json["message"], "Bad request");
+    }
+
+    async fn put_body(
+        content_type: Option<&'static str>,
+        body: &'static str,
+    ) -> (StatusCode, serde_json::Value) {
+        use axum::{Router, body::Body, http::Request, routing::put};
+        use axum_extra::extract::WithRejection;
+        use opensovd_models::data::WriteRequest;
+        use tower::ServiceExt;
+
+        async fn handler(
+            WithRejection(Json(_body), _): WithRejection<Json<WriteRequest>, Error>,
+        ) -> StatusCode {
+            StatusCode::NO_CONTENT
+        }
+
+        let app = Router::new().route("/test", put(handler));
+        let mut request = Request::builder().method("PUT").uri("/test");
+        if let Some(content_type) = content_type {
+            request = request.header("content-type", content_type);
+        }
+        let request = request.body(Body::from(body)).unwrap();
+        let response = app.oneshot(request).await.unwrap();
+        let status = response.status();
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        (status, serde_json::from_slice(&body).unwrap())
+    }
+
+    #[tokio::test]
+    async fn test_error_body_missing_data() {
+        let (status, json) = put_body(Some("application/json"), r#"{"value": 42}"#).await;
+        assert_eq!(status, 400);
+        assert_eq!(json["path"], "/data");
+        assert_eq!(json["error"]["error_code"], "incomplete-request");
+    }
+
+    #[tokio::test]
+    async fn test_error_body_wrong_signature_type() {
+        let (status, json) =
+            put_body(Some("application/json"), r#"{"data": 1, "signature": 5}"#).await;
+        assert_eq!(status, 400);
+        assert_eq!(json["path"], "/signature");
+    }
+
+    #[tokio::test]
+    async fn test_error_body_not_object() {
+        let (status, json) = put_body(Some("application/json"), "[]").await;
+        assert_eq!(status, 400);
+        assert_eq!(json["path"], "");
+    }
+
+    #[tokio::test]
+    async fn test_error_body_not_json() {
+        let (status, json) = put_body(Some("application/json"), "{").await;
+        assert_eq!(status, 400);
+        assert_eq!(json["path"], "");
+        assert_eq!(json["error"]["error_code"], "incomplete-request");
+    }
+
+    #[tokio::test]
+    async fn test_error_body_missing_content_type() {
+        let (status, json) = put_body(None, r#"{"data": 42}"#).await;
+        assert_eq!(status, 415);
+        assert_eq!(json["error_code"], "incomplete-request");
     }
 }
