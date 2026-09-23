@@ -85,13 +85,19 @@ pub(super) async fn app_capabilities(
     let translation_id = entity.translation_id().map(String::from);
 
     let base = super::super::versioned_uri(&parts);
-    let is_located_on = entity
-        .component_id()
-        .map(|cid| format!("{base}/components/{}", encode_path_segment(cid)).into());
+    // Resolved through the topology, as the relation handlers do, so a link is
+    // only advertised when its target exists.
+    let is_located_on = topo
+        .component_of_app(&app_id)
+        .ok()
+        .flatten()
+        .map(|c| format!("{base}/components/{}", encode_path_segment(c.id())).into());
 
-    let belongs_to = entity
-        .area_id()
-        .map(|_| format!("{base}/apps/{}/belongs-to", encode_path_segment(&app_id)).into());
+    let belongs_to = topo
+        .area_of_app(&app_id)
+        .ok()
+        .flatten()
+        .map(|area| format!("{base}/areas/{}", encode_path_segment(area.id())).into());
 
     let data = entity
         .data_provider()
@@ -130,22 +136,26 @@ pub(super) async fn app_is_located_on(
     let component = topo
         .component_of_app(&app_id)
         .map_err(|_| Error::EntityNotFound(app_id.clone()))?
-        .ok_or_else(|| Error::EntityNotFound(app_id.clone()))?;
+        .ok_or_else(|| Error::ResourceNotFound(format!("apps/{app_id}/is-located-on")))?;
 
-    let base = super::super::versioned_uri(&parts);
     let tags = component.tags();
-    let translation_id = component.translation_id().map(String::from);
+    let matches_tags =
+        query.tags.is_empty() || (!tags.is_empty() && query.tags.iter().any(|t| tags.contains(t)));
 
-    let item = EntityReference {
-        id: component.id().to_string(),
-        name: component.name().to_string(),
-        translation_id,
-        href: format!("{base}/components/{}", encode_path_segment(component.id())).into(),
-        tags: (!tags.is_empty()).then_some(tags.to_vec()),
-    };
+    let mut items = Vec::new();
+    if matches_tags {
+        let base = super::super::versioned_uri(&parts);
+        items.push(EntityReference {
+            id: component.id().to_string(),
+            name: component.name().to_string(),
+            translation_id: component.translation_id().map(String::from),
+            href: format!("{base}/components/{}", encode_path_segment(component.id())).into(),
+            tags: (!tags.is_empty()).then_some(tags.to_vec()),
+        });
+    }
 
     Ok(Json(Response {
-        data: Entities { items: vec![item] },
+        data: Entities { items },
         schema: query.include_schema.then(Entities::schema),
     }))
 }
@@ -160,29 +170,26 @@ pub(super) async fn app_belongs_to(
     axum_extra::extract::Query(query): axum_extra::extract::Query<EntitiesQuery>,
 ) -> Result<Json<Response<Entities>>> {
     let topo = topology.read().await;
-    let mut items = Vec::new();
-
-    if let Some(area) = topo
+    // Not advertised without an area, so not served either.
+    let area = topo
         .area_of_app(&app_id)
         .map_err(|_| Error::EntityNotFound(app_id.clone()))?
-    {
-        let tags = area.tags();
-        let translation_id = area.translation_id().map(String::from);
+        .ok_or_else(|| Error::ResourceNotFound(format!("apps/{app_id}/belongs-to")))?;
 
-        // Check tag filter if provided
-        let matches_tags = query.tags.is_empty()
-            || (!tags.is_empty() && query.tags.iter().any(|t| tags.contains(t)));
+    let tags = area.tags();
+    let matches_tags =
+        query.tags.is_empty() || (!tags.is_empty() && query.tags.iter().any(|t| tags.contains(t)));
 
-        if matches_tags {
-            let base = super::super::versioned_uri(&parts);
-            items.push(EntityReference {
-                id: area.id().to_string(),
-                name: area.name().to_string(),
-                translation_id,
-                href: format!("{base}/areas/{}", encode_path_segment(area.id())).into(),
-                tags: (!tags.is_empty()).then_some(tags.to_vec()),
-            });
-        }
+    let mut items = Vec::new();
+    if matches_tags {
+        let base = super::super::versioned_uri(&parts);
+        items.push(EntityReference {
+            id: area.id().to_string(),
+            name: area.name().to_string(),
+            translation_id: area.translation_id().map(String::from),
+            href: format!("{base}/areas/{}", encode_path_segment(area.id())).into(),
+            tags: (!tags.is_empty()).then_some(tags.to_vec()),
+        });
     }
 
     Ok(Json(Response {
@@ -230,12 +237,110 @@ mod tests {
         );
         assert_eq!(
             json["belongs-to"],
-            "http://localhost/sovd/v1/apps/engine_control/belongs-to"
+            "http://localhost/sovd/v1/areas/powertrain"
         );
         assert_eq!(
             json["data"],
             "http://localhost/sovd/v1/apps/engine_control/data"
         );
+    }
+
+    #[tokio::test]
+    async fn test_app_without_area_omits_belongs_to() {
+        let state = AppState::<()> {
+            vendor_info: None,
+            topology: create_mock_topology().await,
+        };
+        let app = routes::<()>()
+            .with_state(state)
+            .layer(crate::routes::test_base_uri());
+
+        let request = Request::builder()
+            .uri("/apps/ota_manager")
+            .body(Body::empty())
+            .unwrap();
+        let response = app.clone().oneshot(request).await.unwrap();
+        assert!(response.status().is_success());
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert!(json.get("belongs-to").is_none());
+
+        // Not advertised, so not served either.
+        let request = Request::builder()
+            .uri("/apps/ota_manager/belongs-to")
+            .body(Body::empty())
+            .unwrap();
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), axum::http::StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn test_app_capabilities_skip_removed_relations() {
+        let topology = create_mock_topology().await;
+        {
+            let mut topo = topology.write().await;
+            topo.remove_component("ecu");
+            topo.remove_area("powertrain");
+        }
+        let state = AppState::<()> {
+            vendor_info: None,
+            topology,
+        };
+        let app = routes::<()>()
+            .with_state(state)
+            .layer(crate::routes::test_base_uri());
+
+        let request = Request::builder()
+            .uri("/apps/engine_control")
+            .body(Body::empty())
+            .unwrap();
+        let response = app.clone().oneshot(request).await.unwrap();
+        assert!(response.status().is_success());
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert!(json.get("is-located-on").is_none());
+        assert!(json.get("belongs-to").is_none());
+
+        for (uri, vendor_code) in [
+            ("/apps/engine_control/is-located-on", "resource-not-found"),
+            ("/apps/engine_control/belongs-to", "resource-not-found"),
+            ("/apps/unknown/is-located-on", "entity-not-found"),
+            ("/apps/unknown/belongs-to", "entity-not-found"),
+        ] {
+            let request = Request::builder().uri(uri).body(Body::empty()).unwrap();
+            let response = app.clone().oneshot(request).await.unwrap();
+            assert_eq!(
+                response.status(),
+                axum::http::StatusCode::NOT_FOUND,
+                "{uri}"
+            );
+            let body = response.into_body().collect().await.unwrap().to_bytes();
+            let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+            assert_eq!(json["vendor_code"], vendor_code, "{uri}");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_app_is_located_on_filters_tags() {
+        let state = AppState::<()> {
+            vendor_info: None,
+            topology: create_mock_topology().await,
+        };
+        let app = routes::<()>()
+            .with_state(state)
+            .layer(crate::routes::test_base_uri());
+
+        for (query, expected) in [("critical", 1), ("nonexistent", 0)] {
+            let request = Request::builder()
+                .uri(format!("/apps/engine_control/is-located-on?tags={query}"))
+                .body(Body::empty())
+                .unwrap();
+            let response = app.clone().oneshot(request).await.unwrap();
+            assert_eq!(response.status(), axum::http::StatusCode::OK, "{query}");
+            let body = response.into_body().collect().await.unwrap().to_bytes();
+            let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+            assert_eq!(json["items"].as_array().unwrap().len(), expected, "{query}");
+        }
     }
 
     #[tokio::test]

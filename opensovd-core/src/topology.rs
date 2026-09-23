@@ -32,6 +32,16 @@ pub enum TopologyError {
     NotFound(EntityRef),
 }
 
+/// Removes `id` from the set under `key`, dropping the set once empty.
+fn unindex(index: &mut HashMap<String, IndexSet<String>>, key: &str, id: &str) {
+    if let Some(set) = index.get_mut(key) {
+        set.shift_remove(id);
+        if set.is_empty() {
+            index.remove(key);
+        }
+    }
+}
+
 pub struct TopologyState {
     components: IndexMap<String, Component>,
     apps: IndexMap<String, App>,
@@ -57,6 +67,9 @@ impl TopologyState {
     }
 
     fn insert_component(&mut self, id: String, component: Component) {
+        if let Some(old) = self.components.get(&id).and_then(Component::area_id) {
+            unindex(&mut self.components_by_area, old, &id);
+        }
         if let Some(area) = component.area_id() {
             self.components_by_area
                 .entry(area.to_owned())
@@ -68,18 +81,21 @@ impl TopologyState {
 
     fn remove_component(&mut self, id: &str) -> Option<Component> {
         let removed = self.components.shift_remove(id)?;
-        if let Some(area) = removed.area_id()
-            && let Some(set) = self.components_by_area.get_mut(area)
-        {
-            set.shift_remove(id);
-            if set.is_empty() {
-                self.components_by_area.remove(area);
-            }
+        if let Some(area) = removed.area_id() {
+            unindex(&mut self.components_by_area, area, id);
         }
         Some(removed)
     }
 
     fn insert_app(&mut self, id: String, app: App) {
+        if let Some(old) = self.apps.get(&id) {
+            if let Some(comp) = old.component_id() {
+                unindex(&mut self.apps_by_component, comp, &id);
+            }
+            if let Some(area) = old.area_id() {
+                unindex(&mut self.apps_by_area, area, &id);
+            }
+        }
         if let Some(comp) = app.component_id() {
             self.apps_by_component
                 .entry(comp.to_owned())
@@ -97,21 +113,11 @@ impl TopologyState {
 
     fn remove_app(&mut self, id: &str) -> Option<App> {
         let removed = self.apps.shift_remove(id)?;
-        if let Some(comp) = removed.component_id()
-            && let Some(set) = self.apps_by_component.get_mut(comp)
-        {
-            set.shift_remove(id);
-            if set.is_empty() {
-                self.apps_by_component.remove(comp);
-            }
+        if let Some(comp) = removed.component_id() {
+            unindex(&mut self.apps_by_component, comp, id);
         }
-        if let Some(area) = removed.area_id()
-            && let Some(set) = self.apps_by_area.get_mut(area)
-        {
-            set.shift_remove(id);
-            if set.is_empty() {
-                self.apps_by_area.remove(area);
-            }
+        if let Some(area) = removed.area_id() {
+            unindex(&mut self.apps_by_area, area, id);
         }
         Some(removed)
     }
@@ -754,5 +760,35 @@ mod tests {
                 .count(),
             0
         );
+    }
+
+    #[tokio::test]
+    async fn test_readd_component_moves_area_index() {
+        let topology = Topology::new();
+        {
+            let mut t = topology.write().await;
+            t.add_component(Component::new("ecu1", "ECU 1").with_area_id("powertrain"));
+            t.add_component(Component::new("ecu1", "ECU 1").with_area_id("chassis"));
+        }
+
+        let topo = topology.read().await;
+        assert_eq!(topo.components_of_area("powertrain").count(), 0);
+        assert_eq!(topo.components_of_area("chassis").count(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_readd_app_moves_component_and_area_index() {
+        let topology = Topology::new();
+        {
+            let mut t = topology.write().await;
+            t.add_app(App::new("diag", "Diagnostics", "gw").with_area_id("network"));
+            t.add_app(App::new("diag", "Diagnostics", "ecu1").with_area_id("powertrain"));
+        }
+
+        let topo = topology.read().await;
+        assert_eq!(topo.apps_of_component("gw").count(), 0);
+        assert_eq!(topo.apps_of_component("ecu1").count(), 1);
+        assert_eq!(topo.apps_of_area("network").count(), 0);
+        assert_eq!(topo.apps_of_area("powertrain").count(), 1);
     }
 }

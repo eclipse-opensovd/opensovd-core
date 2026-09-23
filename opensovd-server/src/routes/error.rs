@@ -23,6 +23,8 @@ pub enum Error {
     EntityNotFound(String),
     #[error("provider not available: {0}")]
     ProviderNotAvailable(String),
+    #[error("resource not found: {0}")]
+    ResourceNotFound(String),
     #[error(transparent)]
     Data(#[from] DataError),
     #[error(transparent)]
@@ -43,6 +45,13 @@ impl IntoResponse for Error {
                 GenericError::with_vendor_code(
                     "entity-not-found",
                     format!("Entity not found: {id}"),
+                ),
+            ),
+            Self::ResourceNotFound(resource) => (
+                StatusCode::NOT_FOUND,
+                GenericError::with_vendor_code(
+                    "resource-not-found",
+                    format!("Resource not found: {resource}"),
                 ),
             ),
             Self::ProviderNotAvailable(provider) => (
@@ -129,6 +138,19 @@ mod tests {
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["vendor_code"], "entity-not-found");
         assert!(json["message"].as_str().unwrap().contains("test-component"));
+    }
+
+    #[tokio::test]
+    async fn test_error_resource_not_found() {
+        let error = Error::ResourceNotFound("apps/ota_manager/belongs-to".into());
+        let response = error.into_response();
+
+        assert_eq!(response.status(), 404);
+
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["vendor_code"], "resource-not-found");
+        assert!(json["message"].as_str().unwrap().contains("belongs-to"));
     }
 
     #[tokio::test]

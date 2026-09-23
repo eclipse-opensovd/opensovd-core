@@ -84,7 +84,11 @@ pub(super) async fn area_capabilities(
     let translation_id = entity.translation_id().map(String::from);
 
     let base = super::super::versioned_uri(&parts);
-    let contains = Some(format!("{base}/areas/{}/contains", encode_path_segment(&area_id)).into());
+    // Relation links are only advertised when the relation is not empty (ISO 17978-3, Table 53).
+    let has_members = topo.components_of_area(&area_id).next().is_some()
+        || topo.apps_of_area(&area_id).next().is_some();
+    let contains = has_members
+        .then(|| format!("{base}/areas/{}/contains", encode_path_segment(&area_id)).into());
 
     Ok(Json(Response {
         data: EntityCapabilities {
@@ -200,6 +204,47 @@ mod tests {
             json["contains"],
             "http://localhost/sovd/v1/areas/powertrain/contains"
         );
+    }
+
+    #[tokio::test]
+    async fn test_area_capabilities_omit_empty_contains() {
+        let topology = create_mock_topology().await;
+        topology
+            .write()
+            .await
+            .add_area(opensovd_core::Area::new("body", "Body Domain"));
+        let state = AppState::<()> {
+            vendor_info: None,
+            topology,
+        };
+        let app = routes::<()>()
+            .with_state(state)
+            .layer(crate::routes::test_base_uri());
+
+        let request = Request::builder()
+            .uri("/areas/body")
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.clone().oneshot(request).await.unwrap();
+        assert!(response.status().is_success());
+
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(json["id"], "body");
+        assert!(json.get("contains").is_none());
+
+        // Not advertised, but still served as an empty list (ISO 17978-3, 7.6.2.4).
+        let request = Request::builder()
+            .uri("/areas/body/contains")
+            .body(Body::empty())
+            .unwrap();
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), axum::http::StatusCode::OK);
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["items"], serde_json::json!([]));
     }
 
     #[tokio::test]
