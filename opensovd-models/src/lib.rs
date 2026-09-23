@@ -10,7 +10,7 @@ pub mod error;
 pub mod types;
 pub mod version;
 
-pub use error::{ErrorCode, GenericError};
+pub use error::{DataError, ErrorCode, ErrorDetails, GenericError};
 use serde::{Deserialize, Serialize};
 pub use types::{JsonPointer, UriReference};
 

@@ -23,6 +23,36 @@ impl From<String> for JsonPointer {
     }
 }
 
+impl From<&serde_path_to_error::Error<serde_json::Error>> for JsonPointer {
+    /// Points at the element where deserialization failed, or at the field
+    /// itself if it is missing.
+    fn from(error: &serde_path_to_error::Error<serde_json::Error>) -> Self {
+        use serde_path_to_error::Segment;
+
+        let mut pointer = String::new();
+        let mut push = |token: &str| {
+            pointer.push('/');
+            pointer.push_str(&token.replace('~', "~0").replace('/', "~1"));
+        };
+        for segment in error.path() {
+            match segment {
+                Segment::Seq { index } => push(&index.to_string()),
+                Segment::Map { key } => push(key),
+                Segment::Enum { variant } => push(variant),
+                Segment::Unknown => {}
+            }
+        }
+        let message = error.inner().to_string();
+        if let Some(field) = message
+            .strip_prefix("missing field `")
+            .and_then(|rest| rest.split('`').next())
+        {
+            push(field);
+        }
+        Self(pointer)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct SupportedTags(pub Vec<String>);
@@ -97,6 +127,50 @@ mod tests {
         let s = String::from("/data/0");
         let ptr: JsonPointer = s.into();
         assert_eq!(ptr.0, "/data/0");
+    }
+
+    fn pointer_of<T: serde::de::DeserializeOwned + std::fmt::Debug>(json: &str) -> String {
+        let deserializer = &mut serde_json::Deserializer::from_str(json);
+        let error = serde_path_to_error::deserialize::<_, T>(deserializer).unwrap_err();
+        JsonPointer::from(&error).0
+    }
+
+    #[test]
+    fn json_pointer_from_path_error() {
+        #[derive(Debug, Deserialize)]
+        #[allow(dead_code)]
+        struct Inner {
+            level: u8,
+        }
+        #[derive(Debug, Deserialize)]
+        #[allow(dead_code)]
+        enum Mode {
+            Manual { level: u8 },
+        }
+        #[derive(Debug, Deserialize)]
+        #[allow(dead_code)]
+        struct Outer {
+            data: Vec<Inner>,
+            mode: Option<Mode>,
+            #[serde(rename = "a/b~c")]
+            escaped: Option<u8>,
+        }
+
+        assert_eq!(
+            pointer_of::<Outer>(r#"{"data": [{"level": "x"}]}"#),
+            "/data/0/level"
+        );
+        assert_eq!(pointer_of::<Outer>(r#"{"data": [{}]}"#), "/data/0/level");
+        assert_eq!(pointer_of::<Outer>(r"{}"), "/data");
+        assert_eq!(
+            pointer_of::<Outer>(r#"{"data": [], "a/b~c": "x"}"#),
+            "/a~1b~0c"
+        );
+        assert_eq!(
+            pointer_of::<Outer>(r#"{"data": [], "mode": {"Manual": {"level": "x"}}}"#),
+            "/mode/Manual/level"
+        );
+        assert_eq!(pointer_of::<Outer>("[]"), "");
     }
 }
 

@@ -19,6 +19,7 @@ jsonschema = ["dep:schemars"]
 schemars = { workspace = true, optional = true, features = ["derive", "std", "chrono04"] }
 serde = { workspace = true, features = ["derive", "std"] }
 serde_json = { workspace = true, features = ["std"] }
+serde_path_to_error = { workspace = true }
 chrono = { workspace = true, features = ["serde"] }
 
 [lints]
