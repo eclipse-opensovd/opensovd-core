@@ -15,6 +15,7 @@ categories.workspace = true
 [features]
 unit = ["dep:serde"]
 auth = ["dep:jsonwebtoken", "dep:regorus", "dep:serde", "dep:serde_json", "dep:http", "dep:tracing", "dep:opensovd-server"]
+mdns = ["dep:mdns-sd", "dep:if-addrs", "dep:rustix", "dep:thiserror", "dep:tokio", "dep:tracing"]
 
 [dependencies]
 opensovd-server = { workspace = true, optional = true }
@@ -24,6 +25,13 @@ serde = { workspace = true, optional = true, features = ["derive", "std"] }
 serde_json = { workspace = true, optional = true, features = ["std"] }
 http = { workspace = true, optional = true }
 tracing = { workspace = true, optional = true }
+mdns-sd = { workspace = true, optional = true, features = ["async"] }
+if-addrs = { workspace = true, optional = true }
+tokio = { workspace = true, optional = true, features = ["rt", "time"] }
+thiserror = { workspace = true, optional = true }
+
+[target.'cfg(unix)'.dependencies]
+rustix = { workspace = true, optional = true, features = ["std", "system"] }
 
 [dev-dependencies]
 serde_json = { workspace = true, features = ["std"] }
