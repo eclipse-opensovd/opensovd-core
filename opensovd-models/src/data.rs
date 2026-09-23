@@ -3,8 +3,8 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::error::GenericError;
-use crate::{Items, JsonPointer};
+use crate::Items;
+use crate::error::DataError;
 
 /// Data category type.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -46,7 +46,7 @@ pub type DataList = Items<Metadata>;
 pub struct Data {
     pub data: serde_json::Value,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub errors: Option<Vec<DataErrorEntry>>,
+    pub errors: Option<Vec<DataError>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -55,7 +55,7 @@ pub struct ReadResponse {
     pub id: String,
     pub data: serde_json::Value,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub errors: Option<Vec<DataErrorEntry>>,
+    pub errors: Option<Vec<DataError>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub schema: Option<serde_json::Value>,
 }
@@ -67,47 +67,6 @@ pub struct WriteRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub signature: Option<String>,
 }
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "jsonschema", derive(schemars::JsonSchema))]
-pub struct DataErrorEntry {
-    pub path: JsonPointer,
-    pub error: GenericError,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "jsonschema", derive(schemars::JsonSchema))]
-pub struct DataError {
-    pub error_code: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub message: Option<String>,
-}
-
-impl DataError {
-    #[must_use]
-    pub fn not_found(id: &str) -> Self {
-        Self {
-            error_code: "not-found".into(),
-            message: Some(format!("Data resource not found: {id}")),
-        }
-    }
-
-    #[must_use]
-    pub fn read_only() -> Self {
-        Self {
-            error_code: "read-only".into(),
-            message: Some("Data resource is read-only".into()),
-        }
-    }
-}
-
-impl std::fmt::Display for DataError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.error_code)
-    }
-}
-
-impl std::error::Error for DataError {}
 
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct DataQuery {
@@ -220,21 +179,5 @@ mod tests {
         assert_eq!(DataCategory::StoredData.as_str(), "storedData");
         assert_eq!(DataCategory::SysInfo.as_str(), "sysInfo");
         assert_eq!(DataCategory::Custom("x-custom".into()).as_str(), "x-custom");
-    }
-
-    #[test]
-    fn test_data_error() {
-        let not_found = DataError::not_found("voltage");
-        assert_eq!(not_found.error_code, "not-found");
-        assert_eq!(
-            not_found.message,
-            Some("Data resource not found: voltage".into())
-        );
-        assert_eq!(not_found.to_string(), "not-found");
-
-        let read_only = DataError::read_only();
-        assert_eq!(read_only.error_code, "read-only");
-        assert_eq!(read_only.message, Some("Data resource is read-only".into()));
-        assert_eq!(read_only.to_string(), "read-only");
     }
 }

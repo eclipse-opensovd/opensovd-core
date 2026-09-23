@@ -93,6 +93,44 @@ async fn write_data() {
 }
 
 #[tokio::test]
+async fn write_data_rejected() {
+    let mut builder = Connector::builder();
+    builder
+        .expect()
+        .with_method("PUT")
+        .with_uri("http://localhost/sovd/v1/components/ecu1/data/param1")
+        .returning((
+            http::StatusCode::BAD_REQUEST,
+            json!({
+                "path": "/data/value",
+                "error": {"error_code": "invalid-signature", "message": "bad signature"}
+            })
+            .to_string(),
+        ))
+        .unwrap();
+    let client = mock_client(builder.build());
+    let err = client
+        .component("ecu1")
+        .data("param1")
+        .write(&json!({"value": 42}))
+        .unwrap()
+        .send()
+        .await
+        .unwrap_err();
+    match err {
+        opensovd_client::Error::ApiError {
+            status,
+            details: Some(opensovd_client::ErrorDetails::Data(error)),
+        } => {
+            assert_eq!(status.as_u16(), 400);
+            assert_eq!(error.path.0, "/data/value");
+            assert_eq!(error.error.expect("error").message, "bad signature");
+        }
+        other => panic!("unexpected error: {other:?}"),
+    }
+}
+
+#[tokio::test]
 async fn app_data() {
     let mut builder = Connector::builder();
     builder

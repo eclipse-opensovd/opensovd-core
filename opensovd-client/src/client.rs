@@ -339,8 +339,8 @@ impl Client {
                 .map_err(|e| Error::Service { source: e })?
                 .to_bytes();
             if !status.is_success() {
-                let error = serde_json::from_slice(&body).ok();
-                return Err(Error::ApiError { status, error });
+                let details = serde_json::from_slice(&body).ok();
+                return Err(Error::ApiError { status, details });
             }
             Ok(body)
         };
