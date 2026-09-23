@@ -65,15 +65,28 @@ struct Cli {
 
 /// Exercise the client API and print results.
 async fn run(client: &Client) -> Result<(), opensovd_client::Error> {
+    // Root capabilities: the entity collections the vehicle offers
+    let root = client.capabilities().send().await?;
+    for (name, link) in [
+        ("components", &root.data.components),
+        ("apps", &root.data.apps),
+        ("areas", &root.data.areas),
+    ] {
+        if let Some(link) = link {
+            println!("{name}: {}", link.0);
+        }
+    }
+
     // Components
     let components = client.list_components().send().await?;
     for c in &components.data.items {
         println!("component: {} ({})", c.id, c.name);
     }
 
-    // Data items for the first component
+    // Data items for the first component, following the links it advertises
     if let Some(first) = components.data.items.first() {
-        let data = client.component(&first.id).list_data().send().await?;
+        let component = client.component(&first.id).capabilities().await?;
+        let data = component.list_data().send().await?;
         for d in &data.data.items {
             println!("  data: {} ({})", d.id, d.name);
         }

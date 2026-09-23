@@ -77,3 +77,30 @@ let _components = client.list_components().send().await?;
 ```
 
 Part of [OpenSOVD Core](https://github.com/eclipse-opensovd/opensovd-core).
+
+## Capabilities
+
+Entity handles navigate by links. `client.component(id)` starts from links
+derived from the id and makes no request; `capabilities()` fetches what the
+server advertises (ISO 17978-3 7.6.3) and returns a handle that follows the
+server's links, keeping a default wherever the server has none.
+`Client::capabilities()` queries the vehicle's root capabilities.
+
+```rust,no_run
+use opensovd_client::Client;
+
+# async fn run() -> Result<(), Box<dyn std::error::Error>> {
+let client = Client::connect("http://localhost:7690/sovd/v1")?;
+
+let root = client.capabilities().schema(true).send().await?;
+println!("components: {:?}", root.data.components);
+
+// Default links: GET /components/ecu/data
+client.component("ecu").list_data().send().await?;
+
+// Advertised links: GET <the server's data link>
+let ecu = client.component("ecu").capabilities().await?;
+ecu.list_data().send().await?;
+# Ok(())
+# }
+```

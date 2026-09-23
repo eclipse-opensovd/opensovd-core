@@ -4,6 +4,7 @@
 #![allow(clippy::missing_errors_doc)]
 #![doc = include_str!("../README.md")]
 
+mod capabilities;
 mod client;
 mod data;
 mod discovery;
@@ -13,11 +14,13 @@ mod list;
 #[cfg(unix)]
 mod unix;
 
+pub use capabilities::CapabilitiesRequest;
 pub use client::{BuilderError, Client, ClientBuilder};
 pub use discovery::Discovery;
 pub use error::{Error, Result};
 pub use opensovd_models::Response;
 pub use opensovd_models::data::DataCategory;
+pub use opensovd_models::discovery::EntityCapabilities;
 pub use opensovd_models::version::{SovdInfo, VendorInfo, VersionInfo};
 #[cfg(unix)]
 pub use unix::UnixConnector;

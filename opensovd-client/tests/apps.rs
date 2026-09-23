@@ -59,3 +59,23 @@ async fn list_apps_with_schema() {
     assert!(result.data.items.is_empty());
     assert_eq!(result.schema.unwrap(), json!({"type": "object"}));
 }
+
+#[tokio::test]
+async fn app_capabilities_keep_default_links() {
+    let mut builder = Connector::builder();
+    builder
+        .expect()
+        .with_uri("http://localhost/sovd/v1/apps/app1")
+        .returning(json!({"id": "app1", "name": "App"}).to_string())
+        .unwrap();
+    builder
+        .expect()
+        .with_uri("http://localhost/sovd/v1/apps/app1/data")
+        .returning(json!({"items": []}).to_string())
+        .unwrap();
+    let client = mock_client(builder.build());
+
+    let app = client.app("app1").capabilities().await.unwrap();
+    assert!(app.links().data.is_some());
+    app.list_data().send().await.unwrap();
+}

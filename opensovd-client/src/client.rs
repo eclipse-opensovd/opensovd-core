@@ -19,6 +19,7 @@ use tower::{
     util::{BoxCloneSyncService, MapErrLayer, MapResponseLayer},
 };
 
+use crate::capabilities::CapabilitiesRequest;
 use crate::discovery::Discovery;
 use crate::entities::{App, Area, Component};
 use crate::error::{Error, Result};
@@ -234,6 +235,17 @@ impl Client {
         Self::builder().base_uri(uri)?.build()
     }
 
+    /// Returns a request builder for the capabilities of the vehicle (`GET /`):
+    /// links to its entity collections.
+    #[must_use]
+    pub fn capabilities(&self) -> CapabilitiesRequest<'_> {
+        CapabilitiesRequest {
+            client: self,
+            path: String::new(),
+            schema: false,
+        }
+    }
+
     /// Returns a request builder for listing components.
     #[must_use]
     pub fn list_components(&self) -> ListEntitiesRequest<'_> {
@@ -267,28 +279,38 @@ impl Client {
     /// Returns a reference to a specific component by ID.
     #[must_use]
     pub fn component(&self, id: &str) -> Component<'_> {
-        Component {
-            client: self,
-            id: encode(id),
-        }
+        Component::new(self, id)
     }
 
     /// Returns a reference to a specific app by ID.
     #[must_use]
     pub fn app(&self, id: &str) -> App<'_> {
-        App {
-            client: self,
-            id: encode(id),
-        }
+        App::new(self, id)
     }
 
     /// Returns a reference to a specific area by ID.
     #[must_use]
     pub fn area(&self, id: &str) -> Area<'_> {
-        Area {
-            client: self,
-            id: encode(id),
+        Area::new(self, id)
+    }
+
+    /// The absolute URL of `path` relative to the base URI.
+    pub(crate) fn url(&self, path: &str) -> String {
+        let base = self.base_uri.to_string();
+        format!("{}{path}", base.trim_end_matches('/'))
+    }
+
+    /// Resolve a link the server advertised against the base URI.
+    pub(crate) fn resolve(&self, link: &str) -> String {
+        if link.contains("://") {
+            return link.to_owned();
         }
+        if link.starts_with('/') {
+            let scheme = self.base_uri.scheme_str().unwrap_or("http");
+            let authority = self.base_uri.authority().map_or("", |a| a.as_str());
+            return format!("{scheme}://{authority}{link}");
+        }
+        self.url(&format!("/{link}"))
     }
 
     /// GET a JSON resource at `path` (relative to the base URI) with optional query parameters.
@@ -409,12 +431,17 @@ pub(crate) fn encode(segment: &str) -> String {
 }
 
 /// Build a URI by appending a path and optional query parameters to a base URI.
+///
+/// An absolute URI, such as a link the server advertised, is used as is.
 #[allow(clippy::result_large_err)]
 pub(crate) fn build_uri_with_query(
     base_uri: &http::Uri,
     path: &str,
     query: &[(&str, &str)],
 ) -> Result<http::Uri> {
+    if path.contains("://") {
+        return Ok(build_uri_query_string(path, query).parse()?);
+    }
     // A root base URI such as `http://localhost` renders with a trailing slash;
     // avoid a doubled slash when the path also starts with one.
     let mut base = base_uri.to_string();

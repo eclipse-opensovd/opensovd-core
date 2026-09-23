@@ -177,3 +177,21 @@ async fn backpressure_layer_does_not_panic() {
         assert!(list.data.items.is_empty());
     }
 }
+
+#[tokio::test]
+async fn root_capabilities() {
+    let mut builder = Connector::builder();
+    builder
+        .expect()
+        .with_uri("http://localhost/sovd/v1")
+        .returning(
+            json!({"id": "", "name": "", "areas": "/sovd/v1/areas", "apps": "/sovd/v1/apps"})
+                .to_string(),
+        )
+        .unwrap();
+    let client = mock_client(builder.build());
+    let result = client.capabilities().send().await.unwrap();
+    assert!(result.data.id.is_empty());
+    assert!(result.data.areas.is_some());
+    assert!(result.data.components.is_none());
+}

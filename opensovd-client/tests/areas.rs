@@ -46,3 +46,30 @@ async fn list_areas_with_schema() {
     assert!(result.data.items.is_empty());
     assert_eq!(result.schema.unwrap(), json!({"type": "object"}));
 }
+
+#[tokio::test]
+async fn area_capabilities_resolve_relative_links() {
+    let mut builder = Connector::builder();
+    builder
+        .expect()
+        .with_uri("http://localhost/sovd/v1/areas/powertrain")
+        .returning(
+            json!({
+                "id": "powertrain",
+                "name": "Powertrain",
+                "contains": "/sovd/v1/domains/powertrain/contains"
+            })
+            .to_string(),
+        )
+        .unwrap();
+    builder
+        .expect()
+        .with_uri("http://localhost/sovd/v1/domains/powertrain/contains")
+        .returning(json!({"items": []}).to_string())
+        .unwrap();
+    let client = mock_client(builder.build());
+
+    let area = client.area("powertrain").capabilities().await.unwrap();
+    let result = area.contains().await.unwrap();
+    assert!(result.items.is_empty());
+}
