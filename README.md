@@ -27,7 +27,7 @@ curl -s http://127.0.0.1:7690/sovd/version-info | jq
 {
   "sovd_info": [
     {
-      "version": "1.1",
+      "version": "1.1.0",
       "base_uri": "http://127.0.0.1:7690/sovd/v1",
       "vendor_info": {
         "version": "0.1.1",

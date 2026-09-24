@@ -57,7 +57,7 @@ impl<V> FromRef<AppState<V>> for Topology {
 const API_VERSION: &str = "v1";
 
 /// SOVD standard version.
-pub const SOVD_VERSION: &str = "1.1";
+pub const SOVD_VERSION: &str = "1.1.0";
 
 /// Scheme and mount path the server advertises, resolved from its configuration
 /// and attached to every request as an extension.

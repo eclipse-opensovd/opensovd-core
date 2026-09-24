@@ -24,7 +24,7 @@ async fn select_reuses_transport() {
         .with_uri("http://localhost:7690/sovd/version-info")
         .returning(
             json!({"sovd_info": [{
-                "version": "1.1",
+                "version": "1.1.0",
                 "base_uri": "http://localhost:7690/sovd/v1"
             }]})
             .to_string(),
@@ -36,7 +36,7 @@ async fn select_reuses_transport() {
         .unwrap();
 
     let client = discovery(b.build())
-        .select(|s: &SovdInfo<serde_json::Value>| s.version == "1.1")
+        .select(|s: &SovdInfo<serde_json::Value>| s.version == "1.1.0")
         .await
         .unwrap();
 
@@ -52,7 +52,7 @@ async fn select_inherits_request_timeout() {
         .with_uri("http://localhost:7690/sovd/version-info")
         .returning(
             json!({"sovd_info": [{
-                "version": "1.1",
+                "version": "1.1.0",
                 "base_uri": "http://localhost:7690/sovd/v1"
             }]})
             .to_string(),
@@ -73,7 +73,7 @@ async fn select_inherits_request_timeout() {
         .connector(b.build())
         .discovery()
         .expect("valid discovery client")
-        .select(|s: &SovdInfo<serde_json::Value>| s.version == "1.1")
+        .select(|s: &SovdInfo<serde_json::Value>| s.version == "1.1.0")
         .await
         .unwrap();
 
@@ -92,7 +92,7 @@ async fn select_matches_on_vendor_info() {
         .with_uri("http://localhost:7690/sovd/version-info")
         .returning(
             json!({"sovd_info": [{
-                "version": "1.1",
+                "version": "1.1.0",
                 "base_uri": "http://localhost:7690/sovd/v1",
                 "vendor_info": {"name": "OpenSOVD", "version": "2.0"}
             }]})
@@ -129,7 +129,7 @@ async fn select_no_match() {
         .with_uri("http://localhost:7690/sovd/version-info")
         .returning(
             json!({"sovd_info": [{
-                "version": "1.1",
+                "version": "1.1.0",
                 "base_uri": "http://localhost:7690/sovd/v1"
             }]})
             .to_string(),
@@ -154,7 +154,7 @@ async fn versions_lists_instances() {
         .with_uri("http://localhost:7690/sovd/version-info")
         .returning(
             json!({"sovd_info": [{
-                "version": "1.1",
+                "version": "1.1.0",
                 "base_uri": "http://localhost:7690/sovd/v1",
                 "vendor_info": {"name": "OpenSOVD", "version": "2.0"}
             }]})
@@ -165,7 +165,7 @@ async fn versions_lists_instances() {
     let versions: Vec<SovdInfo<VendorInfo>> = discovery(b.build()).versions().await.unwrap();
 
     assert_eq!(versions.len(), 1);
-    assert_eq!(versions[0].version, "1.1");
+    assert_eq!(versions[0].version, "1.1.0");
     let vendor = versions[0]
         .vendor_info
         .as_ref()
@@ -181,7 +181,7 @@ async fn versions_without_vendor() {
         .with_uri("http://localhost:7690/sovd/version-info")
         .returning(
             json!({"sovd_info": [{
-                "version": "1.1",
+                "version": "1.1.0",
                 "base_uri": "http://localhost:7690/sovd/v1"
             }]})
             .to_string(),
@@ -199,7 +199,7 @@ async fn versions_accepts_arbitrary_vendor() {
         .with_uri("http://localhost:7690/sovd/version-info")
         .returning(
             json!({"sovd_info": [{
-                "version": "1.1",
+                "version": "1.1.0",
                 "base_uri": "http://localhost:7690/sovd/v1",
                 "vendor_info": {"anything": [1, 2, 3]}
             }]})
@@ -223,7 +223,7 @@ async fn version_info_error_status() {
         .unwrap();
 
     let err = discovery(b.build())
-        .select(|s: &SovdInfo<serde_json::Value>| s.version == "1.1")
+        .select(|s: &SovdInfo<serde_json::Value>| s.version == "1.1.0")
         .await
         .err()
         .expect("expected an error");
@@ -244,7 +244,7 @@ async fn version_info_is_cached() {
         .with_uri("http://localhost:7690/sovd/version-info")
         .returning(
             json!({"sovd_info": [{
-                "version": "1.1",
+                "version": "1.1.0",
                 "base_uri": "http://localhost:7690/sovd/v1"
             }]})
             .to_string(),
@@ -256,7 +256,7 @@ async fn version_info_is_cached() {
     // Two reads of the version list must hit /version-info exactly once.
     let _ = disco.versions::<VendorInfo>().await.unwrap();
     let _ = disco
-        .select(|s: &SovdInfo<serde_json::Value>| s.version == "1.1")
+        .select(|s: &SovdInfo<serde_json::Value>| s.version == "1.1.0")
         .await
         .unwrap();
 

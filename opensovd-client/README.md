@@ -32,7 +32,7 @@ for info in discovery.versions::<VendorInfo>().await? {
 }
 
 // Select a version and exercise it (or match on `vendor_info` via the `V` payload).
-let client = discovery.select(|s: &SovdInfo<VendorInfo>| s.version == "1.1").await?;
+let client = discovery.select(|s: &SovdInfo<VendorInfo>| s.version == "1.1.0").await?;
 match client.list_components().send().await {
     Ok(list) => {
         for c in &list.data.items {
