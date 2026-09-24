@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 Contributors to the Eclipse Foundation
 // SPDX-License-Identifier: Apache-2.0
 
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 
 /// SOVD error codes.
@@ -51,7 +53,7 @@ pub struct GenericError {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub translation_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub parameters: Option<serde_json::Value>,
+    pub parameters: Option<HashMap<String, serde_json::Value>>,
 }
 
 impl GenericError {
@@ -75,5 +77,30 @@ impl GenericError {
             translation_id: None,
             parameters: None,
         }
+    }
+}
+
+#[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_generic_error_parameters_accept_map() {
+        let err: GenericError = serde_json::from_str(
+            r#"{"error_code":"vendor-specific","vendor_code":"sensor-timeout","message":"Sensor did not respond","parameters":{"sensor":"brake-pressure","retries":3}}"#,
+        )
+        .unwrap();
+        let params = err.parameters.unwrap();
+        assert_eq!(params["sensor"], "brake-pressure");
+        assert_eq!(params["retries"], 3);
+    }
+
+    #[test]
+    fn test_generic_error_parameters_reject_non_map() {
+        let result = serde_json::from_str::<GenericError>(
+            r#"{"error_code":"sovd-server-failure","message":"Internal error","parameters":["brake-pressure"]}"#,
+        );
+        assert!(result.is_err());
     }
 }
