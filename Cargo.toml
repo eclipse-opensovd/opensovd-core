@@ -21,7 +21,7 @@ opensovd-extra = { path = "opensovd-extra" }
 opensovd-models = { path = "opensovd-models" }
 opensovd-providers = { path = "opensovd-providers" }
 opensovd-client = { path = "opensovd-client" }
-opensovd-server = { path = "opensovd-server" }
+opensovd-server = { path = "opensovd-server", default-features = false }
 opensovd-mocks = { path = "opensovd-mocks" }
 libcli = { path = "opensovd-cli/lib" }
 libcli-build = { path = "opensovd-cli/build" }
