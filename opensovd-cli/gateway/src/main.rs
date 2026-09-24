@@ -244,9 +244,10 @@ async fn configure_listener<Vendor, Authn, Authz, Layer>(
     Ok(builder.listener(listener))
 }
 
+#[cfg_attr(not(feature = "mock"), expect(clippy::unused_async))]
 async fn configure_topology<Vendor, Authn, Authz, Layer>(
     builder: opensovd_server::ServerBuilder<Vendor, Authn, Authz, Layer>,
-    cli: &cli::Cli,
+    #[cfg_attr(not(feature = "mock"), expect(unused_variables))] cli: &cli::Cli,
 ) -> opensovd_server::ServerBuilder<Vendor, Authn, Authz, Layer> {
     #[cfg(feature = "mock")]
     let topology = if cli.mock {

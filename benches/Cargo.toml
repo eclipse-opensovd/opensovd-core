@@ -14,7 +14,7 @@ opensovd-core = { workspace = true }
 opensovd-extra = { workspace = true, features = ["auth"] }
 opensovd-models = { workspace = true }
 opensovd-providers = { workspace = true }
-opensovd-server = { workspace = true }
+opensovd-server = { workspace = true, default-features = true }
 axum = { workspace = true }
 criterion = { workspace = true, features = ["async_tokio"] }
 http = { workspace = true }

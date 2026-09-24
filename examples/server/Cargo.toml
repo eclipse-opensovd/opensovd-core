@@ -45,7 +45,7 @@ opensovd-extra = { workspace = true, features = ["auth"] }
 opensovd-mocks = { workspace = true }
 opensovd-models = { workspace = true }
 opensovd-providers = { workspace = true }
-opensovd-server = { workspace = true }
+opensovd-server = { workspace = true, default-features = true }
 rustls = { workspace = true, optional = true }
 sysinfo = { workspace = true }
 tempfile = { workspace = true }
