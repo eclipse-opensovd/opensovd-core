@@ -180,14 +180,18 @@ def test_traverse_api(client, include_schema):
         if include_schema:
             validate_schema(located_on)
 
-        # GET app belongs-to (optional)
+        # GET app belongs-to (only advertised when the app is in an area)
         response = client.get(f"/v1/apps/{app_id}/belongs-to", params=params)
-        assert response.status_code == 200
-        belongs_to = response.json()
-        assert "items" in belongs_to
-        assert len(belongs_to["items"]) <= 1  # 0 or 1
-        if include_schema:
-            validate_schema(belongs_to)
+        belongs_to = {"items": []}
+        if "belongs-to" in app:
+            assert response.status_code == 200
+            belongs_to = response.json()
+            assert "items" in belongs_to
+            assert len(belongs_to["items"]) == 1  # Exactly one area
+            if include_schema:
+                validate_schema(belongs_to)
+        else:
+            assert response.status_code == 404
 
         # Verify data link in app capabilities (if app has data provider)
         if "data" in app:
@@ -247,14 +251,23 @@ def test_traverse_api(client, include_schema):
 
         component_hosts[component_id] = [item["id"] for item in hosts["items"]]
 
-        # GET component belongs-to
-        response = client.get(f"/v1/components/{component_id}/belongs-to", params=params)
+        # GET component capabilities to see which relationships are advertised
+        response = client.get(f"/v1/components/{component_id}", params=params)
         assert response.status_code == 200
-        belongs_to = response.json()
-        assert "items" in belongs_to
-        assert len(belongs_to["items"]) <= 1  # 0 or 1
-        if include_schema:
-            validate_schema(belongs_to)
+        component = response.json()
+
+        # GET component belongs-to (only advertised when the component is in an area)
+        response = client.get(f"/v1/components/{component_id}/belongs-to", params=params)
+        belongs_to = {"items": []}
+        if "belongs-to" in component:
+            assert response.status_code == 200
+            belongs_to = response.json()
+            assert "items" in belongs_to
+            assert len(belongs_to["items"]) == 1  # Exactly one area
+            if include_schema:
+                validate_schema(belongs_to)
+        else:
+            assert response.status_code == 404
 
         if len(belongs_to["items"]) > 0:
             component_areas[component_id] = belongs_to["items"][0]["id"]

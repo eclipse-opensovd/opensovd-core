@@ -152,7 +152,8 @@ pub async fn create_mock_topology() -> Topology {
         .build()
         .unwrap();
 
-    let engine_control = App::new("engine_control", "Engine Control Application", "ecu")
+    let engine_control = App::new("engine_control", "Engine Control Application")
+        .with_component_id("ecu")
         .with_translation_id("app.engine_control.name")
         .with_tags(vec!["powertrain".to_string(), "critical".to_string()])
         .with_metadata(HashMap::from([
@@ -183,7 +184,8 @@ pub async fn create_mock_topology() -> Topology {
         .build()
         .unwrap();
 
-    let diagnostics = App::new("diagnostics", "Diagnostic Services", "gateway")
+    let diagnostics = App::new("diagnostics", "Diagnostic Services")
+        .with_component_id("gateway")
         .with_tags(vec!["network".to_string(), "service".to_string()])
         .with_area_id("network")
         .with_data_provider(diagnostics_provider);
@@ -209,7 +211,8 @@ pub async fn create_mock_topology() -> Topology {
         .build()
         .unwrap();
 
-    let ota_manager = App::new("ota_manager", "OTA Update Manager", "gateway")
+    let ota_manager = App::new("ota_manager", "OTA Update Manager")
+        .with_component_id("gateway")
         .with_translation_id("app.ota.name")
         .with_tags(vec!["system".to_string(), "infrastructure".to_string()])
         .with_metadata(HashMap::from([(

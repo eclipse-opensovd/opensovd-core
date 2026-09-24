@@ -191,7 +191,7 @@ mod tests {
 
     #[test]
     fn app_entity_ref() {
-        let app = App::new("diag", "Diagnostics", "ecu1");
+        let app = App::new("diag", "Diagnostics");
         let eid = app.entity_ref();
         assert_eq!(eid.kind(), EntityKind::App);
         assert_eq!(eid.id(), "diag");
@@ -203,5 +203,14 @@ mod tests {
         let eid = area.entity_ref();
         assert_eq!(eid.kind(), EntityKind::Area);
         assert_eq!(eid.id(), "zone-front");
+    }
+
+    #[test]
+    fn app_component_id() {
+        let hosted = App::new("diag", "Diagnostics").with_component_id("ecu1");
+        assert_eq!(hosted.component_id(), Some("ecu1"));
+
+        let standalone = App::new("standalone", "Standalone");
+        assert_eq!(standalone.component_id(), None);
     }
 }
