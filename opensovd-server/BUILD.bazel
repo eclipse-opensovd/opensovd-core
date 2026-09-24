@@ -1,0 +1,98 @@
+load("@crate_index//:defs.bzl", "aliases", "all_crate_deps")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files(["Cargo.toml"])
+
+COMMON_TEST_SRCS = glob(["tests/common/**/*.rs"])
+
+rust_library(
+    name = "opensovd_server",
+    srcs = glob(["src/**/*.rs"]),
+    aliases = aliases(normal = True, proc_macro = True),
+    crate_features = [
+        "default",
+        "http2",
+        "json-preserve-order",
+        "tls",
+    ],
+    crate_name = "opensovd_server",
+    compile_data = ["README.md"],
+    edition = "2024",
+    proc_macro_deps = all_crate_deps(proc_macro = True),
+    version = "0.1.1",
+    deps = all_crate_deps(normal = True) + [
+        "//opensovd-core:opensovd_core",
+        "//opensovd-models:opensovd_models",
+    ],
+)
+
+rust_test(
+    name = "unit_test",
+    crate = ":opensovd_server",
+    deps = all_crate_deps(normal_dev = True) + [
+        "//opensovd-mocks:opensovd_mocks",
+    ],
+    proc_macro_deps = all_crate_deps(proc_macro_dev = True),
+)
+
+rust_test(
+    name = "auth_test",
+    srcs = ["tests/auth.rs"] + COMMON_TEST_SRCS,
+    aliases = aliases(
+        normal = True,
+        normal_dev = True,
+        proc_macro = True,
+        proc_macro_dev = True,
+    ),
+    crate_root = "tests/auth.rs",
+    edition = "2024",
+    proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True),
+    version = "0.1.1",
+    deps = all_crate_deps(normal = True, normal_dev = True) + [
+        "//opensovd-core:opensovd_core",
+        ":opensovd_server",
+        "//opensovd-mocks:opensovd_mocks",
+    ],
+)
+
+rust_test(
+    name = "builder_test",
+    srcs = ["tests/builder.rs"] + COMMON_TEST_SRCS,
+    aliases = aliases(
+        normal = True,
+        normal_dev = True,
+        proc_macro = True,
+        proc_macro_dev = True,
+    ),
+    crate_root = "tests/builder.rs",
+    edition = "2024",
+    proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True),
+    version = "0.1.1",
+    deps = all_crate_deps(normal = True, normal_dev = True) + [
+        "//opensovd-core:opensovd_core",
+        ":opensovd_server",
+        "//opensovd-mocks:opensovd_mocks",
+    ],
+)
+
+rust_test(
+    name = "routes_test",
+    srcs = ["tests/routes.rs"] + COMMON_TEST_SRCS,
+    aliases = aliases(
+        normal = True,
+        normal_dev = True,
+        proc_macro = True,
+        proc_macro_dev = True,
+    ),
+    crate_root = "tests/routes.rs",
+    edition = "2024",
+    proc_macro_deps = all_crate_deps(proc_macro = True, proc_macro_dev = True),
+    version = "0.1.1",
+    deps = all_crate_deps(normal = True, normal_dev = True) + [
+        "//opensovd-core:opensovd_core",
+        ":opensovd_server",
+        "//opensovd-mocks:opensovd_mocks",
+    ],
+)

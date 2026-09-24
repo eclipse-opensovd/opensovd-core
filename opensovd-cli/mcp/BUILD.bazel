@@ -1,0 +1,44 @@
+load("@crate_index//:defs.bzl", "aliases", "all_crate_deps")
+load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files(["Cargo.toml"])
+
+cargo_build_script(
+    name = "build_script_build",
+    srcs = ["build.rs"],
+    aliases = aliases(build = True, build_proc_macro = True),
+    crate_name = "build_script_build",
+    crate_root = "build.rs",
+    edition = "2024",
+    pkg_name = "opensovd-mcp",
+    version = "0.1.1",
+    deps = all_crate_deps(build = True),
+    proc_macro_deps = all_crate_deps(build_proc_macro = True),
+)
+
+rust_binary(
+    name = "opensovd_mcp",
+    srcs = glob(["src/**/*.rs"]),
+    aliases = aliases(normal = True, proc_macro = True),
+    crate_name = "opensovd_mcp",
+    crate_root = "src/main.rs",
+    edition = "2024",
+    proc_macro_deps = all_crate_deps(proc_macro = True),
+    version = "0.1.1",
+    deps = all_crate_deps(normal = True) + [
+        ":build_script_build",
+        "//opensovd-cli/lib:libcli",
+        "//opensovd-client:opensovd_client",
+        "//opensovd-models:opensovd_models",
+    ],
+)
+
+rust_test(
+    name = "unit_test",
+    crate = ":opensovd_mcp",
+    deps = all_crate_deps(normal_dev = True),
+    proc_macro_deps = all_crate_deps(proc_macro_dev = True),
+)

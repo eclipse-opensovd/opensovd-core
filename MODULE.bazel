@@ -1,0 +1,50 @@
+module(
+    name = "opensovd_core",
+    version = "0.0.0",
+)
+
+bazel_dep(name = "bazel_skylib", version = "1.8.2")
+bazel_dep(name = "platforms", version = "1.1.0")
+bazel_dep(name = "rules_cc", version = "0.2.8")
+bazel_dep(name = "rules_rust", version = "0.70.0")
+
+rust = use_extension("@rules_rust//rust:extensions.bzl", "rust")
+rust.toolchain(
+    edition = "2024",
+    versions = ["nightly/2026-05-07"],
+)
+use_repo(rust, "rust_toolchains")
+
+register_toolchains("@rust_toolchains//:all")
+
+rust_host_tools = use_extension("@rules_rust//rust:extensions.bzl", "rust_host_tools")
+rust_host_tools.host_tools(
+    name = "rust_host_tools_nightly",
+    version = "nightly/2026-05-07",
+)
+use_repo(rust_host_tools, "rust_host_tools_nightly")
+
+crate = use_extension("@rules_rust//crate_universe:extensions.bzl", "crate", isolate = True)
+crate.from_cargo(
+    name = "crate_index",
+    cargo_lockfile = "//:Cargo.lock",
+    host_tools = "@rust_host_tools_nightly",
+    lockfile = "//:cargo-bazel-lock.json",
+    manifests = [
+        "//:Cargo.toml",
+        "//benches:Cargo.toml",
+        "//examples/client:Cargo.toml",
+        "//examples/server:Cargo.toml",
+        "//opensovd-cli/gateway:Cargo.toml",
+        "//opensovd-cli/lib:Cargo.toml",
+        "//opensovd-cli/mcp:Cargo.toml",
+        "//opensovd-client:Cargo.toml",
+        "//opensovd-core:Cargo.toml",
+        "//opensovd-extra:Cargo.toml",
+        "//opensovd-mocks:Cargo.toml",
+        "//opensovd-models:Cargo.toml",
+        "//opensovd-providers:Cargo.toml",
+        "//opensovd-server:Cargo.toml",
+    ],
+)
+use_repo(crate, "crate_index")
