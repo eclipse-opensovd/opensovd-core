@@ -7,31 +7,34 @@
 //! - GET /components/{component_id}/data-categories - List data categories
 //! - GET /components/{component_id}/data-groups - List data groups
 //! - GET /components/{component_id}/data - List data resources
+//! - GET /components/{component_id}/data/docs - Online capability description
 //! - GET /components/{component_id}/data/{data_id} - Read a data value
 //! - PUT /components/{component_id}/data/{data_id} - Write a data value
 //! - GET /apps/{app_id}/data-categories - List app data categories
 //! - GET /apps/{app_id}/data-groups - List app data groups
 //! - GET /apps/{app_id}/data - List app data resources
+//! - GET /apps/{app_id}/data/docs - Online capability description
 //! - GET /apps/{app_id}/data/{data_id} - Read an app data value
 //! - PUT /apps/{app_id}/data/{data_id} - Write an app data value
 
 use axum::{
     Router,
     extract::{Path, State},
-    http::StatusCode,
+    http::{StatusCode, request::Parts},
     response::Json,
     routing::get,
 };
 use axum_extra::extract::{Query, WithRejection};
-use opensovd_core::{DataFilter, DataScope, Topology};
+use opensovd_core::{DataFilter, DataProvider, DataScope, Topology};
 use opensovd_models::Response;
 use opensovd_models::data::{
     DataCategories, DataCategoryInformation, DataGroups, DataGroupsQuery, DataList, DataQuery,
     Group, Metadata, ReadDataQuery, ReadResponse, WriteRequest,
 };
 
-use super::AppState;
+use super::entities::encode_path_segment;
 use super::error::{Error, Result};
+use super::{AppState, docs};
 use crate::schema::JsonSchema;
 
 pub fn routes<V>() -> Router<AppState<V>>
@@ -49,16 +52,32 @@ where
         )
         .route("/components/{component_id}/data", get(component_data_list))
         .route(
+            "/components/{component_id}/data/docs",
+            get(component_data_collection_docs),
+        )
+        .route(
             "/components/{component_id}/data/{data_id}",
             get(component_data_read).put(component_data_write),
         )
         .route("/apps/{app_id}/data-categories", get(app_data_categories))
         .route("/apps/{app_id}/data-groups", get(app_data_groups))
         .route("/apps/{app_id}/data", get(app_data_list))
+        .route("/apps/{app_id}/data/docs", get(app_data_collection_docs))
         .route(
             "/apps/{app_id}/data/{data_id}",
             get(app_data_read).put(app_data_write),
         )
+}
+
+fn response_metadata(metadata: opensovd_core::Metadata) -> Metadata {
+    Metadata {
+        id: metadata.id,
+        name: metadata.name,
+        category: metadata.category.into(),
+        translation_id: metadata.translation_id,
+        groups: (!metadata.groups.is_empty()).then_some(metadata.groups),
+        tags: (!metadata.tags.is_empty()).then_some(metadata.tags),
+    }
 }
 
 /// GET /components/{component_id}/data-categories - List data categories.
@@ -177,14 +196,7 @@ async fn component_data_list(
         .list(filter)
         .await?
         .into_iter()
-        .map(|m| Metadata {
-            id: m.id,
-            name: m.name,
-            category: m.category.into(),
-            translation_id: m.translation_id,
-            groups: (!m.groups.is_empty()).then_some(m.groups),
-            tags: (!m.tags.is_empty()).then_some(m.tags),
-        })
+        .map(response_metadata)
         .collect();
 
     Ok(Json(Response {
@@ -237,6 +249,48 @@ async fn component_data_write(
 
     provider.write(&data_id, body.data).await?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// Shared body for the collection `/data/docs` handlers.
+///
+/// `server_url` is the mounted SOVD API base advertised in the generated
+/// OpenAPI document.
+async fn data_collection_docs(
+    provider: Option<&dyn DataProvider>,
+    collection_path: &str,
+    server_url: &str,
+) -> Result<Json<serde_json::Value>> {
+    let provider = provider.ok_or_else(|| Error::ProviderNotAvailable("data".into()))?;
+    let items = provider
+        .list(DataFilter::default())
+        .await?
+        .into_iter()
+        .map(response_metadata)
+        .collect::<Vec<_>>();
+
+    Ok(Json(docs::data_collection_docs(
+        collection_path,
+        &items,
+        server_url,
+    )))
+}
+
+/// GET /components/{component_id}/data/docs
+/// Returns the self-contained OpenAPI 3.1 description of the component data
+/// collection endpoint, including the current metadata entries.
+async fn component_data_collection_docs(
+    State(topology): State<Topology>,
+    Path(component_id): Path<String>,
+    parts: Parts,
+) -> Result<Json<serde_json::Value>> {
+    let server_url = super::versioned_uri(&parts);
+    let topo = topology.read().await;
+    let entity = topo
+        .get_component(&component_id)
+        .map_err(|_| Error::EntityNotFound(component_id.clone()))?;
+
+    let collection_path = component_data_collection_path(&component_id);
+    data_collection_docs(entity.data_provider(), &collection_path, &server_url).await
 }
 
 /// GET /apps/{app_id}/data-categories - List app data categories.
@@ -333,14 +387,7 @@ async fn app_data_list(
         .list(filter)
         .await?
         .into_iter()
-        .map(|m| Metadata {
-            id: m.id,
-            name: m.name,
-            category: m.category.into(),
-            translation_id: m.translation_id,
-            groups: (!m.groups.is_empty()).then_some(m.groups),
-            tags: (!m.tags.is_empty()).then_some(m.tags),
-        })
+        .map(response_metadata)
         .collect();
 
     Ok(Json(Response {
@@ -395,6 +442,32 @@ async fn app_data_write(
     Ok(StatusCode::NO_CONTENT)
 }
 
+/// GET /apps/{app_id}/data/docs
+/// Returns the self-contained OpenAPI 3.1 description of the app data
+/// collection endpoint, including the current metadata entries.
+async fn app_data_collection_docs(
+    State(topology): State<Topology>,
+    Path(app_id): Path<String>,
+    parts: Parts,
+) -> Result<Json<serde_json::Value>> {
+    let server_url = super::versioned_uri(&parts);
+    let topo = topology.read().await;
+    let entity = topo
+        .get_app(&app_id)
+        .map_err(|_| Error::EntityNotFound(app_id.clone()))?;
+
+    let collection_path = app_data_collection_path(&app_id);
+    data_collection_docs(entity.data_provider(), &collection_path, &server_url).await
+}
+
+fn component_data_collection_path(component_id: &str) -> String {
+    format!("/components/{}/data", encode_path_segment(component_id))
+}
+
+fn app_data_collection_path(app_id: &str) -> String {
+    format!("/apps/{}/data", encode_path_segment(app_id))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -419,5 +492,14 @@ mod tests {
         let filter = data_filter(query(vec![], vec![], vec!["t"]));
         assert_eq!(filter.scope, None);
         assert_eq!(filter.tags, vec!["t"]);
+    }
+
+    #[test]
+    fn collection_paths_percent_encode_reserved_characters() {
+        assert_eq!(
+            component_data_collection_path("ecu/1"),
+            "/components/ecu%2F1/data"
+        );
+        assert_eq!(app_data_collection_path("diag/1"), "/apps/diag%2F1/data");
     }
 }
