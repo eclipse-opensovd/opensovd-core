@@ -4,7 +4,7 @@
 //! Topology benchmarks.
 
 // Benchmark code uses expect for setup/readability in non-production paths.
-#![allow(clippy::expect_used)]
+#![expect(clippy::expect_used)]
 
 use criterion::{Criterion, criterion_group, criterion_main};
 use opensovd_core::{Component, DataProvider, EntityCollection, Topology};

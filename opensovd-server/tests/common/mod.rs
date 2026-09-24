@@ -15,7 +15,7 @@ use tokio::sync::oneshot;
 pub struct TestEntity;
 
 impl TestEntity {
-    #[allow(clippy::new_ret_no_self)]
+    #[expect(clippy::new_ret_no_self)]
     pub fn new(id: &str, name: &str) -> Component {
         Component::new(id, name)
     }

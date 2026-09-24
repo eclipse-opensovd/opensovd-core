@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #![cfg(unix)]
-#![allow(clippy::unwrap_used)]
+#![expect(clippy::unwrap_used)]
 
 use std::time::Duration;
 

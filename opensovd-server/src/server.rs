@@ -101,7 +101,7 @@ impl From<UnixListener> for Listener {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(clippy::too_many_arguments)]
 fn build_router<Vendor, Authn, Authz, Layer>(
     base: Option<&str>,
     advertised: crate::routes::BaseUri,
@@ -180,7 +180,10 @@ pub struct Server<Vendor = VendorInfo, Authn = NoAuth, Authz = AllowAll, Layer =
     tls_config: Option<rustls::ServerConfig>,
 }
 
-#[allow(clippy::expect_used)] // Panic on signal handler failure is intentional
+#[expect(
+    clippy::expect_used,
+    reason = "panic on signal handler failure is intentional"
+)]
 async fn default_shutdown_signal() {
     #[cfg(unix)]
     let sigterm = async {
@@ -589,7 +592,6 @@ where
 
 #[cfg(test)]
 #[cfg_attr(coverage_nightly, coverage(off))]
-#[allow(clippy::string_slice)]
 mod tests {
     use super::*;
 

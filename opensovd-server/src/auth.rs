@@ -329,7 +329,6 @@ where
 
 #[cfg(test)]
 #[cfg_attr(coverage_nightly, coverage(off))]
-#[allow(clippy::string_slice)]
 mod tests {
     use axum::{Router, body::Body, http::Request, routing::get};
     use http_body_util::BodyExt;

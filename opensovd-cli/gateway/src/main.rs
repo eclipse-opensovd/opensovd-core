@@ -38,7 +38,7 @@ const VENDOR_INFO: OpenSovdInfo = OpenSovdInfo {
 };
 
 #[tokio::main(flavor = "current_thread")]
-#[allow(clippy::print_stderr)]
+#[expect(clippy::print_stderr)]
 async fn main() -> ExitCode {
     let cli = cli::Cli::parse();
 
@@ -193,7 +193,7 @@ async fn configure_listener<Vendor, Authn, Authz, Layer>(
     if let Some(fd) = sd_notify::listen_fds()?.next() {
         use std::os::fd::FromRawFd;
         // SAFETY: fd is valid and owned, provided by systemd socket activation
-        #[allow(unsafe_code)]
+        #[expect(unsafe_code)]
         let std_listener = unsafe { std::net::TcpListener::from_raw_fd(fd) };
         std_listener.set_nonblocking(true)?;
         let listener = tokio::net::TcpListener::from_std(std_listener)?;

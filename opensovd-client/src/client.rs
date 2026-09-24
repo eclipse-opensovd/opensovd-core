@@ -409,6 +409,10 @@ pub(crate) fn encode(segment: &str) -> String {
 }
 
 /// Build a URI by appending a path and optional query parameters to a base URI.
+#[expect(
+    clippy::allow_attributes,
+    reason = "error size depends on serde_json/preserve_order"
+)]
 #[allow(clippy::result_large_err)]
 pub(crate) fn build_uri_with_query(
     base_uri: &http::Uri,

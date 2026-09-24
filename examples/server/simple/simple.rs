@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 Contributors to the Eclipse Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-#![allow(clippy::expect_used, clippy::indexing_slicing)]
+#![expect(clippy::indexing_slicing)]
 
 //! Simple example demonstrating a Linux system component with real data.
 //!
@@ -113,9 +113,9 @@ impl ReadableDataResource for MemoryUsage {
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
             sys.refresh_memory();
-            #[allow(clippy::cast_precision_loss)]
+            #[expect(clippy::cast_precision_loss)]
             let total = sys.total_memory() as f64;
-            #[allow(clippy::cast_precision_loss)]
+            #[expect(clippy::cast_precision_loss)]
             let used = sys.used_memory() as f64;
             if total > 0.0 {
                 used / total * 100.0
