@@ -129,7 +129,6 @@ impl Authorizer<Claims> for RegorusAuthorizer {
 
 #[cfg(test)]
 #[cfg_attr(coverage_nightly, coverage(off))]
-#[allow(clippy::ignored_unit_patterns)]
 mod tests {
     use super::*;
 

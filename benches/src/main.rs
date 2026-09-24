@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // Benchmark code uses expect/unwrap for setup since criterion doesn't support Result returns
-#![allow(clippy::expect_used, clippy::arithmetic_side_effects)]
+#![expect(clippy::expect_used, clippy::arithmetic_side_effects)]
 
 use std::sync::LazyLock;
 

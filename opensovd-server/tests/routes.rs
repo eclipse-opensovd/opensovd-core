@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #![cfg_attr(coverage_nightly, feature(coverage_attribute))]
-#![allow(unsafe_code)]
+#![expect(unsafe_code)]
 
 use axum::Router;
 use axum::extract::ConnectInfo as AxumConnectInfo;
