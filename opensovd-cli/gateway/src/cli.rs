@@ -7,7 +7,7 @@ use std::path::PathBuf;
 
 #[cfg(feature = "tls")]
 use anyhow::Context;
-use clap::{Args, Parser};
+use clap::{Args, CommandFactory, FromArgMatches, Parser};
 
 pub const ABOUT: &str = "OpenSOVD Gateway Server";
 const DEFAULT_URL: &str = "http://localhost:7690/sovd";
@@ -38,6 +38,9 @@ Examples:
 
   # Listen on an abstract Unix socket
   opensovd-gateway --unix-socket @opensovd
+
+  # Announce via mDNS on the diagnostic port
+  opensovd-gateway --url http://0.0.0.0:7690/sovd --mdns ABC123456789 --mdns-interface eth1
 ")]
 pub struct Cli {
     /// Server URL including base URI path (e.g., http://host:port/path).
@@ -63,6 +66,10 @@ pub struct Cli {
     #[cfg(feature = "tls")]
     #[command(flatten)]
     pub tls: TlsArgs,
+
+    #[cfg(feature = "mdns")]
+    #[command(flatten)]
+    pub mdns: MdnsArgs,
 
     /// Enable mock entities for testing and development.
     #[arg(help_heading = "Options")]
@@ -185,6 +192,131 @@ impl TlsArgs {
 
         Ok(Some(config))
     }
+}
+
+#[cfg(feature = "mdns")]
+#[derive(Args)]
+#[command(next_help_heading = "mDNS Options")]
+pub struct MdnsArgs {
+    /// Announce the server via mDNS and DNS-SD (ISO 17978-3) with this
+    /// vehicle identification, e.g. the VIN. Empty, false, 0, no or off
+    /// disable the announcement.
+    #[arg(
+        id = "mdns",
+        long = "mdns",
+        value_name = "ID",
+        env = "SOVD_MDNS",
+        value_parser = parse_mdns_identification
+    )]
+    identification: Option<String>,
+
+    /// Host label published as HOST.local. Defaults to the identification
+    /// with spaces and underscores turned into hyphens and other characters
+    /// dropped, or to the system host name if nothing is left.
+    #[arg(
+        id = "mdns_host",
+        long = "mdns-host",
+        value_name = "HOST",
+        env = "SOVD_MDNS_HOST",
+        value_parser = parse_mdns_host
+    )]
+    pub host: Option<String>,
+
+    /// Announce only on these network interfaces. Can be repeated or
+    /// comma-separated. With a specific --url IP, the list must include that
+    /// IP's interface, and only that interface is used.
+    #[arg(
+        id = "mdns_interface",
+        long = "mdns-interface",
+        value_name = "IFNAME",
+        env = "SOVD_MDNS_INTERFACE",
+        value_delimiter = ',',
+        value_parser = parse_mdns_interface
+    )]
+    pub interfaces: Vec<String>,
+}
+
+#[cfg(feature = "mdns")]
+impl MdnsArgs {
+    /// The identification, or `None` when mDNS is disabled.
+    pub fn identification(&self) -> Option<&str> {
+        self.identification.as_deref().filter(|id| {
+            !id.is_empty()
+                && !["false", "0", "no", "off"]
+                    .iter()
+                    .any(|off| id.eq_ignore_ascii_case(off))
+        })
+    }
+}
+
+/// Parses the command line and checks rules that clap cannot express.
+pub fn parse() -> Cli {
+    let mut cmd = Cli::command();
+    let matches = cmd.get_matches_mut();
+    let cli = Cli::from_arg_matches(&matches).unwrap_or_else(|e| e.format(&mut cmd).exit());
+    #[cfg(feature = "mdns")]
+    if let Err(e) = check_mdns(&cli, &matches) {
+        cmd.error(e.0, e.1).exit();
+    }
+    cli
+}
+
+#[cfg(feature = "mdns")]
+fn check_mdns(
+    cli: &Cli,
+    matches: &clap::ArgMatches,
+) -> Result<(), (clap::error::ErrorKind, &'static str)> {
+    use clap::error::ErrorKind;
+    use clap::parser::ValueSource;
+
+    let enabled = cli.mdns.identification().is_some();
+    #[cfg(unix)]
+    if enabled && cli.unix_socket.is_some() {
+        return Err((
+            ErrorKind::ArgumentConflict,
+            "--mdns cannot be used with --unix-socket",
+        ));
+    }
+    if !enabled {
+        for (id, msg) in [
+            ("mdns_host", "--mdns-host requires --mdns"),
+            ("mdns_interface", "--mdns-interface requires --mdns"),
+        ] {
+            if matches.value_source(id) == Some(ValueSource::CommandLine) {
+                return Err((ErrorKind::MissingRequiredArgument, msg));
+            }
+        }
+    }
+    Ok(())
+}
+
+#[cfg(feature = "mdns")]
+fn parse_mdns_identification(id: &str) -> Result<String, String> {
+    let id = id.trim();
+    if ["true", "1", "yes", "on"]
+        .iter()
+        .any(|on| id.eq_ignore_ascii_case(on))
+    {
+        return Err("expected the vehicle identification, e.g. the VIN".to_owned());
+    }
+    Ok(id.to_owned())
+}
+
+#[cfg(feature = "mdns")]
+fn parse_mdns_interface(name: &str) -> Result<String, String> {
+    let name = name.trim();
+    if name.is_empty() {
+        Err("interface name must not be empty".to_owned())
+    } else {
+        Ok(name.to_owned())
+    }
+}
+
+#[cfg(feature = "mdns")]
+fn parse_mdns_host(host: &str) -> Result<String, String> {
+    opensovd_extra::mdns::validate_host(host)
+        .map(|()| host.to_owned())
+        .map_err(|e| e.to_string())
 }
 
 #[derive(Args)]

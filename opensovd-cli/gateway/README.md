@@ -26,6 +26,9 @@ opensovd-gateway --unix-socket @opensovd
 
 # Enable mock topology for testing
 opensovd-gateway --mock
+
+# Announce via mDNS on the diagnostic port
+opensovd-gateway --url http://0.0.0.0:7690/sovd --mdns ABC123456789 --mdns-interface eth1
 ```
 
 Mock data comes from the shared `opensovd-mocks` crate used across examples and tests.
@@ -48,6 +51,16 @@ Mock data comes from the shared `opensovd-mocks` crate used across examples and 
 | `--cors-header`      | Allowed headers (`*` for any)      |
 | `--cors-credentials` | Allow credentials                  |
 | `--cors-max-age`     | Preflight cache duration (seconds) |
+
+### mDNS Options
+
+Announces the gateway as `_sovd._tcp` with the `identification` and `accessurl` TXT records of ISO 17978-3. Loopback addresses are rejected. `0.0.0.0` announces all IPv4 addresses, `[::]` all addresses the listener accepts. UDP port 5353 must be open.
+
+| Option                  | Description                                                   |
+|-------------------------|---------------------------------------------------------------|
+| `--mdns ID`             | Announce with this vehicle identification, e.g. the VIN. Empty, `false`, `0`, `no` or `off` disable it |
+| `--mdns-host`           | Host label published as `HOST.local` (default: identification with spaces and underscores turned into hyphens and other characters dropped, or the system host name if nothing is left) |
+| `--mdns-interface`      | Announce only on these interfaces, repeatable or comma-separated. With a specific `--url` IP, the list must include that IP's interface, and only that interface is used |
 
 ## Contributing
 

@@ -14,3 +14,9 @@ pub mod auth;
 
 #[cfg(feature = "auth")]
 pub use auth::{JwtAlgorithm, JwtAuthenticator, RegorusAuthorizer};
+
+#[cfg(feature = "mdns")]
+pub mod mdns;
+
+#[cfg(feature = "mdns")]
+pub use mdns::{Announcement, MdnsAnnouncer, MdnsError};

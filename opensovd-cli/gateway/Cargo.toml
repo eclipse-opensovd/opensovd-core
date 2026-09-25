@@ -17,12 +17,13 @@ name = "opensovd-gateway"
 path = "src/main.rs"
 
 [features]
-default = ["jsonschema", "json-preserve-order", "mock", "http2", "tls"]
+default = ["jsonschema", "json-preserve-order", "mock", "http2", "tls", "mdns"]
 jsonschema = ["opensovd-server/jsonschema", "dep:schemars"]
 json-preserve-order = ["opensovd-server/json-preserve-order"]
 mock = ["dep:opensovd-mocks"]
 http2 = ["opensovd-server/http2"]
 tls = ["opensovd-server/tls", "dep:rustls"]
+mdns = ["opensovd-extra/mdns", "dep:socket2"]
 
 [dependencies]
 anyhow = { workspace = true }
@@ -39,8 +40,9 @@ http = { workspace = true }
 tower = { workspace = true, features = ["util"] }
 tower-http = { workspace = true, features = ["cors", "fs"] }
 tracing = { workspace = true }
-clap = { workspace = true, features = ["cargo", "derive", "env", "help", "std", "usage"] }
+clap = { workspace = true, features = ["cargo", "derive", "env", "error-context", "help", "std", "usage"] }
 rustls = { workspace = true, optional = true }
+socket2 = { workspace = true, optional = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 sd-notify = { workspace = true }
