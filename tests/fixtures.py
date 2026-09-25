@@ -35,7 +35,12 @@ def default_binary_args(config: pytest.Config, *extra: str) -> list[str]:
     supplied one. Detects both `--url X` and `--url=X` forms.
     """
     extra_args = shlex.split(config.getoption("--opensovd-args"))
-    has_url = any(a == "--url" or a.startswith("--url=") for a in (*extra, *extra_args))
-    if has_url:
-        return [*extra, *extra_args]
-    return ["--url", "http://127.0.0.1:0/sovd", *extra, *extra_args]
+    args = (*extra, *extra_args)
+
+    def has(flag: str) -> bool:
+        return any(a == flag or a.startswith(f"{flag}=") for a in args)
+
+    if has("--url"):
+        return [*args]
+    scheme = "https" if has("--tls-cert") else "http"
+    return ["--url", f"{scheme}://127.0.0.1:0/sovd", *args]
