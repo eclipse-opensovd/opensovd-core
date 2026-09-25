@@ -35,6 +35,28 @@ def validate_schema(data, is_data_item=False):
         jsonschema.validate(instance=data, schema=schema)
 
 
+# Reference collections ISO 17978-3 7.6.2.4 defines: always served, empty when
+# not advertised. belongs-to and is-located-on have no listing in the spec.
+SPEC_RELATIONS = {"contains", "hosts"}
+
+
+def get_relation(client, capabilities, path, relation, params, include_schema):
+    """GET a relation: listed when advertised; empty or 404 otherwise."""
+    response = client.get(path, params=params)
+    if relation not in capabilities and relation not in SPEC_RELATIONS:
+        assert response.status_code == 404, path
+        assert response.json()["vendor_code"] == "resource-not-found", path
+        return []
+    assert response.status_code == 200, path
+    body = response.json()
+    assert "items" in body
+    if relation not in capabilities:
+        assert body["items"] == [], path
+    if include_schema:
+        validate_schema(body)
+    return body["items"]
+
+
 @pytest.mark.parametrize("include_schema", [False, True], ids=["without-schema", "with-schema"])
 def test_traverse_api(client, include_schema):
     """Traverse all API endpoints, optionally validating schemas."""
@@ -131,20 +153,14 @@ def test_traverse_api(client, include_schema):
         assert response.status_code == 200
         area = response.json()
         assert area["id"] == area_id
-        assert "contains" in area  # All areas have contains link
         if include_schema:
             validate_schema(area)
 
         # GET area contains
-        response = client.get(f"/v1/areas/{area_id}/contains", params=params)
-        assert response.status_code == 200
-        contains = response.json()
-        assert "items" in contains
-        if include_schema:
-            validate_schema(contains)
-
-        # Store for later validation
-        area_contains[area_id] = [item["id"] for item in contains["items"]]
+        contains = get_relation(
+            client, area, f"/v1/areas/{area_id}/contains", "contains", params, include_schema
+        )
+        area_contains[area_id] = [item["id"] for item in contains]
 
     # 6. GET /v1/apps list
     response = client.get("/v1/apps", params=params)
@@ -166,28 +182,22 @@ def test_traverse_api(client, include_schema):
         assert response.status_code == 200
         app = response.json()
         assert app["id"] == app_id
-        assert "is-located-on" in app  # Mandatory
+        assert "is-located-on" in app  # Every mock app is hosted
         if include_schema:
             validate_schema(app)
 
         # GET app is-located-on
-        response = client.get(f"/v1/apps/{app_id}/is-located-on", params=params)
-        assert response.status_code == 200
-        located_on = response.json()
-        assert "items" in located_on
-        assert len(located_on["items"]) == 1  # Exactly one host
-        host_component_id = located_on["items"][0]["id"]
-        if include_schema:
-            validate_schema(located_on)
+        located_on = get_relation(
+            client, app, f"/v1/apps/{app_id}/is-located-on", "is-located-on", params, include_schema
+        )
+        assert len(located_on) == 1  # Exactly one host
+        host_component_id = located_on[0]["id"]
 
-        # GET app belongs-to (optional)
-        response = client.get(f"/v1/apps/{app_id}/belongs-to", params=params)
-        assert response.status_code == 200
-        belongs_to = response.json()
-        assert "items" in belongs_to
-        assert len(belongs_to["items"]) <= 1  # 0 or 1
-        if include_schema:
-            validate_schema(belongs_to)
+        # GET app belongs-to
+        belongs_to = get_relation(
+            client, app, f"/v1/apps/{app_id}/belongs-to", "belongs-to", params, include_schema
+        )
+        assert len(belongs_to) <= 1  # 0 or 1
 
         # Verify data link in app capabilities (if app has data provider)
         if "data" in app:
@@ -228,8 +238,8 @@ def test_traverse_api(client, include_schema):
 
         # Store relationships
         app_hosts[app_id] = host_component_id
-        if len(belongs_to["items"]) > 0:
-            app_areas[app_id] = belongs_to["items"][0]["id"]
+        if belongs_to:
+            app_areas[app_id] = belongs_to[0]["id"]
 
     # 8. Test component relationship endpoints
     component_hosts: dict[str, list[str]] = {}
@@ -237,27 +247,33 @@ def test_traverse_api(client, include_schema):
     for component_item in components_list["items"]:
         component_id = component_item["id"]
 
-        # GET component hosts
-        response = client.get(f"/v1/components/{component_id}/hosts", params=params)
+        response = client.get(f"/v1/components/{component_id}", params=params)
         assert response.status_code == 200
-        hosts = response.json()
-        assert "items" in hosts
-        if include_schema:
-            validate_schema(hosts)
+        component = response.json()
 
-        component_hosts[component_id] = [item["id"] for item in hosts["items"]]
+        # GET component hosts
+        hosts = get_relation(
+            client,
+            component,
+            f"/v1/components/{component_id}/hosts",
+            "hosts",
+            params,
+            include_schema,
+        )
+        component_hosts[component_id] = [item["id"] for item in hosts]
 
         # GET component belongs-to
-        response = client.get(f"/v1/components/{component_id}/belongs-to", params=params)
-        assert response.status_code == 200
-        belongs_to = response.json()
-        assert "items" in belongs_to
-        assert len(belongs_to["items"]) <= 1  # 0 or 1
-        if include_schema:
-            validate_schema(belongs_to)
-
-        if len(belongs_to["items"]) > 0:
-            component_areas[component_id] = belongs_to["items"][0]["id"]
+        belongs_to = get_relation(
+            client,
+            component,
+            f"/v1/components/{component_id}/belongs-to",
+            "belongs-to",
+            params,
+            include_schema,
+        )
+        assert len(belongs_to) <= 1  # 0 or 1
+        if belongs_to:
+            component_areas[component_id] = belongs_to[0]["id"]
 
     # 9. Validate relationship consistency
     # Verify app.is-located-on <-> component.hosts
@@ -284,6 +300,23 @@ def test_traverse_api(client, include_schema):
         for entity_id in contained_ids:
             if entity_id in app_areas:
                 assert app_areas[entity_id] == area_id
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/v1/apps/unknown/is-located-on",
+        "/v1/apps/unknown/belongs-to",
+        "/v1/components/unknown/hosts",
+        "/v1/components/unknown/belongs-to",
+        "/v1/areas/unknown/contains",
+    ],
+)
+def test_relation_of_unknown_entity(client, path):
+    """Relations of an unknown entity report the entity, not the relation, as missing."""
+    response = client.get(path)
+    assert response.status_code == 404
+    assert response.json()["vendor_code"] == "entity-not-found"
 
 
 def test_root_capabilities_areas_link(client):

@@ -87,21 +87,26 @@ pub(super) async fn component_capabilities(
     let translation_id = entity.translation_id().map(String::from);
 
     let base = super::super::versioned_uri(&parts);
-    let hosts = Some(
-        format!(
-            "{base}/components/{}/hosts",
-            encode_path_segment(&component_id)
-        )
-        .into(),
-    );
+    // Relation links are only advertised when the relation is not empty (ISO 17978-3, Table 53).
+    let hosts = topo
+        .apps_of_component(&component_id)
+        .next()
+        .is_some()
+        .then(|| {
+            format!(
+                "{base}/components/{}/hosts",
+                encode_path_segment(&component_id)
+            )
+            .into()
+        });
 
-    let belongs_to = entity.area_id().map(|_| {
-        format!(
-            "{base}/components/{}/belongs-to",
-            encode_path_segment(&component_id)
-        )
-        .into()
-    });
+    // Resolved through the topology, as the belongs-to handler does, so the link
+    // is only advertised when the area exists.
+    let belongs_to = topo
+        .area_of_component(&component_id)
+        .ok()
+        .flatten()
+        .map(|area| format!("{base}/areas/{}", encode_path_segment(area.id())).into());
 
     let data = entity.data_provider().map(|_| {
         format!(
@@ -186,29 +191,26 @@ pub(super) async fn component_belongs_to(
     axum_extra::extract::Query(query): axum_extra::extract::Query<EntitiesQuery>,
 ) -> Result<Json<Response<Entities>>> {
     let topo = topology.read().await;
-    let mut items = Vec::new();
-
-    if let Some(area) = topo
+    // Not advertised without an area, so not served either.
+    let area = topo
         .area_of_component(&component_id)
         .map_err(|_| Error::EntityNotFound(component_id.clone()))?
-    {
-        let tags = area.tags();
-        let translation_id = area.translation_id().map(String::from);
+        .ok_or_else(|| Error::ResourceNotFound(format!("components/{component_id}/belongs-to")))?;
 
-        // Check tag filter if provided
-        let matches_tags = query.tags.is_empty()
-            || (!tags.is_empty() && query.tags.iter().any(|t| tags.contains(t)));
+    let tags = area.tags();
+    let matches_tags =
+        query.tags.is_empty() || (!tags.is_empty() && query.tags.iter().any(|t| tags.contains(t)));
 
-        if matches_tags {
-            let base = super::super::versioned_uri(&parts);
-            items.push(EntityReference {
-                id: area.id().to_string(),
-                name: area.name().to_string(),
-                translation_id,
-                href: format!("{base}/areas/{}", encode_path_segment(area.id())).into(),
-                tags: (!tags.is_empty()).then_some(tags.to_vec()),
-            });
-        }
+    let mut items = Vec::new();
+    if matches_tags {
+        let base = super::super::versioned_uri(&parts);
+        items.push(EntityReference {
+            id: area.id().to_string(),
+            name: area.name().to_string(),
+            translation_id: area.translation_id().map(String::from),
+            href: format!("{base}/areas/{}", encode_path_segment(area.id())).into(),
+            tags: (!tags.is_empty()).then_some(tags.to_vec()),
+        });
     }
 
     Ok(Json(Response {
@@ -256,9 +258,89 @@ mod tests {
         );
         assert_eq!(
             json["belongs-to"],
-            "http://localhost/sovd/v1/components/ecu/belongs-to"
+            "http://localhost/sovd/v1/areas/powertrain"
         );
         assert_eq!(json["data"], "http://localhost/sovd/v1/components/ecu/data");
+    }
+
+    #[tokio::test]
+    async fn test_component_capabilities_omit_empty_relations() {
+        let topology = create_mock_topology().await;
+        topology
+            .write()
+            .await
+            .add_component(opensovd_core::Component::new("spare", "Spare ECU"));
+        let state = AppState::<()> {
+            vendor_info: None,
+            topology,
+        };
+        let app = routes::<()>()
+            .with_state(state)
+            .layer(crate::routes::test_base_uri());
+
+        let request = Request::builder()
+            .uri("/components/spare")
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.clone().oneshot(request).await.unwrap();
+        assert!(response.status().is_success());
+
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(json["id"], "spare");
+        assert!(json.get("hosts").is_none());
+        assert!(json.get("belongs-to").is_none());
+
+        // hosts is a spec relation (ISO 17978-3, 7.6.2.4): served empty when not advertised.
+        let request = Request::builder()
+            .uri("/components/spare/hosts")
+            .body(Body::empty())
+            .unwrap();
+        let response = app.clone().oneshot(request).await.unwrap();
+        assert_eq!(response.status(), axum::http::StatusCode::OK);
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["items"], serde_json::json!([]));
+
+        // belongs-to has no listing in the spec; without an area there is nothing to serve.
+        let request = Request::builder()
+            .uri("/components/spare/belongs-to")
+            .body(Body::empty())
+            .unwrap();
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), axum::http::StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn test_component_capabilities_skip_removed_area() {
+        let topology = create_mock_topology().await;
+        topology.write().await.remove_area("powertrain");
+        let state = AppState::<()> {
+            vendor_info: None,
+            topology,
+        };
+        let app = routes::<()>()
+            .with_state(state)
+            .layer(crate::routes::test_base_uri());
+
+        let request = Request::builder()
+            .uri("/components/ecu")
+            .body(Body::empty())
+            .unwrap();
+        let response = app.clone().oneshot(request).await.unwrap();
+        assert!(response.status().is_success());
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert!(json.get("belongs-to").is_none());
+
+        let request = Request::builder()
+            .uri("/components/ecu/belongs-to")
+            .body(Body::empty())
+            .unwrap();
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), axum::http::StatusCode::NOT_FOUND);
     }
 
     #[tokio::test]
