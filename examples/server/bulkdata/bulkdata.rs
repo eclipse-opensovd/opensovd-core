@@ -1,8 +1,6 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 Contributors to the Eclipse Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-#![allow(clippy::expect_used)]
-
 //! Bulk-data example backed by a temporary filesystem directory.
 //!
 //! Starts a server on port 7690 with a single app-scoped bulk-data provider at

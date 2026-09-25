@@ -4,7 +4,7 @@
 //! Build-time version stamping shared by the OpenSOVD binaries.
 
 // Emitting directives on stdout is how a build script talks to cargo.
-#![allow(clippy::print_stdout)]
+#![expect(clippy::print_stdout)]
 
 use std::{path::Path, process::Command};
 

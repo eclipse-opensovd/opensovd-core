@@ -204,7 +204,7 @@ mod tests {
 
         #[derive(Deserialize)]
         struct TestQuery {
-            #[allow(dead_code)]
+            #[expect(dead_code)]
             flag: bool,
         }
 

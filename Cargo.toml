@@ -21,7 +21,7 @@ opensovd-extra = { path = "opensovd-extra" }
 opensovd-models = { path = "opensovd-models" }
 opensovd-providers = { path = "opensovd-providers" }
 opensovd-client = { path = "opensovd-client" }
-opensovd-server = { path = "opensovd-server" }
+opensovd-server = { path = "opensovd-server", default-features = false }
 opensovd-mocks = { path = "opensovd-mocks" }
 libcli = { path = "opensovd-cli/lib" }
 libcli-build = { path = "opensovd-cli/build" }
@@ -83,6 +83,7 @@ rust_2024_compatibility = { level = "warn", priority = -1 }
 pedantic = { level = "deny", priority = -1 }
 cargo = { level = "deny", priority = -1 }
 multiple_crate_versions = "allow"
+allow_attributes = "deny"
 clone_on_ref_ptr = "deny"
 expect_used = "deny"
 indexing_slicing = "deny"

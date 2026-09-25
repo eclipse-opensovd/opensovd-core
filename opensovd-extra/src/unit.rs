@@ -40,7 +40,7 @@ pub struct PhysicalDimension {
     pub plane_angle: i8,
 }
 
-#[allow(clippy::trivially_copy_pass_by_ref)]
+#[expect(clippy::trivially_copy_pass_by_ref)]
 const fn is_zero(v: &i8) -> bool {
     *v == 0
 }
@@ -75,12 +75,12 @@ const fn one() -> f64 {
     1.0
 }
 
-#[allow(clippy::trivially_copy_pass_by_ref)]
+#[expect(clippy::trivially_copy_pass_by_ref)]
 fn is_one(v: &f64) -> bool {
     (*v - 1.0).abs() < f64::EPSILON
 }
 
-#[allow(clippy::trivially_copy_pass_by_ref)]
+#[expect(clippy::trivially_copy_pass_by_ref)]
 fn is_zero_f64(v: &f64) -> bool {
     v.abs() < f64::EPSILON
 }

@@ -124,11 +124,7 @@ impl Authenticator for JwtAuthenticator {
 
 #[cfg(test)]
 #[cfg_attr(coverage_nightly, coverage(off))]
-#[allow(
-    clippy::unwrap_used,
-    clippy::arithmetic_side_effects,
-    clippy::ignored_unit_patterns
-)]
+#[expect(clippy::arithmetic_side_effects, clippy::ignored_unit_patterns)]
 mod tests {
     use std::sync::LazyLock;
 
