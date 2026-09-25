@@ -1,0 +1,32 @@
+load("//bazel:rust_crate.bzl", "workspace_rust_library")
+
+package(default_visibility = ["//:workspace_crates"])
+
+exports_files(["Cargo.toml"])
+
+workspace_rust_library(
+    name = "opensovd_client",
+    srcs = glob(["src/**/*.rs"]),
+    crate_deps = [
+        "bytes",
+        "http",
+        "http-body",
+        "http-body-util",
+        "hyper",
+        "hyper-util",
+        "percent-encoding",
+        "serde",
+        "serde_json",
+        "thiserror",
+        "tokio",
+        "tower",
+        "tower-service",
+    ],
+    crate_name = "opensovd_client",
+    crate_root = "src/lib.rs",
+    compile_data = ["README.md"],
+    version = "0.1.1",
+    deps = [
+        "//opensovd-models:opensovd_models",
+    ],
+)

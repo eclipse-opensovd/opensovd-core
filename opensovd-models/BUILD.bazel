@@ -1,0 +1,20 @@
+load("//bazel:rust_crate.bzl", "workspace_rust_library")
+
+package(default_visibility = ["//:workspace_crates"])
+
+exports_files(["Cargo.toml"])
+
+workspace_rust_library(
+    name = "opensovd_models",
+    srcs = glob(["src/**/*.rs"]),
+    crate_deps = [
+        "chrono",
+        "schemars",
+        "serde",
+        "serde_json",
+    ],
+    crate_features = ["jsonschema"],
+    crate_name = "opensovd_models",
+    crate_root = "src/lib.rs",
+    version = "0.1.1",
+)

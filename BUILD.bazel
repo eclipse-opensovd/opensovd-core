@@ -1,0 +1,99 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 Contributors to the Eclipse Foundation
+# SPDX-License-Identifier: Apache-2.0
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files([
+    "Cargo.lock",
+    "Cargo.toml",
+    "rust-toolchain.toml",
+])
+
+package_group(
+    name = "workspace_crates",
+    packages = ["//..."],
+)
+
+alias(
+    name = "opensovd-core",
+    actual = "//opensovd-core:opensovd_core",
+)
+
+alias(
+    name = "opensovd-extra",
+    actual = "//opensovd-extra:opensovd_extra",
+)
+
+alias(
+    name = "opensovd-models",
+    actual = "//opensovd-models:opensovd_models",
+)
+
+alias(
+    name = "opensovd-providers",
+    actual = "//opensovd-providers:opensovd_providers",
+)
+
+alias(
+    name = "opensovd-client",
+    actual = "//opensovd-client:opensovd_client",
+)
+
+alias(
+    name = "opensovd-server",
+    actual = "//opensovd-server:opensovd_server",
+)
+
+alias(
+    name = "opensovd-mocks",
+    actual = "//opensovd-mocks:opensovd_mocks",
+)
+
+alias(
+    name = "libcli",
+    actual = "//opensovd-cli/lib:libcli",
+)
+
+alias(
+    name = "opensovd-gateway",
+    actual = "//opensovd-cli/gateway:opensovd_gateway",
+)
+
+alias(
+    name = "opensovd-mcp",
+    actual = "//opensovd-cli/mcp:opensovd_mcp",
+)
+
+alias(
+    name = "opensovd-examples-client",
+    actual = "//examples/client:client_example",
+)
+
+alias(
+    name = "opensovd-examples-server",
+    actual = "//examples/server:server_examples",
+)
+
+alias(
+    name = "opensovd-benches",
+    actual = "//benches:bench_binaries",
+)
+
+filegroup(
+    name = "workspace",
+    srcs = [
+        ":opensovd-core",
+        ":opensovd-extra",
+        ":opensovd-models",
+        ":opensovd-providers",
+        ":opensovd-client",
+        ":opensovd-server",
+        ":opensovd-mocks",
+        ":libcli",
+        ":opensovd-gateway",
+        ":opensovd-mcp",
+        ":opensovd-examples-client",
+        ":opensovd-examples-server",
+        ":opensovd-benches",
+    ],
+)

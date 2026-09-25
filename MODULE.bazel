@@ -1,0 +1,36 @@
+module(
+    name = "opensovd_core",
+    version = "0.0.0",
+    bazel_compatibility = [">=8.6.0"],
+)
+
+bazel_dep(name = "rules_rust", version = "0.68.1-score")
+
+rust = use_extension(
+    "@rules_rust//rust:extensions.bzl",
+    "rust",
+    dev_dependency = True,
+)
+rust.toolchain(
+    edition = "2024",
+    versions = ["nightly/2026-05-07"],
+)
+use_repo(rust, "rust_toolchains")
+
+register_toolchains(
+    "@rust_toolchains//:all",
+    dev_dependency = True,
+)
+
+opensovd_crate_universe = use_extension(
+    "@rules_rust//crate_universe:extensions.bzl",
+    "crate",
+    isolate = True,
+)
+opensovd_crate_universe.from_cargo(
+    name = "crate_index",
+    cargo_lockfile = "//:Cargo.lock",
+    manifests = ["//:Cargo.toml"],
+    skip_cargo_lockfile_overwrite = True,
+)
+use_repo(opensovd_crate_universe, "crate_index")
