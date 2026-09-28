@@ -129,7 +129,8 @@ where
     let mut router = match base {
         Some(path) => Router::new().nest(path, inner),
         None => Router::new().merge(inner),
-    };
+    }
+    .fallback(crate::routes::not_found);
 
     for (path, svc) in services {
         router = router.nest_service(&path, svc);

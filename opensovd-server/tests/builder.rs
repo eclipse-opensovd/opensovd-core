@@ -191,6 +191,42 @@ async fn test_list_areas() {
     assert_eq!(items.len(), 2);
 }
 
+#[tokio::test]
+async fn test_unknown_path_returns_generic_error() {
+    let topology = opensovd_mocks::create_mock_topology().await;
+    let client = common::client();
+
+    for (base, path) in [
+        ("/sovd", "/sovd/"),
+        ("/sovd", "/sovd/v1/unknown"),
+        ("/sovd", "/sovd/v1/components/ecu/unknown"),
+        ("/", "/v1/unknown"),
+    ] {
+        let server = common::TestServer::builder()
+            .base_uri(base)
+            .topology(topology.clone())
+            .build()
+            .await;
+        let request = Request::builder()
+            .uri(server.url(path))
+            .body(http_body_util::Empty::<bytes::Bytes>::new())
+            .unwrap();
+
+        let response = client.request(request).await.unwrap();
+        assert_eq!(response.status(), 404, "{path}");
+        assert_eq!(
+            response.headers()["content-type"],
+            "application/json",
+            "{path}"
+        );
+
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["error_code"], "vendor-specific", "{path}");
+        assert_eq!(json["vendor_code"], "resource-not-found", "{path}");
+    }
+}
+
 struct MockDiscoveryProvider {
     component: Component,
 }

@@ -34,7 +34,11 @@ mod entities;
 mod error;
 mod version;
 
-use axum::{Extension, Router, extract::FromRef, http::request::Parts};
+use axum::{
+    Extension, Router,
+    extract::FromRef,
+    http::{Uri, request::Parts},
+};
 use http::header::HOST;
 use opensovd_core::Topology;
 pub use opensovd_models::version::{VendorInfo, VersionInfo};
@@ -123,4 +127,9 @@ where
         .merge(version::routes::<V>());
 
     router.with_state(state).layer(Extension(base_uri))
+}
+
+/// Answers a path no route serves with a `GenericError` body.
+pub(crate) async fn not_found(uri: Uri) -> error::Error {
+    error::Error::ResourceNotFound(uri.path().to_string())
 }
