@@ -79,7 +79,7 @@ async fn component_data_categories(
         .ok_or_else(|| Error::ProviderNotAvailable("data".into()))?;
 
     let items = provider
-        .categories()
+        .data_categories()
         .await?
         .into_iter()
         .map(|c| DataCategoryInformation {
@@ -115,7 +115,7 @@ async fn component_data_groups(
         .as_ref()
         .map(opensovd_models::data::DataCategory::as_str);
     let items = provider
-        .groups(category_filter)
+        .data_groups(category_filter)
         .await?
         .into_iter()
         .map(|g| Group {
@@ -222,7 +222,7 @@ async fn component_data_list(
     let filter = data_filter(query);
 
     let items = provider
-        .list(filter)
+        .data_list(filter)
         .await?
         .into_iter()
         .map(|m| Metadata {
@@ -257,7 +257,7 @@ async fn component_data_read(
         .data_provider()
         .ok_or_else(|| Error::ProviderNotAvailable("data".into()))?;
 
-    let value = provider.read(&data_id, query.include_schema).await?;
+    let value = provider.data_read(&data_id, query.include_schema).await?;
     let schema = query.include_schema.then(|| {
         read_response_schema(
             &data_schema_id("components", &component_id, &data_id),
@@ -289,7 +289,7 @@ async fn component_data_write(
         .data_provider()
         .ok_or_else(|| Error::ProviderNotAvailable("data".into()))?;
 
-    provider.write(&data_id, body.data).await?;
+    provider.data_write(&data_id, body.data).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -309,7 +309,7 @@ async fn app_data_categories(
         .ok_or_else(|| Error::ProviderNotAvailable("data".into()))?;
 
     let items = provider
-        .categories()
+        .data_categories()
         .await?
         .into_iter()
         .map(|c| DataCategoryInformation {
@@ -345,7 +345,7 @@ async fn app_data_groups(
         .as_ref()
         .map(opensovd_models::data::DataCategory::as_str);
     let items = provider
-        .groups(category_filter)
+        .data_groups(category_filter)
         .await?
         .into_iter()
         .map(|g| Group {
@@ -384,7 +384,7 @@ async fn app_data_list(
     let filter = data_filter(query);
 
     let items = provider
-        .list(filter)
+        .data_list(filter)
         .await?
         .into_iter()
         .map(|m| Metadata {
@@ -419,7 +419,7 @@ async fn app_data_read(
         .data_provider()
         .ok_or_else(|| Error::ProviderNotAvailable("data".into()))?;
 
-    let value = provider.read(&data_id, query.include_schema).await?;
+    let value = provider.data_read(&data_id, query.include_schema).await?;
     let schema = query.include_schema.then(|| {
         read_response_schema(
             &data_schema_id("apps", &app_id, &data_id),
@@ -451,7 +451,7 @@ async fn app_data_write(
         .data_provider()
         .ok_or_else(|| Error::ProviderNotAvailable("data".into()))?;
 
-    provider.write(&data_id, body.data).await?;
+    provider.data_write(&data_id, body.data).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 

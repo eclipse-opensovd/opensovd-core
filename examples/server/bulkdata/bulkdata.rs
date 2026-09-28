@@ -133,7 +133,7 @@ impl TempFsBulkDataProvider {
 
 #[async_trait]
 impl BulkDataProvider for TempFsBulkDataProvider {
-    async fn categories(&self) -> Result<Vec<CategoryInfo>, BulkDataError> {
+    async fn bulk_categories(&self) -> Result<Vec<CategoryInfo>, BulkDataError> {
         let mut entries = tokio::fs::read_dir(self.root.path())
             .await
             .map_err(|error| BulkDataError::Internal(error.to_string()))?;
@@ -160,7 +160,7 @@ impl BulkDataProvider for TempFsBulkDataProvider {
         Ok(categories)
     }
 
-    async fn list(
+    async fn bulk_list(
         &self,
         category_id: &str,
         filter: CategoryFilter,
@@ -189,7 +189,11 @@ impl BulkDataProvider for TempFsBulkDataProvider {
         Ok(items)
     }
 
-    async fn download(&self, category_id: &str, data_id: &str) -> Result<BulkData, BulkDataError> {
+    async fn bulk_download(
+        &self,
+        category_id: &str,
+        data_id: &str,
+    ) -> Result<BulkData, BulkDataError> {
         let path = self.data_path(category_id, data_id)?;
         let file = tokio::fs::File::open(&path).await.map_err(|error| {
             if error.kind() == std::io::ErrorKind::NotFound {
@@ -218,7 +222,7 @@ impl BulkDataProvider for TempFsBulkDataProvider {
         })
     }
 
-    async fn upload(
+    async fn bulk_upload(
         &self,
         category_id: &str,
         data_id: &str,
@@ -250,7 +254,7 @@ impl BulkDataProvider for TempFsBulkDataProvider {
         Ok(())
     }
 
-    async fn delete(&self, category_id: &str, data_id: &str) -> Result<(), BulkDataError> {
+    async fn bulk_delete(&self, category_id: &str, data_id: &str) -> Result<(), BulkDataError> {
         let path = self.data_path(category_id, data_id)?;
         tokio::fs::remove_file(&path).await.map_err(|error| {
             if error.kind() == std::io::ErrorKind::NotFound {
@@ -264,15 +268,18 @@ impl BulkDataProvider for TempFsBulkDataProvider {
         Ok(())
     }
 
-    async fn delete_category(
+    async fn bulk_delete_category(
         &self,
         category_id: &str,
     ) -> Result<Vec<DeletedBulkDataItem>, BulkDataError> {
         let category_path = self.category_path(category_id)?;
         let mut items = Vec::new();
         let mut no_errors = true;
-        for data in self.list(category_id, CategoryFilter::default()).await? {
-            let error = self.delete(category_id, &data.id).await.err();
+        for data in self
+            .bulk_list(category_id, CategoryFilter::default())
+            .await?
+        {
+            let error = self.bulk_delete(category_id, &data.id).await.err();
             if error.is_some() {
                 no_errors = false;
             }

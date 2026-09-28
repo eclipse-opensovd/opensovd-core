@@ -21,15 +21,15 @@ struct WindowProvider;
 
 #[async_trait]
 impl DataProvider for WindowProvider {
-    async fn list(&self, _filter: DataFilter) -> Result<Vec<Metadata>, DataError> {
+    async fn data_list(&self, _filter: DataFilter) -> Result<Vec<Metadata>, DataError> {
         Ok(Vec::new())
     }
 
-    async fn read(&self, data_id: &str, _include_schema: bool) -> Result<Data, DataError> {
+    async fn data_read(&self, data_id: &str, _include_schema: bool) -> Result<Data, DataError> {
         Err(DataError::NotFound(data_id.into()))
     }
 
-    async fn write(&self, _data_id: &str, value: serde_json::Value) -> Result<(), DataError> {
+    async fn data_write(&self, _data_id: &str, value: serde_json::Value) -> Result<(), DataError> {
         let position = value.get("position").and_then(serde_json::Value::as_u64);
         if position.is_some_and(|p| p <= 255) {
             Ok(())

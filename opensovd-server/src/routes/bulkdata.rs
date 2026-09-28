@@ -81,7 +81,7 @@ async fn bulk_data_categories(
     Ok(Json(Response {
         data: AvailableBulkDataCategories {
             items: provider
-                .categories()
+                .bulk_categories()
                 .await?
                 .iter()
                 .map(|c| BulkDataCategory(c.category.clone()))
@@ -112,7 +112,7 @@ async fn bulk_data_descriptors(
     Ok(Json(Response {
         data: BulkDataMetadata {
             items: provider
-                .list(&category, category_filter(&query))
+                .bulk_list(&category, category_filter(&query))
                 .await?
                 .iter()
                 .map(|metadata| BulkDataDescriptor {
@@ -230,7 +230,7 @@ async fn upload_bulk_data(
             .into_data_stream()
             .map(|r| r.map_err(|e| BulkDataError::Internal(e.to_string())));
         provider
-            .upload(&category, &filename, content_length.0, &mut stream, None)
+            .bulk_upload(&category, &filename, content_length.0, &mut stream, None)
             .await?;
     } else {
         let mut multipart = Multipart::from_request(req, &())
@@ -272,7 +272,7 @@ async fn upload_bulk_data(
                         chunk.map_err(|e| BulkDataError::InvalidRequest(e.to_string()))
                     });
                     provider
-                        .upload(&category, &filename, length, &mut data_stream, sig.as_ref())
+                        .bulk_upload(&category, &filename, length, &mut data_stream, sig.as_ref())
                         .await?;
                     file_content_received = true;
                     break;
@@ -321,7 +321,7 @@ async fn delete_bulk_data_category(
     let topo = topology.read().await;
     let provider = get_provider(topo, &entity_collection, &entity_id)?;
 
-    let deleted = provider.delete_category(&category).await?;
+    let deleted = provider.bulk_delete_category(&category).await?;
     let mut result = DeleteBulkDataResult {
         deleted_ids: vec![],
         errors: vec![],
@@ -355,7 +355,7 @@ async fn download_bulk_data(
     let topo = topology.read().await;
     let provider = get_provider(topo, &entity_collection, &entity_id)?;
 
-    let bulkdata = provider.download(&category, &bulk_data_id).await?;
+    let bulkdata = provider.bulk_download(&category, &bulk_data_id).await?;
 
     let mut response = axum::response::Response::builder()
         .status(StatusCode::OK)
@@ -386,7 +386,7 @@ async fn delete_bulk_data(
     let topo = topology.read().await;
     let provider = get_provider(topo, &entity_collection, &entity_id)?;
 
-    provider.delete(&category, &bulk_data_id).await?;
+    provider.bulk_delete(&category, &bulk_data_id).await?;
 
     Ok(StatusCode::NO_CONTENT)
 }

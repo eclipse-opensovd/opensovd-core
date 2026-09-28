@@ -63,14 +63,14 @@ pub enum DataError {
 /// A `Result` alias where the `Err` variant is [`DataError`].
 pub type Result<T> = std::result::Result<T, DataError>;
 
-/// Category information returned by `categories()`.
+/// Category information returned by `data_categories()`.
 #[derive(Debug, Clone)]
 pub struct CategoryInfo {
     pub category: String,
     pub translation_id: Option<String>,
 }
 
-/// Group information returned by `groups()`.
+/// Group information returned by `data_groups()`.
 #[derive(Debug, Clone)]
 pub struct GroupInfo {
     pub id: String,
@@ -80,7 +80,7 @@ pub struct GroupInfo {
     pub group_translation_id: Option<String>,
 }
 
-/// Tag information returned by `tags()`.
+/// Tag information returned by `data_tags()`.
 #[derive(Debug, Clone)]
 pub struct TagInfo {
     pub id: String,
@@ -90,16 +90,16 @@ pub struct TagInfo {
 
 #[async_trait]
 pub trait DataProvider: Send + Sync + 'static {
-    async fn list(&self, filter: DataFilter) -> Result<Vec<Metadata>>;
+    async fn data_list(&self, filter: DataFilter) -> Result<Vec<Metadata>>;
 
-    async fn read(&self, data_id: &str, include_schema: bool) -> Result<Data>;
+    async fn data_read(&self, data_id: &str, include_schema: bool) -> Result<Data>;
 
-    async fn write(&self, data_id: &str, value: serde_json::Value) -> Result<()>;
+    async fn data_write(&self, data_id: &str, value: serde_json::Value) -> Result<()>;
 
     /// Returns unique categories from all data values.
-    /// Default implementation extracts from `list()`.
-    async fn categories(&self) -> Result<Vec<CategoryInfo>> {
-        let all = self.list(DataFilter::default()).await?;
+    /// Default implementation extracts from `data_list()`.
+    async fn data_categories(&self) -> Result<Vec<CategoryInfo>> {
+        let all = self.data_list(DataFilter::default()).await?;
         let mut seen = std::collections::HashSet::new();
         Ok(all
             .into_iter()
@@ -112,9 +112,9 @@ pub trait DataProvider: Send + Sync + 'static {
     }
 
     /// Returns groups with their categories.
-    /// Default implementation extracts from `list()`.
-    async fn groups(&self, category_filter: Option<&str>) -> Result<Vec<GroupInfo>> {
-        let all = self.list(DataFilter::default()).await?;
+    /// Default implementation extracts from `data_list()`.
+    async fn data_groups(&self, category_filter: Option<&str>) -> Result<Vec<GroupInfo>> {
+        let all = self.data_list(DataFilter::default()).await?;
         let mut seen = std::collections::HashSet::new();
         Ok(all
             .into_iter()
@@ -135,9 +135,9 @@ pub trait DataProvider: Send + Sync + 'static {
     }
 
     /// Returns unique tags from all data values.
-    /// Default implementation extracts from `list()`.
-    async fn tags(&self) -> Result<Vec<TagInfo>> {
-        let all = self.list(DataFilter::default()).await?;
+    /// Default implementation extracts from `data_list()`.
+    async fn data_tags(&self) -> Result<Vec<TagInfo>> {
+        let all = self.data_list(DataFilter::default()).await?;
         let mut seen = std::collections::HashSet::new();
         Ok(all
             .into_iter()
@@ -162,15 +162,15 @@ mod tests {
 
     #[async_trait]
     impl DataProvider for MockProvider {
-        async fn list(&self, _filter: DataFilter) -> Result<Vec<Metadata>> {
+        async fn data_list(&self, _filter: DataFilter) -> Result<Vec<Metadata>> {
             Ok(self.items.clone())
         }
 
-        async fn read(&self, _data_id: &str, _include_schema: bool) -> Result<Data> {
+        async fn data_read(&self, _data_id: &str, _include_schema: bool) -> Result<Data> {
             unimplemented!()
         }
 
-        async fn write(&self, _data_id: &str, _value: serde_json::Value) -> Result<()> {
+        async fn data_write(&self, _data_id: &str, _value: serde_json::Value) -> Result<()> {
             unimplemented!()
         }
     }
@@ -199,7 +199,7 @@ mod tests {
             ],
         };
 
-        let cats = provider.categories().await.unwrap();
+        let cats = provider.data_categories().await.unwrap();
         assert_eq!(cats.len(), 2);
         assert!(cats.iter().any(|c| c.category == "currentData"));
         assert!(cats.iter().any(|c| c.category == "identData"));
@@ -214,7 +214,7 @@ mod tests {
             ],
         };
 
-        let groups = provider.groups(None).await.unwrap();
+        let groups = provider.data_groups(None).await.unwrap();
         assert_eq!(groups.len(), 2);
         assert!(groups.iter().any(|g| g.id == "front"));
         assert!(groups.iter().any(|g| g.id == "rear"));
@@ -229,7 +229,7 @@ mod tests {
             ],
         };
 
-        let groups = provider.groups(Some("currentData")).await.unwrap();
+        let groups = provider.data_groups(Some("currentData")).await.unwrap();
         assert_eq!(groups.len(), 1);
         assert_eq!(groups.first().map(|g| g.id.as_str()), Some("front"));
     }

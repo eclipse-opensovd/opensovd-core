@@ -59,17 +59,17 @@ pub struct DeletedBulkDataItem {
 
 #[async_trait]
 pub trait BulkDataProvider: Send + Sync + std::fmt::Debug + 'static {
-    async fn categories(&self) -> Result<Vec<CategoryInfo>>;
+    async fn bulk_categories(&self) -> Result<Vec<CategoryInfo>>;
 
-    async fn list(
+    async fn bulk_list(
         &self,
         category_id: &str,
         filter: CategoryFilter,
     ) -> Result<Vec<BulkDataMetadata>>;
 
-    async fn download(&self, category_id: &str, data_id: &str) -> Result<BulkData>;
+    async fn bulk_download(&self, category_id: &str, data_id: &str) -> Result<BulkData>;
 
-    async fn upload(
+    async fn bulk_upload(
         &self,
         category_id: &str,
         data_id: &str,
@@ -78,7 +78,7 @@ pub trait BulkDataProvider: Send + Sync + std::fmt::Debug + 'static {
         signature: Option<&String>,
     ) -> Result<()>;
 
-    async fn delete(&self, category_id: &str, data_id: &str) -> Result<()>;
+    async fn bulk_delete(&self, category_id: &str, data_id: &str) -> Result<()>;
 
-    async fn delete_category(&self, category_id: &str) -> Result<Vec<DeletedBulkDataItem>>;
+    async fn bulk_delete_category(&self, category_id: &str) -> Result<Vec<DeletedBulkDataItem>>;
 }
