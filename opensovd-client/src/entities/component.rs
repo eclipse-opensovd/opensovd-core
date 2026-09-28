@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use opensovd_models::data::{DataCategories, DataGroups};
-use opensovd_models::discovery::Entities;
+use opensovd_models::discovery::{Entities, EntityCapabilities};
 
 use crate::client::{Client, encode};
 use crate::data::{DataRequest, ListDataRequest};
@@ -58,10 +58,16 @@ impl Component<'_> {
             .await
     }
 
-    /// List areas this component belongs to.
-    pub async fn belongs_to(&self) -> Result<Entities> {
-        self.client
-            .get(&format!("/components/{}/belongs-to", self.id), &[])
-            .await
+    /// Get the area this component belongs to by following its advertised
+    /// `belongs-to` link, or `None` when it advertises none.
+    pub async fn belongs_to(&self) -> Result<Option<EntityCapabilities>> {
+        let capabilities: EntityCapabilities = self
+            .client
+            .get(&format!("/components/{}", self.id), &[])
+            .await?;
+        let Some(href) = capabilities.belongs_to else {
+            return Ok(None);
+        };
+        self.client.follow(&href).await.map(Some)
     }
 }

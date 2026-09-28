@@ -8,11 +8,8 @@
 //! - `GET /components` - List all components
 //! - `GET /components/{component_id}` - Query capabilities of a component
 //! - `GET /components/{component_id}/hosts` - List apps hosted on a component
-//! - `GET /components/{component_id}/belongs-to` - Get areas containing a component
 //! - `GET /apps` - List all apps
 //! - `GET /apps/{app_id}` - Query capabilities of an app
-//! - `GET /apps/{app_id}/is-located-on` - Get the component hosting an app
-//! - `GET /apps/{app_id}/belongs-to` - Get areas containing an app
 //! - `GET /areas` - List all areas
 //! - `GET /areas/{area_id}` - Query capabilities of an area
 //! - `GET /areas/{area_id}/contains` - List entities contained in an area

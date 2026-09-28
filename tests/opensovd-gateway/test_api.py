@@ -35,6 +35,32 @@ def validate_schema(data, is_data_item=False):
         jsonschema.validate(instance=data, schema=schema)
 
 
+def get_json(client, url, params, include_schema):
+    """GET a path or an advertised href and return its body."""
+    response = client.get(url, params=params)
+    assert response.status_code == 200, url
+    body = response.json()
+    if include_schema:
+        validate_schema(body)
+    return body
+
+
+def get_references(client, capabilities, path, relation, params, include_schema):
+    """Return the hrefs a reference collection lists.
+
+    An advertised collection is read through its link and is not empty. A
+    collection that is not advertised is still served at `path`, empty.
+    """
+    href = capabilities.get(relation)
+    items = get_json(client, href or path, params, include_schema)["items"]
+    if href:
+        assert href.endswith(path), href
+        assert items, f"{href} is advertised but empty"
+    else:
+        assert items == [], path
+    return {item["href"] for item in items}
+
+
 @pytest.mark.parametrize("include_schema", [False, True], ids=["without-schema", "with-schema"])
 def test_traverse_api(client, include_schema):
     """Traverse all API endpoints, optionally validating schemas."""
@@ -65,17 +91,17 @@ def test_traverse_api(client, include_schema):
     if include_schema:
         validate_schema(components_list)
 
+    # Capabilities of every listed entity, keyed by the href it is listed under
+    entities: dict[str, dict] = {}
+
     # 3. Traverse each component
     for component_item in components_list["items"]:
         component_id = component_item["id"]
 
         # GET component capabilities
-        response = client.get(f"/v1/components/{component_id}", params=params)
-        assert response.status_code == 200
-        component = response.json()
+        component = get_json(client, component_item["href"], params, include_schema)
         assert component["id"] == component_id
-        if include_schema:
-            validate_schema(component)
+        entities[component_item["href"]] = component
 
         # GET data-categories
         response = client.get(f"/v1/components/{component_id}/data-categories", params=params)
@@ -122,29 +148,19 @@ def test_traverse_api(client, include_schema):
         validate_schema(areas_list)
 
     # 5. Traverse each area
-    area_contains: dict[str, list[str]] = {}
+    contains: dict[str, set[str]] = {}
     for area_item in areas_list["items"]:
         area_id = area_item["id"]
 
         # GET area capabilities
-        response = client.get(f"/v1/areas/{area_id}", params=params)
-        assert response.status_code == 200
-        area = response.json()
+        area = get_json(client, area_item["href"], params, include_schema)
         assert area["id"] == area_id
-        assert "contains" in area  # All areas have contains link
-        if include_schema:
-            validate_schema(area)
+        entities[area_item["href"]] = area
 
         # GET area contains
-        response = client.get(f"/v1/areas/{area_id}/contains", params=params)
-        assert response.status_code == 200
-        contains = response.json()
-        assert "items" in contains
-        if include_schema:
-            validate_schema(contains)
-
-        # Store for later validation
-        area_contains[area_id] = [item["id"] for item in contains["items"]]
+        contains[area_item["href"]] = get_references(
+            client, area, f"/v1/areas/{area_id}/contains", "contains", params, include_schema
+        )
 
     # 6. GET /v1/apps list
     response = client.get("/v1/apps", params=params)
@@ -156,38 +172,14 @@ def test_traverse_api(client, include_schema):
         validate_schema(apps_list)
 
     # 7. Traverse each app
-    app_hosts: dict[str, str] = {}
-    app_areas: dict[str, str] = {}
     for app_item in apps_list["items"]:
         app_id = app_item["id"]
 
         # GET app capabilities
-        response = client.get(f"/v1/apps/{app_id}", params=params)
-        assert response.status_code == 200
-        app = response.json()
+        app = get_json(client, app_item["href"], params, include_schema)
         assert app["id"] == app_id
-        assert "is-located-on" in app  # Mandatory
-        if include_schema:
-            validate_schema(app)
-
-        # GET app is-located-on
-        response = client.get(f"/v1/apps/{app_id}/is-located-on", params=params)
-        assert response.status_code == 200
-        located_on = response.json()
-        assert "items" in located_on
-        assert len(located_on["items"]) == 1  # Exactly one host
-        host_component_id = located_on["items"][0]["id"]
-        if include_schema:
-            validate_schema(located_on)
-
-        # GET app belongs-to (optional)
-        response = client.get(f"/v1/apps/{app_id}/belongs-to", params=params)
-        assert response.status_code == 200
-        belongs_to = response.json()
-        assert "items" in belongs_to
-        assert len(belongs_to["items"]) <= 1  # 0 or 1
-        if include_schema:
-            validate_schema(belongs_to)
+        assert "is-located-on" in app  # Every mock app is hosted
+        entities[app_item["href"]] = app
 
         # Verify data link in app capabilities (if app has data provider)
         if "data" in app:
@@ -226,64 +218,72 @@ def test_traverse_api(client, include_schema):
                 if include_schema:
                     validate_schema(data_value, is_data_item=True)
 
-        # Store relationships
-        app_hosts[app_id] = host_component_id
-        if len(belongs_to["items"]) > 0:
-            app_areas[app_id] = belongs_to["items"][0]["id"]
-
-    # 8. Test component relationship endpoints
-    component_hosts: dict[str, list[str]] = {}
-    component_areas: dict[str, str] = {}
+    # 8. GET component hosts
+    hosts: dict[str, set[str]] = {}
     for component_item in components_list["items"]:
         component_id = component_item["id"]
-
-        # GET component hosts
-        response = client.get(f"/v1/components/{component_id}/hosts", params=params)
-        assert response.status_code == 200
-        hosts = response.json()
-        assert "items" in hosts
-        if include_schema:
-            validate_schema(hosts)
-
-        component_hosts[component_id] = [item["id"] for item in hosts["items"]]
-
-        # GET component belongs-to
-        response = client.get(f"/v1/components/{component_id}/belongs-to", params=params)
-        assert response.status_code == 200
-        belongs_to = response.json()
-        assert "items" in belongs_to
-        assert len(belongs_to["items"]) <= 1  # 0 or 1
-        if include_schema:
-            validate_schema(belongs_to)
-
-        if len(belongs_to["items"]) > 0:
-            component_areas[component_id] = belongs_to["items"][0]["id"]
-
-    # 9. Validate relationship consistency
-    # Verify app.is-located-on <-> component.hosts
-    for app_id, host_component_id in app_hosts.items():
-        assert app_id in component_hosts.get(host_component_id, []), (
-            f"App {app_id} hosted on {host_component_id}, but not in hosts list"
+        hosts[component_item["href"]] = get_references(
+            client,
+            entities[component_item["href"]],
+            f"/v1/components/{component_id}/hosts",
+            "hosts",
+            params,
+            include_schema,
         )
 
-    # Reverse direction
-    for component_id, hosted_apps in component_hosts.items():
-        for app_id in hosted_apps:
-            assert app_hosts.get(app_id) == component_id, (
-                f"Component {component_id} hosts {app_id}, but mismatch in is-located-on"
-            )
+    # 9. belongs-to and is-located-on reference the listed area and component
+    # directly; follow each link.
+    located_on: set[tuple[str, str]] = set()
+    belongs_to: set[tuple[str, str]] = set()
+    for href, entity in entities.items():
+        for link, pairs in (("is-located-on", located_on), ("belongs-to", belongs_to)):
+            if link not in entity:
+                continue
+            target = entity[link]
+            assert target in entities, f"{href} {link} {target} is not a listed entity"
+            assert get_json(client, target, params, include_schema)["id"] == entities[target]["id"]
+            pairs.add((href, target))
 
-    # Verify area.contains <-> component.belongs-to
-    for area_id, contained_ids in area_contains.items():
-        for entity_id in contained_ids:
-            if entity_id in component_areas:
-                assert component_areas[entity_id] == area_id
+    # 10. Each relation matches its reverse relation in both directions
+    assert located_on == {(app, comp) for comp, apps in hosts.items() for app in apps}
+    assert belongs_to == {
+        (entity, area) for area, members in contains.items() for entity in members
+    }
 
-    # Verify area.contains <-> app.belongs-to
-    for area_id, contained_ids in area_contains.items():
-        for entity_id in contained_ids:
-            if entity_id in app_areas:
-                assert app_areas[entity_id] == area_id
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/v1/components/unknown/hosts",
+        "/v1/areas/unknown/contains",
+    ],
+)
+def test_relation_of_unknown_entity(client, path):
+    """Relations of an unknown entity report the entity, not the relation, as missing."""
+    response = client.get(path)
+    assert response.status_code == 404
+    assert response.json()["vendor_code"] == "entity-not-found"
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/v1/unknown",
+        "/v1/components/ecu/unknown",
+        # Removed: both links reference the area and component directly.
+        "/v1/apps/engine_control/is-located-on",
+        "/v1/apps/engine_control/belongs-to",
+        "/v1/components/ecu/belongs-to",
+    ],
+)
+def test_unknown_path(client, path):
+    """Paths no route serves answer 404 with a GenericError body."""
+    response = client.get(path)
+    assert response.status_code == 404
+    assert response.headers["content-type"] == "application/json"
+    body = response.json()
+    assert body["error_code"] == "vendor-specific"
+    assert body["vendor_code"] == "resource-not-found"
 
 
 def test_root_capabilities_areas_link(client):

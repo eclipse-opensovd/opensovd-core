@@ -38,12 +38,48 @@ async fn component_belongs_to() {
     let mut builder = Connector::builder();
     builder
         .expect()
-        .with_uri("http://localhost/sovd/v1/components/ecu1/belongs-to")
-        .returning(json!({"items": []}).to_string())
+        .with_uri("http://localhost/sovd/v1/components/ecu1")
+        .returning(
+            json!({
+                "id": "ecu1",
+                "name": "ECU 1",
+                "belongs-to": "http://localhost/sovd/v1/areas/body"
+            })
+            .to_string(),
+        )
+        .unwrap();
+    builder
+        .expect()
+        .with_uri("http://localhost/sovd/v1/areas/body")
+        .returning(json!({"id": "body", "name": "Body"}).to_string())
         .unwrap();
     let client = mock_client(builder.build());
-    let result = client.component("ecu1").belongs_to().await.unwrap();
-    assert!(result.items.is_empty());
+    let area = client
+        .component("ecu1")
+        .belongs_to()
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(area.id, "body");
+}
+
+#[tokio::test]
+async fn component_without_area() {
+    let mut builder = Connector::builder();
+    builder
+        .expect()
+        .with_uri("http://localhost/sovd/v1/components/ecu1")
+        .returning(json!({"id": "ecu1", "name": "ECU 1"}).to_string())
+        .unwrap();
+    let client = mock_client(builder.build());
+    assert!(
+        client
+            .component("ecu1")
+            .belongs_to()
+            .await
+            .unwrap()
+            .is_none()
+    );
 }
 
 #[tokio::test]

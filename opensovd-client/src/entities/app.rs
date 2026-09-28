@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use opensovd_models::data::{DataCategories, DataGroups};
-use opensovd_models::discovery::Entities;
+use opensovd_models::discovery::EntityCapabilities;
 
 use crate::client::{Client, encode};
 use crate::data::{DataRequest, ListDataRequest};
@@ -51,17 +51,25 @@ impl App<'_> {
             .await
     }
 
-    /// Get the component this app is located on.
-    pub async fn is_located_on(&self) -> Result<Entities> {
-        self.client
-            .get(&format!("/apps/{}/is-located-on", self.id), &[])
-            .await
+    /// Get the component this app is located on by following its advertised
+    /// `is-located-on` link, or `None` when it advertises none.
+    pub async fn is_located_on(&self) -> Result<Option<EntityCapabilities>> {
+        let Some(href) = self.capabilities().await?.is_located_on else {
+            return Ok(None);
+        };
+        self.client.follow(&href).await.map(Some)
     }
 
-    /// List areas this app belongs to.
-    pub async fn belongs_to(&self) -> Result<Entities> {
-        self.client
-            .get(&format!("/apps/{}/belongs-to", self.id), &[])
-            .await
+    /// Get the area this app belongs to by following its advertised
+    /// `belongs-to` link, or `None` when it advertises none.
+    pub async fn belongs_to(&self) -> Result<Option<EntityCapabilities>> {
+        let Some(href) = self.capabilities().await?.belongs_to else {
+            return Ok(None);
+        };
+        self.client.follow(&href).await.map(Some)
+    }
+
+    async fn capabilities(&self) -> Result<EntityCapabilities> {
+        self.client.get(&format!("/apps/{}", self.id), &[]).await
     }
 }

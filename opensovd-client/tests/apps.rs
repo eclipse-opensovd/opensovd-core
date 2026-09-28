@@ -25,12 +25,24 @@ async fn app_is_located_on() {
     let mut builder = Connector::builder();
     builder
         .expect()
-        .with_uri("http://localhost/sovd/v1/apps/diag/is-located-on")
-        .returning(json!({"items": []}).to_string())
+        .with_uri("http://localhost/sovd/v1/apps/diag")
+        .returning(
+            json!({
+                "id": "diag",
+                "name": "Diagnostics",
+                "is-located-on": "http://localhost/sovd/v1/components/ecu1"
+            })
+            .to_string(),
+        )
+        .unwrap();
+    builder
+        .expect()
+        .with_uri("http://localhost/sovd/v1/components/ecu1")
+        .returning(json!({"id": "ecu1", "name": "ECU 1"}).to_string())
         .unwrap();
     let client = mock_client(builder.build());
-    let result = client.app("diag").is_located_on().await.unwrap();
-    assert!(result.items.is_empty());
+    let component = client.app("diag").is_located_on().await.unwrap().unwrap();
+    assert_eq!(component.id, "ecu1");
 }
 
 #[tokio::test]
@@ -38,12 +50,38 @@ async fn app_belongs_to() {
     let mut builder = Connector::builder();
     builder
         .expect()
-        .with_uri("http://localhost/sovd/v1/apps/diag/belongs-to")
-        .returning(json!({"items": []}).to_string())
+        .with_uri("http://localhost/sovd/v1/apps/diag")
+        .returning(
+            json!({
+                "id": "diag",
+                "name": "Diagnostics",
+                "belongs-to": "http://localhost/sovd/v1/areas/body"
+            })
+            .to_string(),
+        )
+        .unwrap();
+    builder
+        .expect()
+        .with_uri("http://localhost/sovd/v1/areas/body")
+        .returning(json!({"id": "body", "name": "Body"}).to_string())
         .unwrap();
     let client = mock_client(builder.build());
-    let result = client.app("diag").belongs_to().await.unwrap();
-    assert!(result.items.is_empty());
+    let area = client.app("diag").belongs_to().await.unwrap().unwrap();
+    assert_eq!(area.id, "body");
+}
+
+#[tokio::test]
+async fn app_without_relation_links() {
+    let mut builder = Connector::builder();
+    builder
+        .expect()
+        .with_uri("http://localhost/sovd/v1/apps/diag")
+        .returning(json!({"id": "diag", "name": "Diagnostics"}).to_string())
+        .unwrap();
+    let client = mock_client(builder.build());
+    let app = client.app("diag");
+    assert!(app.is_located_on().await.unwrap().is_none());
+    assert!(app.belongs_to().await.unwrap().is_none());
 }
 
 #[tokio::test]

@@ -10,6 +10,7 @@ use hyper_util::{
     client::legacy::{self, connect::HttpConnector},
     rt::TokioExecutor,
 };
+use opensovd_models::UriReference;
 use serde::{Serialize, de::DeserializeOwned};
 use thiserror::Error;
 use tokio::sync::OnceCell;
@@ -293,10 +294,19 @@ impl Client {
 
     /// GET a JSON resource at `path` (relative to the base URI) with optional query parameters.
     pub async fn get<T: DeserializeOwned>(&self, path: &str, query: &[(&str, &str)]) -> Result<T> {
-        let uri = build_uri_with_query(&self.base_uri, path, query)?;
+        self.get_uri(build_uri_with_query(&self.base_uri, path, query)?)
+            .await
+    }
+
+    /// GET the JSON resource at an href the server advertised.
+    pub(crate) async fn follow<T: DeserializeOwned>(&self, href: &UriReference) -> Result<T> {
+        self.get_uri(href.0.parse()?).await
+    }
+
+    async fn get_uri<T: DeserializeOwned>(&self, uri: http::Uri) -> Result<T> {
         let req = http::Request::builder()
             .method(http::Method::GET)
-            .uri(&uri)
+            .uri(uri)
             .body(Full::new(Bytes::new()))?;
         let bytes = self.request(req).await?;
         Ok(serde_json::from_slice(&bytes)?)

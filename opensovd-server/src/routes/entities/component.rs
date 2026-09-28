@@ -28,10 +28,6 @@ where
         .route("/components", get(component_list))
         .route("/components/{component_id}", get(component_capabilities))
         .route("/components/{component_id}/hosts", get(component_hosts))
-        .route(
-            "/components/{component_id}/belongs-to",
-            get(component_belongs_to),
-        )
 }
 
 /// GET /components - Discover contained components.
@@ -87,21 +83,25 @@ pub(super) async fn component_capabilities(
     let translation_id = entity.translation_id().map(String::from);
 
     let base = super::super::versioned_uri(&parts);
-    let hosts = Some(
-        format!(
-            "{base}/components/{}/hosts",
-            encode_path_segment(&component_id)
-        )
-        .into(),
-    );
+    // Relation links are only advertised when the relation is not empty.
+    let hosts = topo
+        .apps_of_component(&component_id)
+        .next()
+        .is_some()
+        .then(|| {
+            format!(
+                "{base}/components/{}/hosts",
+                encode_path_segment(&component_id)
+            )
+            .into()
+        });
 
-    let belongs_to = entity.area_id().map(|_| {
-        format!(
-            "{base}/components/{}/belongs-to",
-            encode_path_segment(&component_id)
-        )
-        .into()
-    });
+    // A direct reference, advertised only when the area exists.
+    let belongs_to = topo
+        .area_of_component(&component_id)
+        .ok()
+        .flatten()
+        .map(|area| format!("{base}/areas/{}", encode_path_segment(area.id())).into());
 
     let data = entity.data_provider().map(|_| {
         format!(
@@ -176,47 +176,6 @@ pub(super) async fn component_hosts(
     }))
 }
 
-/// GET `/components/:component_id/belongs-to` - Get area containing the component.
-///
-/// Returns the area that contains a specific component.
-pub(super) async fn component_belongs_to(
-    State(topology): State<Topology>,
-    Path(component_id): Path<String>,
-    parts: Parts,
-    axum_extra::extract::Query(query): axum_extra::extract::Query<EntitiesQuery>,
-) -> Result<Json<Response<Entities>>> {
-    let topo = topology.read().await;
-    let mut items = Vec::new();
-
-    if let Some(area) = topo
-        .area_of_component(&component_id)
-        .map_err(|_| Error::EntityNotFound(component_id.clone()))?
-    {
-        let tags = area.tags();
-        let translation_id = area.translation_id().map(String::from);
-
-        // Check tag filter if provided
-        let matches_tags = query.tags.is_empty()
-            || (!tags.is_empty() && query.tags.iter().any(|t| tags.contains(t)));
-
-        if matches_tags {
-            let base = super::super::versioned_uri(&parts);
-            items.push(EntityReference {
-                id: area.id().to_string(),
-                name: area.name().to_string(),
-                translation_id,
-                href: format!("{base}/areas/{}", encode_path_segment(area.id())).into(),
-                tags: (!tags.is_empty()).then_some(tags.to_vec()),
-            });
-        }
-    }
-
-    Ok(Json(Response {
-        data: Entities { items },
-        schema: query.include_schema.then(Entities::schema),
-    }))
-}
-
 #[cfg(test)]
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
@@ -256,9 +215,74 @@ mod tests {
         );
         assert_eq!(
             json["belongs-to"],
-            "http://localhost/sovd/v1/components/ecu/belongs-to"
+            "http://localhost/sovd/v1/areas/powertrain"
         );
         assert_eq!(json["data"], "http://localhost/sovd/v1/components/ecu/data");
+    }
+
+    #[tokio::test]
+    async fn test_component_capabilities_omit_empty_relations() {
+        let topology = create_mock_topology().await;
+        topology
+            .write()
+            .await
+            .add_component(opensovd_core::Component::new("spare", "Spare ECU"));
+        let state = AppState::<()> {
+            vendor_info: None,
+            topology,
+        };
+        let app = routes::<()>()
+            .with_state(state)
+            .layer(crate::routes::test_base_uri());
+
+        let request = Request::builder()
+            .uri("/components/spare")
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.clone().oneshot(request).await.unwrap();
+        assert!(response.status().is_success());
+
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(json["id"], "spare");
+        assert!(json.get("hosts").is_none());
+        assert!(json.get("belongs-to").is_none());
+
+        // Not advertised, but still served as an empty list.
+        let request = Request::builder()
+            .uri("/components/spare/hosts")
+            .body(Body::empty())
+            .unwrap();
+        let response = app.clone().oneshot(request).await.unwrap();
+        assert_eq!(response.status(), axum::http::StatusCode::OK);
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["items"], serde_json::json!([]));
+    }
+
+    #[tokio::test]
+    async fn test_component_capabilities_skip_removed_area() {
+        let topology = create_mock_topology().await;
+        topology.write().await.remove_area("powertrain");
+        let state = AppState::<()> {
+            vendor_info: None,
+            topology,
+        };
+        let app = routes::<()>()
+            .with_state(state)
+            .layer(crate::routes::test_base_uri());
+
+        let request = Request::builder()
+            .uri("/components/ecu")
+            .body(Body::empty())
+            .unwrap();
+        let response = app.oneshot(request).await.unwrap();
+        assert!(response.status().is_success());
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert!(json.get("belongs-to").is_none());
     }
 
     #[tokio::test]

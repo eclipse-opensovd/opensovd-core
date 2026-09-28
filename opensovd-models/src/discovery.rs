@@ -124,7 +124,7 @@ pub struct EntityCapabilities {
     /// Reference to the logs resource
     #[serde(skip_serializing_if = "Option::is_none")]
     pub logs: Option<UriReference>,
-    /// Reference to belongs-to collection
+    /// Reference to the Area the entity belongs to
     #[serde(skip_serializing_if = "Option::is_none", rename = "belongs-to")]
     pub belongs_to: Option<UriReference>,
     /// Reference to contains collection (only for Areas)

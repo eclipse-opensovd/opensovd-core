@@ -200,6 +200,9 @@ async fn test_unknown_path_returns_generic_error() {
         ("/sovd", "/sovd/"),
         ("/sovd", "/sovd/v1/unknown"),
         ("/sovd", "/sovd/v1/components/ecu/unknown"),
+        ("/sovd", "/sovd/v1/components/ecu/belongs-to"),
+        ("/sovd", "/sovd/v1/apps/engine_control/belongs-to"),
+        ("/sovd", "/sovd/v1/apps/engine_control/is-located-on"),
         ("/", "/v1/unknown"),
     ] {
         let server = common::TestServer::builder()
