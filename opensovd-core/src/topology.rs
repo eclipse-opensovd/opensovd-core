@@ -594,7 +594,7 @@ mod tests {
         {
             let mut t = topology.write().await;
             t.add_component(Component::new("ecu1", "ECU 1"));
-            t.add_app(App::new("app1", "App 1", "ecu1"));
+            t.add_app(App::new("app1", "App 1").with_component_id("ecu1"));
         }
 
         let topo = topology.read().await;
@@ -649,7 +649,7 @@ mod tests {
         {
             let mut t = topology.write().await;
             t.add_area(Area::new("powertrain", "Powertrain"));
-            t.add_app(App::new("app1", "App 1", "ecu1").with_area_id("powertrain"));
+            t.add_app(App::new("app1", "App 1").with_area_id("powertrain"));
         }
 
         let topo = topology.read().await;
@@ -706,7 +706,7 @@ mod tests {
         {
             let mut t = topology.write().await;
             t.add_area(Area::new("network", "Network"));
-            t.add_app(App::new("diag", "Diagnostics", "gw").with_area_id("network"));
+            t.add_app(App::new("diag", "Diagnostics").with_area_id("network"));
         }
 
         assert_eq!(topology.read().await.apps_of_area("network").count(), 1);
