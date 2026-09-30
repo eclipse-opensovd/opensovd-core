@@ -107,12 +107,12 @@ classDiagram
     class Authenticator {
         <<trait>>
         +type Identity
-        +authenticate(parts) Future~Result~Identity, AuthError~~
+        +authenticate(parts) Result~Identity, AuthError~
     }
 
     class Authorizer~I~ {
         <<trait>>
-        +authorize(identity, parts) Future~Result~(), AuthError~~
+        +authorize(identity, parts) Result~(), AuthError~
     }
 
     class NoAuth {
