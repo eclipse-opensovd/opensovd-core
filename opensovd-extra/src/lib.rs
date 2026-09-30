@@ -20,3 +20,9 @@ pub mod tls;
 
 #[cfg(feature = "tls")]
 pub use tls::{ClientAuth, ServerTlsConfig, TlsError};
+
+#[cfg(feature = "mdns")]
+pub mod mdns;
+
+#[cfg(feature = "mdns")]
+pub use mdns::{Announcement, MdnsAnnouncer, MdnsError};
