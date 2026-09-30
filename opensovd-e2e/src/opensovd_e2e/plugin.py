@@ -5,10 +5,11 @@
 
 import re
 import shlex
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 
 import pytest
 
+from opensovd_e2e.netns import NetworkNamespace, skip_unless_available
 from opensovd_e2e.process import ProcessUnderTest, spawn_process
 
 # Stored in pytest_configure for later access in report hooks.
@@ -98,6 +99,17 @@ def process(request, crate_binary, binary_args, ready_banner) -> ProcessUnderTes
     )
     yield proc
     proc.close()
+
+
+@pytest.fixture
+def netns() -> Iterator[NetworkNamespace]:
+    """A private network namespace, removed with everything inside after the test.
+
+    Skipped where unprivileged user namespaces are unavailable.
+    """
+    skip_unless_available()
+    with NetworkNamespace() as netns:
+        yield netns
 
 
 @pytest.hookimpl(optionalhook=True)

@@ -283,6 +283,9 @@ jobs:
 
       - run: mise run lint
 
+      - name: Allow unprivileged user namespaces for the network namespace tests
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
       - run: mise run test:self
 
       - if: github.event_name == 'pull_request'
