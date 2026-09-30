@@ -4,34 +4,13 @@ This document describes the GitHub Actions CI/CD pipeline for opensovd.
 
 ## Build Environment
 
-The Linux and macOS jobs run inside the [Nix flake](../flake.nix) dev shell
-(`nix develop --command ...`), so CI and local development share one set of tool
-versions. Every in-shell command goes through the `RUN` variable, which holds
-`nix develop --command`. Windows has no Nix port and keeps `setup-rust-toolchain`,
-so the build job overrides `RUN` to empty there and each command still exists once.
-
-`.github/actions/nix-setup` installs Nix and restores the cargo cache. The store
-itself is served by cache.nixos.org; a 3.3 GB closure does not fit the Actions
-cache budget alongside the cargo caches.
-
-Since the store is fetched per job, the flake exposes a second, smaller shell.
-`licenses`, `advisories` and `lint` run static checks only, so they enter
-`.#lint`, which leaves out the tools those jobs never call: 2.3 GB against the
-3.3 GB of the default shell. Each passes `shell: '.#lint'` to `nix-setup`, so the
-step that realises the shell fetches the same one, and overrides `RUN` to
-`nix develop .#lint --command`. The shell carries the whole hook set, so the
-floor is the Rust toolchain the rustfmt and clippy hooks need.
-
-The `.nix` files go through the nixfmt hook, like every other file type. `lint`
-also runs `nix flake check --all-systems`, which evaluates the outputs for every
-system in about a second and builds none of them.
-
-The git hooks are defined in [`nix/git-hooks.nix`](../nix/git-hooks.nix)
-and run through [git-hooks.nix](https://github.com/cachix/git-hooks.nix), which
-generates `.pre-commit-config.yaml` on shell entry. The hooks take their tools
-from the shell, so nothing is fetched per hook. They are kept out of
-`nix flake check`, because the cargo and ty hooks need the crates.io registry
-and a synced virtualenv that the sandbox does not provide.
+Every job that needs tools installs them from [`mise.toml`](../mise.toml) through
+`.github/actions/mise`, locked by `mise.lock`, the same set `mise install` gives a
+dev machine. The action takes the mise version from `.devcontainer/Dockerfile`.
+The jobs run the tasks defined in `mise.toml`, so `mise run lint`,
+`mise run test`, `mise run coverage`, `mise run licenses` and
+`mise run advisories` reproduce them locally, and `mise run build` builds the
+binaries the build job ships. `mise run ci` runs all of them but coverage.
 
 ## Jobs
 

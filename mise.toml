@@ -23,7 +23,7 @@ node = "24.21.0"
 "npm:@usebruno/cli" = "4.0.0"
 
 [env]
-UV_PYTHON = { value = "{{ tools.python.path }}", tools = true }
+UV_PYTHON = { value = "{% if tools.python %}{{ tools.python.path }}{% endif %}", tools = true }
 UV_PYTHON_DOWNLOADS = "never"
 
 [tasks.ci]

@@ -1,0 +1,31 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 Contributors to the Eclipse Foundation
+# SPDX-License-Identifier: Apache-2.0
+
+name: mise
+description: Install mise at the version the dev container pins, then the tools from mise.toml.
+
+inputs:
+  tools:
+    description: Comma-separated tools to install instead of all of mise.toml.
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - if: inputs.tools != ''
+      shell: bash
+      env:
+        TOOLS: ${{ inputs.tools }}
+      run: echo "MISE_ENABLE_TOOLS=$TOOLS" >> "$GITHUB_ENV"
+
+    - id: version
+      shell: bash
+      run: |
+        version=$(sed -n 's|^FROM ghcr.io/jdx/mise:\([^ @]*\)[^ ]* AS mise$|\1|p' .devcontainer/Dockerfile)
+        test -n "$version"
+        echo "version=$version" >> "$GITHUB_OUTPUT"
+
+    - uses: jdx/mise-action@v5
+      with:
+        version: ${{ steps.version.outputs.version }}
