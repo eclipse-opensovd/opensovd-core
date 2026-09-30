@@ -21,3 +21,9 @@ pub use tls::{ClientAuth, ServerTlsConfig, TlsError};
 
 #[cfg(feature = "trace")]
 pub mod trace;
+
+#[cfg(feature = "mdns")]
+pub mod mdns;
+
+#[cfg(feature = "mdns")]
+pub use mdns::{Announcement, MdnsAnnouncer, MdnsError};
