@@ -25,3 +25,48 @@ node = "24.21.0"
 [env]
 UV_PYTHON = { value = "{{ tools.python.path }}", tools = true }
 UV_PYTHON_DOWNLOADS = "never"
+
+[tasks.ci]
+description = "Run the checks CI runs"
+depends = ["lint", "build", "test", "licenses", "advisories"]
+
+[tasks.build]
+description = "Build the release binaries CI ships"
+run = "cargo build --locked --profile release-small"
+
+[tasks.lint]
+description = "Run the git hooks on all files"
+run = "prek run --all-files --show-diff-on-failure"
+
+[tasks.fmt]
+description = "Check formatting with the pinned nightly rustfmt"
+tools = { rust = { version = "nightly-2026-05-07", profile = "minimal", components = "rustfmt" } }
+run = "cargo fmt --all -- --check"
+
+[tasks.test]
+description = "Run all tests"
+depends = ["test:unit", "test:self", "test:integration"]
+
+[tasks."test:unit"]
+description = "Run the Rust tests"
+run = "cargo test --locked --workspace --all-features"
+
+[tasks."test:self"]
+description = "Run the pytest plugin self-tests"
+run = "uv run --locked pytest opensovd-e2e/tests"
+
+[tasks."test:integration"]
+description = "Run the e2e tests"
+run = "uv run --locked pytest tests/ --ignore=tests/test_rust.py"
+
+[tasks.coverage]
+description = "Collect Rust and e2e coverage"
+run = "uv run --locked pytest tests/ --opensovd-coverage"
+
+[tasks.licenses]
+description = "Check dependency licenses and sources"
+run = "cargo deny check licenses sources"
+
+[tasks.advisories]
+description = "Check dependencies for security advisories"
+run = "cargo deny check advisories"
