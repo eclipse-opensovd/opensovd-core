@@ -1,8 +1,11 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 Contributors to the Eclipse Foundation
 # SPDX-License-Identifier: Apache-2.0
 
+min_version = "2026.9.18"
+
 [settings]
 idiomatic_version_file_enable_tools = ["rust"]
+lockfile_platforms = ["linux-x64", "linux-arm64", "macos-arm64", "windows-x64"]
 
 [tools]
 python = "3.13.15"
