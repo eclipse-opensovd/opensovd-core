@@ -3,9 +3,11 @@
 
 """Reusable pytest plugin and helpers for OpenSOVD end-to-end binary tests."""
 
+from opensovd_e2e.netns import NetworkNamespace
 from opensovd_e2e.process import ProcessUnderTest, spawn_process
 
 __all__ = [
+    "NetworkNamespace",
     "ProcessUnderTest",
     "spawn_process",
 ]
