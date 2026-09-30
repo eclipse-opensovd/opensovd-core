@@ -46,7 +46,9 @@ updates:
       prefix: "chore(deps)"
 
   - package-ecosystem: docker
-    directory: /docker
+    directories:
+      - /docker
+      - /.devcontainer
     schedule:
       interval: monthly
     groups:
