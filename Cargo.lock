@@ -1483,6 +1483,7 @@ dependencies = [
  "schemars",
  "sd-notify",
  "serde",
+ "socket2",
  "tokio",
  "tower",
  "tower-http",
