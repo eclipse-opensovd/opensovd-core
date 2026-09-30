@@ -121,7 +121,7 @@ impl<Conn, Layers> ClientBuilder<Conn, Layers> {
     /// Returns [`BuilderError::NoBaseUri`] if the base URI has not been set.
     pub fn build<ResBody>(self) -> std::result::Result<Client, BuilderError>
     where
-        Conn: hyper_util::client::legacy::connect::Connect + Clone + Send + Sync + 'static,
+        Conn: legacy::connect::Connect + Clone + Send + Sync + 'static,
         Layers: Layer<legacy::Client<Conn, Full<Bytes>>> + Clone + Send + Sync + 'static,
         Layers::Service: Service<http::Request<Full<Bytes>>, Response = http::Response<ResBody>>
             + Clone
@@ -162,7 +162,7 @@ impl<Conn, Layers> ClientBuilder<Conn, Layers> {
     /// Returns [`BuilderError::NoBaseUri`] if the base URI has not been set.
     pub fn discovery<ResBody>(self) -> std::result::Result<Discovery, BuilderError>
     where
-        Conn: hyper_util::client::legacy::connect::Connect + Clone + Send + Sync + 'static,
+        Conn: legacy::connect::Connect + Clone + Send + Sync + 'static,
         Layers: Layer<legacy::Client<Conn, Full<Bytes>>> + Clone + Send + Sync + 'static,
         Layers::Service: Service<http::Request<Full<Bytes>>, Response = http::Response<ResBody>>
             + Clone

@@ -39,7 +39,7 @@ struct TempFsBulkDataProvider {
 }
 
 impl TempFsBulkDataProvider {
-    fn validate_segment(kind: &str, value: &str) -> std::result::Result<(), BulkDataError> {
+    fn validate_segment(kind: &str, value: &str) -> Result<(), BulkDataError> {
         if value.is_empty()
             || value == "."
             || value == ".."
@@ -53,24 +53,17 @@ impl TempFsBulkDataProvider {
         Ok(())
     }
 
-    fn category_path(&self, category_id: &str) -> std::result::Result<PathBuf, BulkDataError> {
+    fn category_path(&self, category_id: &str) -> Result<PathBuf, BulkDataError> {
         Self::validate_segment("category", category_id)?;
         Ok(self.root.path().join(category_id))
     }
 
-    fn data_path(
-        &self,
-        category_id: &str,
-        data_id: &str,
-    ) -> std::result::Result<PathBuf, BulkDataError> {
+    fn data_path(&self, category_id: &str, data_id: &str) -> Result<PathBuf, BulkDataError> {
         Self::validate_segment("data id", data_id)?;
         Ok(self.category_path(category_id)?.join(data_id))
     }
 
-    async fn ensure_category_dir(
-        &self,
-        category_id: &str,
-    ) -> std::result::Result<PathBuf, BulkDataError> {
+    async fn ensure_category_dir(&self, category_id: &str) -> Result<PathBuf, BulkDataError> {
         let category_path = self.category_path(category_id)?;
         tokio::fs::create_dir_all(&category_path)
             .await
@@ -107,7 +100,7 @@ impl TempFsBulkDataProvider {
     async fn file_metadata(
         &self,
         entry: &tokio::fs::DirEntry,
-    ) -> std::result::Result<Option<BulkDataMetadata>, BulkDataError> {
+    ) -> Result<Option<BulkDataMetadata>, BulkDataError> {
         let file_type = entry
             .file_type()
             .await
@@ -142,7 +135,7 @@ impl TempFsBulkDataProvider {
 
 #[async_trait]
 impl BulkDataProvider for TempFsBulkDataProvider {
-    async fn categories(&self) -> std::result::Result<Vec<CategoryInfo>, BulkDataError> {
+    async fn categories(&self) -> Result<Vec<CategoryInfo>, BulkDataError> {
         let mut entries = tokio::fs::read_dir(self.root.path())
             .await
             .map_err(|error| BulkDataError::Internal(error.to_string()))?;
@@ -173,7 +166,7 @@ impl BulkDataProvider for TempFsBulkDataProvider {
         &self,
         category_id: &str,
         filter: CategoryFilter,
-    ) -> std::result::Result<Vec<BulkDataMetadata>, BulkDataError> {
+    ) -> Result<Vec<BulkDataMetadata>, BulkDataError> {
         let category_path = self.category_path(category_id)?;
         let mut entries = match tokio::fs::read_dir(&category_path).await {
             Ok(entries) => entries,
@@ -198,11 +191,7 @@ impl BulkDataProvider for TempFsBulkDataProvider {
         Ok(items)
     }
 
-    async fn download(
-        &self,
-        category_id: &str,
-        data_id: &str,
-    ) -> std::result::Result<BulkData, BulkDataError> {
+    async fn download(&self, category_id: &str, data_id: &str) -> Result<BulkData, BulkDataError> {
         let path = self.data_path(category_id, data_id)?;
         let file = tokio::fs::File::open(&path).await.map_err(|error| {
             if error.kind() == std::io::ErrorKind::NotFound {
@@ -236,9 +225,9 @@ impl BulkDataProvider for TempFsBulkDataProvider {
         category_id: &str,
         data_id: &str,
         _size: u64,
-        data: &mut (dyn Stream<Item = std::result::Result<Bytes, BulkDataError>> + Send + Unpin),
+        data: &mut (dyn Stream<Item = Result<Bytes, BulkDataError>> + Send + Unpin),
         _signature: Option<&String>,
-    ) -> std::result::Result<(), BulkDataError> {
+    ) -> Result<(), BulkDataError> {
         let _category_path = self.ensure_category_dir(category_id).await?;
         let path = self.data_path(category_id, data_id)?;
         let temp_path = self.data_path(category_id, &format!("{data_id}.tmp"))?;
@@ -263,11 +252,7 @@ impl BulkDataProvider for TempFsBulkDataProvider {
         Ok(())
     }
 
-    async fn delete(
-        &self,
-        category_id: &str,
-        data_id: &str,
-    ) -> std::result::Result<(), BulkDataError> {
+    async fn delete(&self, category_id: &str, data_id: &str) -> Result<(), BulkDataError> {
         let path = self.data_path(category_id, data_id)?;
         tokio::fs::remove_file(&path).await.map_err(|error| {
             if error.kind() == std::io::ErrorKind::NotFound {

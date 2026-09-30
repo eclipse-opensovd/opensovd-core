@@ -36,7 +36,7 @@ where
 pub(super) async fn component_list(
     State(topology): State<Topology>,
     parts: Parts,
-    axum_extra::extract::Query(query): axum_extra::extract::Query<EntitiesQuery>,
+    Query(query): Query<EntitiesQuery>,
 ) -> Result<Json<Response<Entities>>> {
     let base = super::super::versioned_uri(&parts);
     let items = topology
@@ -142,7 +142,7 @@ pub(super) async fn component_hosts(
     State(topology): State<Topology>,
     Path(component_id): Path<String>,
     parts: Parts,
-    axum_extra::extract::Query(query): axum_extra::extract::Query<EntitiesQuery>,
+    Query(query): Query<EntitiesQuery>,
 ) -> Result<Json<Response<Entities>>> {
     // Verify component exists and get hosted apps atomically
     let topo = topology.read().await;
@@ -256,7 +256,7 @@ mod tests {
             .body(Body::empty())
             .unwrap();
         let response = app.clone().oneshot(request).await.unwrap();
-        assert_eq!(response.status(), axum::http::StatusCode::OK);
+        assert_eq!(response.status(), http::StatusCode::OK);
         let body = response.into_body().collect().await.unwrap().to_bytes();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["items"], serde_json::json!([]));
