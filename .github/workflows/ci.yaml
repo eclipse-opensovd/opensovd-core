@@ -133,6 +133,10 @@ jobs:
       - if: ${{ !matrix.target.coverage && contains(matrix.target.tests, 'unit') }}
         run: mise run test:unit ${{ matrix.binary }}
 
+      - if: contains(matrix.target.tests, 'integration')
+        name: Allow unprivileged user namespaces for the network namespace tests
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
       - if: ${{ !matrix.target.coverage && contains(matrix.target.tests, 'integration') }}
         env:
           CARGO_BUILD_TARGET: ${{ matrix.target.triple }}

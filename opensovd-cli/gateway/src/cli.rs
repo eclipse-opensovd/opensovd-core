@@ -7,7 +7,7 @@ use std::path::PathBuf;
 
 #[cfg(feature = "tls")]
 use clap::ValueEnum;
-use clap::{Args, Parser};
+use clap::{Args, CommandFactory, FromArgMatches, Parser};
 
 pub const ABOUT: &str = "OpenSOVD Gateway Server";
 const DEFAULT_URL: &str = "http://localhost:7690/sovd";
@@ -38,6 +38,9 @@ Examples:
 
   # Listen on an abstract Unix socket
   opensovd-gateway --unix-socket @opensovd
+
+  # Announce via mDNS on the diagnostic port
+  opensovd-gateway --url http://0.0.0.0:7690/sovd --mdns ABC123456789 --mdns-interface eth1
 ")]
 pub struct Cli {
     /// Server URL including base URI path (e.g., http://host:port/path).
@@ -64,6 +67,10 @@ pub struct Cli {
     #[cfg(feature = "tls")]
     #[command(flatten)]
     pub tls: TlsArgs,
+
+    #[cfg(feature = "mdns")]
+    #[command(flatten)]
+    pub mdns: MdnsArgs,
 
     /// Enable mock entities for testing and development.
     #[arg(help_heading = "Options")]
@@ -170,6 +177,104 @@ impl TlsArgs {
                 .client_auth(self.client_auth.into()),
         )
     }
+}
+
+#[cfg(feature = "mdns")]
+#[derive(Args)]
+#[command(next_help_heading = "mDNS Options")]
+pub struct MdnsArgs {
+    /// Announce via mDNS with this vehicle identification, e.g. the VIN.
+    #[arg(id = "mdns", long = "mdns", value_name = "ID", env = "SOVD_MDNS")]
+    identification: Option<String>,
+
+    /// Host label published as HOST.local. Derived from the identification by
+    /// default.
+    #[arg(
+        id = "mdns_host",
+        long = "mdns-host",
+        value_name = "HOST",
+        env = "SOVD_MDNS_HOST"
+    )]
+    pub host: Option<String>,
+
+    /// Announce only on these network interfaces (comma-separated).
+    #[arg(
+        id = "mdns_interface",
+        long = "mdns-interface",
+        value_name = "IFNAME",
+        env = "SOVD_MDNS_INTERFACE",
+        value_delimiter = ','
+    )]
+    interfaces: Vec<String>,
+}
+
+#[cfg(feature = "mdns")]
+impl MdnsArgs {
+    /// The identification, or `None` when mDNS is disabled.
+    pub fn identification(&self) -> Option<&str> {
+        self.identification
+            .as_deref()
+            .map(str::trim)
+            .filter(|id| !id.is_empty())
+    }
+
+    /// The interface names, trimmed.
+    pub fn interfaces(&self) -> impl Iterator<Item = &str> {
+        self.interfaces.iter().map(|name| name.trim())
+    }
+}
+
+/// Parses the command line and checks rules that clap cannot express.
+pub fn parse() -> Cli {
+    let mut cmd = Cli::command();
+    let matches = cmd.get_matches_mut();
+    let cli = Cli::from_arg_matches(&matches).unwrap_or_else(|e| e.format(&mut cmd).exit());
+    #[cfg(feature = "mdns")]
+    if let Err(e) = check_mdns(&cli, &matches) {
+        cmd.error(e.0, e.1).exit();
+    }
+    cli
+}
+
+#[cfg(feature = "mdns")]
+fn check_mdns(
+    cli: &Cli,
+    matches: &clap::ArgMatches,
+) -> Result<(), (clap::error::ErrorKind, String)> {
+    use clap::error::ErrorKind;
+    use clap::parser::ValueSource;
+
+    let invalid = |arg: &str, value: &str, reason: &dyn std::fmt::Display| {
+        (
+            ErrorKind::ValueValidation,
+            format!("invalid value '{value}' for '{arg}': {reason}"),
+        )
+    };
+    let enabled = cli.mdns.identification().is_some();
+    #[cfg(unix)]
+    if enabled && cli.unix_socket.is_some() {
+        return Err((
+            ErrorKind::ArgumentConflict,
+            "--mdns cannot be used with --unix-socket".to_owned(),
+        ));
+    }
+    if !enabled {
+        for (id, msg) in [
+            ("mdns_host", "--mdns-host requires --mdns"),
+            ("mdns_interface", "--mdns-interface requires --mdns"),
+        ] {
+            if matches.value_source(id) == Some(ValueSource::CommandLine) {
+                return Err((ErrorKind::MissingRequiredArgument, msg.to_owned()));
+            }
+        }
+        return Ok(());
+    }
+    if cli.mdns.interfaces().any(str::is_empty) {
+        let names = cli.mdns.interfaces.join(",");
+        let reason = "interface name must not be empty";
+        return Err(invalid("--mdns-interface <IFNAME>", &names, &reason));
+    }
+    Ok(())
 }
 
 #[derive(Args)]

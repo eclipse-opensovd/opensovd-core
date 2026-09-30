@@ -7,11 +7,11 @@ mod cli;
 mod cors;
 mod serve_dir;
 
+use std::net::SocketAddr;
 use std::process::ExitCode;
 
 use anyhow::Context;
 use base64::Engine;
-use clap::Parser;
 use opensovd_core::Topology;
 use opensovd_extra::{JwtAlgorithm, JwtAuthenticator, RegorusAuthorizer};
 #[cfg(feature = "mock")]
@@ -40,9 +40,9 @@ const VENDOR_INFO: OpenSovdInfo = OpenSovdInfo {
 #[tokio::main(flavor = "current_thread")]
 #[expect(clippy::print_stderr)]
 async fn main() -> ExitCode {
-    let cli = cli::Cli::parse();
+    let cli = cli::parse();
 
-    if let Err(e) = libcli::init_tracing("warn,gw=info,srv=info,tower_http=debug", None) {
+    if let Err(e) = libcli::init_tracing("warn,gw=info,srv=info,mdns=info,tower_http=debug", None) {
         eprintln!("Failed to initialize tracing: {e}");
         return ExitCode::FAILURE;
     }
@@ -128,12 +128,12 @@ where
         })?
         .as_str();
 
-    let mut builder = Server::builder()
+    let builder = Server::builder()
         .authenticator(authenticator)
         .authorizer(authorizer);
 
     #[cfg(feature = "tls")]
-    if let Some(tls) = cli.tls.config() {
+    let (builder, tls) = if let Some(tls) = cli.tls.config() {
         anyhow::ensure!(
             uri.scheme_str() == Some("https"),
             "--tls-cert requires an https:// --url"
@@ -141,11 +141,20 @@ where
         let mtls = tls.is_mtls();
         let config = tls.build().context("failed to configure TLS")?;
         tracing::info!(target: TARGET, mtls, "TLS enabled");
-        builder = builder.tls(config);
-    }
+        (builder.tls(config), true)
+    } else {
+        (builder, false)
+    };
+    #[cfg(not(feature = "tls"))]
+    let tls = false;
 
-    builder = configure_listener(builder, &cli, authority).await?;
+    let (mut builder, local_addr) = configure_listener(builder, &cli, authority).await?;
     builder = configure_topology(builder, &cli).await;
+
+    #[cfg(feature = "mdns")]
+    let mdns = configure_mdns(cli.mdns, local_addr, &uri, tls)?;
+    #[cfg(not(feature = "mdns"))]
+    let _ = (local_addr.map(|b| (b.addr, b.v6_only, b.activated)), tls);
 
     let cors = cors::create_cors_layer(
         &cli.cors.origins,
@@ -173,12 +182,36 @@ where
         tracing::info!(target: TARGET, path = %path, dir = %dir, "Serving static files");
     }
 
+    #[cfg(feature = "mdns")]
+    let (announcer_tx, announcer_rx) =
+        tokio::sync::oneshot::channel::<Option<opensovd_extra::MdnsAnnouncer>>();
+    builder = builder.shutdown(async move {
+        libcli::shutdown_signal().await;
+        #[cfg(feature = "mdns")]
+        if let Ok(Some(announcer)) = announcer_rx.await {
+            announcer.shutdown().await;
+        }
+    });
+
     let server = builder
         .layer(opensovd_extra::trace::server_layer())
         .layer(tower::util::option_layer(cors))
         .base_uri(uri)?
         .vendor_info(VENDOR_INFO)
         .build()?;
+
+    #[cfg(feature = "mdns")]
+    {
+        let announcer = match mdns {
+            Some(mdns) => Some(
+                mdns.announce()
+                    .await
+                    .context("failed to announce via mDNS")?,
+            ),
+            None => None,
+        };
+        let _ = announcer_tx.send(announcer);
+    }
 
     notify_readiness();
     server.serve().await?;
@@ -187,12 +220,37 @@ where
     Ok(())
 }
 
+type Builder<Vendor, Authn, Authz, Layer> =
+    opensovd_server::ServerBuilder<Vendor, Authn, Authz, Layer>;
+
+#[derive(Clone, Copy)]
+struct Bound {
+    addr: SocketAddr,
+    v6_only: bool,
+    activated: bool,
+}
+
+impl Bound {
+    fn of(listener: &tokio::net::TcpListener, activated: bool) -> std::io::Result<Self> {
+        let addr = listener.local_addr()?;
+        #[cfg(feature = "mdns")]
+        let v6_only = addr.is_ipv6() && socket2::SockRef::from(listener).only_v6()?;
+        #[cfg(not(feature = "mdns"))]
+        let v6_only = false;
+        Ok(Self {
+            addr,
+            v6_only,
+            activated,
+        })
+    }
+}
+
 #[cfg(unix)]
 async fn configure_listener<Vendor, Authn, Authz, Layer>(
-    builder: opensovd_server::ServerBuilder<Vendor, Authn, Authz, Layer>,
+    builder: Builder<Vendor, Authn, Authz, Layer>,
     cli: &cli::Cli,
     authority: &str,
-) -> anyhow::Result<opensovd_server::ServerBuilder<Vendor, Authn, Authz, Layer>> {
+) -> anyhow::Result<(Builder<Vendor, Authn, Authz, Layer>, Option<Bound>)> {
     #[cfg(target_os = "linux")]
     if let Some(fd) = sd_notify::listen_fds()?.next() {
         use std::os::fd::FromRawFd;
@@ -201,7 +259,8 @@ async fn configure_listener<Vendor, Authn, Authz, Layer>(
         let std_listener = unsafe { std::net::TcpListener::from_raw_fd(fd) };
         std_listener.set_nonblocking(true)?;
         let listener = tokio::net::TcpListener::from_std(std_listener)?;
-        return Ok(builder.listener(listener));
+        let bound = Bound::of(&listener, true)?;
+        return Ok((builder.listener(listener), Some(bound)));
     }
 
     if let Some(ref socket_path) = cli.unix_socket {
@@ -227,25 +286,72 @@ async fn configure_listener<Vendor, Authn, Authz, Layer>(
         let listener = UnixListener::bind(socket_path)
             .with_context(|| format!("failed to bind unix socket {socket_path}"))?;
 
-        return Ok(builder.listener(listener));
+        return Ok((builder.listener(listener), None));
     }
 
-    let listener = tokio::net::TcpListener::bind(authority)
-        .await
-        .with_context(|| format!("failed to bind {authority}"))?;
-    Ok(builder.listener(listener))
+    bind_tcp(builder, authority).await
 }
 
 #[cfg(not(unix))]
 async fn configure_listener<Vendor, Authn, Authz, Layer>(
-    builder: opensovd_server::ServerBuilder<Vendor, Authn, Authz, Layer>,
+    builder: Builder<Vendor, Authn, Authz, Layer>,
     _cli: &cli::Cli,
     authority: &str,
-) -> anyhow::Result<opensovd_server::ServerBuilder<Vendor, Authn, Authz, Layer>> {
+) -> anyhow::Result<(Builder<Vendor, Authn, Authz, Layer>, Option<Bound>)> {
+    bind_tcp(builder, authority).await
+}
+
+async fn bind_tcp<Vendor, Authn, Authz, Layer>(
+    builder: Builder<Vendor, Authn, Authz, Layer>,
+    authority: &str,
+) -> anyhow::Result<(Builder<Vendor, Authn, Authz, Layer>, Option<Bound>)> {
     let listener = tokio::net::TcpListener::bind(authority)
         .await
         .with_context(|| format!("failed to bind {authority}"))?;
-    Ok(builder.listener(listener))
+    let bound = Bound::of(&listener, false)?;
+    Ok((builder.listener(listener), Some(bound)))
+}
+
+#[cfg(feature = "mdns")]
+fn configure_mdns(
+    args: cli::MdnsArgs,
+    bound: Option<Bound>,
+    uri: &http::Uri,
+    tls: bool,
+) -> anyhow::Result<Option<opensovd_extra::Announcement>> {
+    let Some(identification) = args.identification().map(str::to_owned) else {
+        return Ok(None);
+    };
+    let Bound {
+        addr,
+        v6_only,
+        activated,
+    } = bound.context("--mdns requires a TCP listener")?;
+    if addr.ip().to_canonical().is_loopback() {
+        let hint = if activated {
+            "set ListenStream in the systemd socket unit"
+        } else {
+            "bind --url"
+        };
+        anyhow::bail!(
+            "--mdns cannot announce the loopback address {}; {hint} to 0.0.0.0 or an interface address",
+            addr.ip()
+        );
+    }
+    anyhow::ensure!(
+        tls || uri.scheme_str() != Some("https"),
+        "--mdns with an https --url requires --tls-cert, since clients connect to the announced port directly"
+    );
+
+    let mut announcement = opensovd_extra::Announcement::new(addr)
+        .identification(identification)
+        .access(if tls { "https" } else { "http" }, uri.path())
+        .interfaces(args.interfaces())
+        .ipv6_only(v6_only);
+    if let Some(host) = args.host {
+        announcement = announcement.host(host);
+    }
+    Ok(Some(announcement))
 }
 
 #[cfg_attr(not(feature = "mock"), expect(clippy::unused_async))]
