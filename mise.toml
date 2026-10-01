@@ -32,7 +32,7 @@ depends = ["lint", "build", "test", "licenses", "advisories"]
 
 [tasks.build]
 description = "Build the release binaries CI ships"
-run = "cargo build --locked --profile release-small"
+run = ["cargo build --locked --profile release-small -p opensovd-gateway", "cargo build --locked --profile release-small -p opensovd-mcp"]
 
 [tasks.lint]
 description = "Run the git hooks on all files"

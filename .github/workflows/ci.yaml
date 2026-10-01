@@ -114,11 +114,11 @@ jobs:
           tools: ${{ matrix.tools }}
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: ci
           cache-on-failure: true
 
-      - shell: bash
-        run: mise run build -- --target ${{ matrix.target }}
+      - env:
+          CARGO_BUILD_TARGET: ${{ matrix.target }}
+        run: mise run build
 
       - if: contains(matrix.tests, 'unit')
         run: mise run test:unit
@@ -190,7 +190,6 @@ jobs:
       - uses: ./.github/actions/mise
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: ci
           cache-on-failure: true
       # Cache prek hooks
       - uses: actions/cache@v6
@@ -238,7 +237,6 @@ jobs:
       - uses: ./.github/actions/mise
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: ci
           cache-on-failure: true
 
       # --opensovd-coverage sets up cargo-llvm-cov instrumentation and writes the
