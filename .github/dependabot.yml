@@ -46,11 +46,27 @@ updates:
       prefix: "chore(deps)"
 
   - package-ecosystem: docker
-    directory: /docker
+    directories:
+      - /docker
+      - /.devcontainer
     schedule:
       interval: monthly
     groups:
       docker:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+    commit-message:
+      prefix: "chore(deps)"
+
+  - package-ecosystem: pre-commit
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      pre-commit:
         patterns:
           - "*"
         update-types:

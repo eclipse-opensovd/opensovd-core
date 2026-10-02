@@ -1,0 +1,72 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 Contributors to the Eclipse Foundation
+# SPDX-License-Identifier: Apache-2.0
+
+min_version = "2026.9.18"
+
+[settings]
+idiomatic_version_file_enable_tools = ["rust"]
+lockfile_platforms = ["linux-x64", "linux-arm64", "macos-arm64", "windows-x64"]
+
+[tools]
+python = "3.13.15"
+uv = "0.12.17"
+prek = "0.5.4"
+ruff = "0.16.9"
+ty = "0.0.84"
+"github:convco/convco" = "0.6.3"
+cargo-deny = "0.20.2"
+"github:taiki-e/cargo-llvm-cov" = "0.9.0"
+git-cliff = "2.14.1"
+gh = "2.102.0"
+jq = "1.8.2"
+node = "24.21.0"
+"npm:@usebruno/cli" = "4.0.0"
+
+[env]
+UV_PYTHON = { value = "{% if tools.python %}{{ tools.python.path }}{% endif %}", tools = true }
+UV_PYTHON_DOWNLOADS = "never"
+
+[tasks.ci]
+description = "Run the checks CI runs"
+depends = ["lint", "build", "test", "licenses", "advisories"]
+
+[tasks.build]
+description = "Build the release binaries CI ships"
+run = ["cargo build --locked --profile release-small -p opensovd-gateway", "cargo build --locked --profile release-small -p opensovd-mcp"]
+
+[tasks.lint]
+description = "Run the git hooks on all files"
+run = "prek run --all-files --show-diff-on-failure"
+
+[tasks.fmt]
+description = "Check formatting with the pinned nightly rustfmt"
+tools = { rust = { version = "nightly-2026-05-07", profile = "minimal", components = "rustfmt" } }
+run = "cargo fmt --all -- --check"
+
+[tasks.test]
+description = "Run all tests"
+depends = ["test:unit", "test:self", "test:integration"]
+
+[tasks."test:unit"]
+description = "Run the Rust tests"
+run = "cargo test --locked --workspace --all-features"
+
+[tasks."test:self"]
+description = "Run the pytest plugin self-tests"
+run = "uv run --locked pytest opensovd-e2e/tests"
+
+[tasks."test:integration"]
+description = "Run the e2e tests"
+run = "uv run --locked pytest tests/ --ignore=tests/test_rust.py"
+
+[tasks.coverage]
+description = "Collect Rust and e2e coverage"
+run = "uv run --locked pytest tests/ --opensovd-coverage"
+
+[tasks.licenses]
+description = "Check dependency licenses and sources"
+run = "cargo deny check licenses sources"
+
+[tasks.advisories]
+description = "Check dependencies for security advisories"
+run = "cargo deny check advisories"
