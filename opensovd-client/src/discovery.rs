@@ -81,6 +81,7 @@ impl Discovery {
         Ok(Client {
             base_uri: advertised.parse()?,
             timeout: self.inner.timeout,
+            auth: self.inner.auth.clone(),
             http: self.inner.http.clone(),
         })
     }
