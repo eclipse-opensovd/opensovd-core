@@ -1397,6 +1397,7 @@ name = "opensovd-extra"
 version = "0.1.1"
 dependencies = [
  "aws-lc-rs",
+ "axum",
  "base64 0.23.1",
  "http",
  "jsonwebtoken",

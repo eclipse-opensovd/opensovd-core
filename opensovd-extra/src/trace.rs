@@ -71,6 +71,7 @@ mod logs {
     use std::marker::PhantomData;
     use std::time::Duration;
 
+    use axum::extract::MatchedPath;
     use http::{Request, Response};
     use tower_http::classify::ServerErrorsFailureClass;
     use tower_http::trace::{MakeSpan, OnFailure, OnRequest, OnResponse};
@@ -93,10 +94,12 @@ mod logs {
 
     impl Logs for ServerLayer {
         fn span<B>(req: &Request<B>) -> Span {
+            let route = req.extensions().get::<MatchedPath>();
             tracing::info_span!(
                 target: SERVER_TARGET,
                 "http",
                 method = %req.method(),
+                route = route.map(|r| tracing::field::display(r.as_str())),
                 uri = %req.uri(),
                 status = Empty,
                 latency_us = Empty,

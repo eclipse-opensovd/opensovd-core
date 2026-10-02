@@ -16,10 +16,11 @@ categories.workspace = true
 unit = ["dep:serde"]
 auth = ["dep:jsonwebtoken", "dep:regorus", "dep:serde", "dep:serde_json", "dep:http", "dep:tracing", "dep:opensovd-server"]
 tls = ["dep:rustls", "dep:thiserror"]
-trace = ["dep:http", "dep:tower", "dep:tower-http", "dep:tracing"]
+trace = ["dep:axum", "dep:http", "dep:tower", "dep:tower-http", "dep:tracing"]
 
 [dependencies]
 opensovd-server = { workspace = true, optional = true }
+axum = { workspace = true, optional = true, features = ["matched-path"] }
 jsonwebtoken = { workspace = true, optional = true }
 regorus = { workspace = true, optional = true }
 serde = { workspace = true, optional = true, features = ["derive", "std"] }
