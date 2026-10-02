@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #![cfg_attr(coverage_nightly, feature(coverage_attribute))]
-#![allow(unsafe_code)]
 
 use axum::Router;
 use axum::extract::ConnectInfo as AxumConnectInfo;
@@ -62,6 +61,7 @@ async fn test_tcp_connect_info() {
 
 #[cfg(target_os = "linux")]
 #[cfg_attr(coverage_nightly, coverage(off))]
+#[expect(unsafe_code)]
 #[tokio::test]
 async fn test_uds_connect_info() {
     use tokio::net::UnixStream;

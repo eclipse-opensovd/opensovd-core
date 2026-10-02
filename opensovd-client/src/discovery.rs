@@ -31,6 +31,10 @@ impl Discovery {
     /// The first call fetches `/version-info`; later calls reuse the cached response.
     /// `V` is the `vendor_info` payload type
     /// ([`VendorInfo`](opensovd_models::version::VendorInfo) for the default shape).
+    #[expect(
+        clippy::allow_attributes,
+        reason = "error size depends on serde_json/preserve_order"
+    )]
     #[allow(clippy::result_large_err)]
     pub async fn versions<V: DeserializeOwned>(&self) -> Result<Vec<SovdInfo<V>>> {
         let info = self

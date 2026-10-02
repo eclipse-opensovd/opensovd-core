@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 Contributors to the Eclipse Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-#![allow(clippy::indexing_slicing)]
+#![expect(clippy::indexing_slicing)]
 
 mod common;
 
@@ -14,7 +14,7 @@ use opensovd_server::Server;
 use tokio::time::Duration;
 
 // not a #[test] fn, so the test-only unwrap allowance does not apply here
-#[allow(clippy::unwrap_used)]
+#[expect(clippy::unwrap_used)]
 async fn advertised_base_uri(server: &common::TestServer, path: &str) -> String {
     let client = common::client();
     let request = Request::builder()

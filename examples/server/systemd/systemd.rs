@@ -30,7 +30,7 @@ mod systemd {
             .ok_or("no socket from systemd, use: systemd-socket-activate -l 8080")?;
 
         // SAFETY: fd is valid and owned, provided by systemd socket activation
-        #[allow(unsafe_code)]
+        #[expect(unsafe_code)]
         let std_listener = unsafe { std::net::TcpListener::from_raw_fd(fd) };
         std_listener.set_nonblocking(true)?;
         let listener = TcpListener::from_std(std_listener)?;

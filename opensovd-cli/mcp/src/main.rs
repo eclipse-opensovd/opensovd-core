@@ -26,7 +26,7 @@ const TARGET: &str = "srv";
 
 const TOPOLOGY_URI: &str = "sovd://topology";
 
-#[allow(clippy::needless_pass_by_value)]
+#[expect(clippy::needless_pass_by_value)]
 fn internal(e: impl ToString) -> McpError {
     McpError::internal_error(e.to_string(), None)
 }
@@ -195,7 +195,7 @@ impl ServerHandler for McpServer {
 }
 
 #[tokio::main(flavor = "current_thread")]
-#[allow(clippy::print_stderr)]
+#[expect(clippy::print_stderr)]
 async fn main() -> ExitCode {
     let cli = cli::Cli::parse();
 

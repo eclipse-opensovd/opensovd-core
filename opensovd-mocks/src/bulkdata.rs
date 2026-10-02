@@ -25,7 +25,7 @@ pub struct InMemoryBulkDataProvider {
     permanent: Arc<RwLock<HashSet<(String, String)>>>,
 }
 
-#[allow(clippy::unwrap_used)]
+#[expect(clippy::unwrap_used)]
 impl InMemoryBulkDataProvider {
     /// Adds an entry that is always present and can never be deleted.
     ///
@@ -56,7 +56,7 @@ impl InMemoryBulkDataProvider {
 }
 
 #[async_trait]
-#[allow(clippy::unwrap_used)]
+#[expect(clippy::unwrap_used)]
 impl BulkDataProvider for InMemoryBulkDataProvider {
     async fn categories(&self) -> Result<Vec<CategoryInfo>, BulkDataError> {
         let store = self.store.read().unwrap();
