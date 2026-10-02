@@ -38,6 +38,22 @@ curl -s http://127.0.0.1:7690/sovd/version-info | jq
 }
 ```
 
+### Talk to the vehicle through an AI agent
+
+The [MCP server](opensovd-cli/mcp/README.md) lets any MCP-capable agent query the gateway. Register the container with your agent, for example Claude Code:
+
+```bash
+claude mcp add --transport stdio sovd -- \
+    docker run -i --rm --network=host ghcr.io/eclipse-opensovd/opensovd-mcp \
+    --url http://127.0.0.1:7690/sovd/v1
+```
+
+Then ask about the vehicle in plain language:
+
+![An agent asking the mock gateway for the vehicle topology](opensovd-cli/mcp/demo/pi.gif)
+
+See the [MCP server README](opensovd-cli/mcp/README.md) for other agents.
+
 ## Development
 
 ### Prerequisites
