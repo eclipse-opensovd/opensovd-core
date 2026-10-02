@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 Contributors to the Eclipse Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use opensovd_models::GenericError;
+use opensovd_models::ErrorDetails;
 
 /// Client error type.
 #[derive(Debug, thiserror::Error)]
@@ -12,12 +12,12 @@ pub enum Error {
     NoMatchingVersion,
 
     /// Server returned a non-success status code.
-    #[error("server error {status}: {error:?}")]
+    #[error("server error {status}: {details:?}")]
     ApiError {
         /// HTTP status code.
         status: http::StatusCode,
-        /// Parsed SOVD error body, if available.
-        error: Option<GenericError>,
+        /// Parsed SOVD error details, if available.
+        details: Option<ErrorDetails>,
     },
 
     /// HTTP request construction error.

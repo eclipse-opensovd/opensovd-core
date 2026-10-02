@@ -41,9 +41,12 @@ async fn http_error_status() {
     let client = mock_client(builder.build());
     let err = client.list_components().send().await.unwrap_err();
     match err {
-        opensovd_client::Error::ApiError { status, error } => {
+        opensovd_client::Error::ApiError { status, details } => {
             assert_eq!(status.as_u16(), 404);
-            assert!(error.is_some());
+            assert!(matches!(
+                details,
+                Some(opensovd_client::ErrorDetails::Generic(_))
+            ));
         }
         other => panic!("unexpected error: {other:?}"),
     }

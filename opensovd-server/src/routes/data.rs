@@ -225,7 +225,7 @@ async fn component_data_read(
 async fn component_data_write(
     State(topology): State<Topology>,
     Path((component_id, data_id)): Path<(String, String)>,
-    Json(body): Json<WriteRequest>,
+    WithRejection(Json(body), _): WithRejection<Json<WriteRequest>, Error>,
 ) -> Result<StatusCode> {
     let topo = topology.read().await;
     let entity = topo
@@ -381,7 +381,7 @@ async fn app_data_read(
 async fn app_data_write(
     State(topology): State<Topology>,
     Path((app_id, data_id)): Path<(String, String)>,
-    Json(body): Json<WriteRequest>,
+    WithRejection(Json(body), _): WithRejection<Json<WriteRequest>, Error>,
 ) -> Result<StatusCode> {
     let topo = topology.read().await;
     let entity = topo
