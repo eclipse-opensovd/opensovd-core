@@ -25,6 +25,16 @@
 //! - GET /components/{component_id}/data/{data_id} - Read a data value
 //! - PUT /components/{component_id}/data/{data_id} - Write a data value
 //!
+//! ## Software-Updates
+//! - GET    /updates
+//! - POST   /updates
+//! - GET    /updates/{update-package-id}
+//! - DELETE /updates/{update-package-id}
+//! - GET    /updates/{update-package-id}/status
+//! - PUT    /updates/{update-package-id}/automated
+//! - PUT    /updates/{update-package-id}/execute
+//! - PUT    /updates/{update-package-id}/prepare
+//!
 //! ## Version
 //! - GET /version-info - Get SOVD server version information
 
@@ -32,6 +42,7 @@ mod bulkdata;
 mod data;
 mod entities;
 mod error;
+mod updates;
 mod version;
 
 use axum::{
@@ -41,15 +52,19 @@ use axum::{
 };
 use http::header::HOST;
 use opensovd_core::Topology;
+use opensovd_models::updates::{UpdateDetail, UpdateStatus};
 pub use opensovd_models::version::{VendorInfo, VersionInfo};
 use serde::Serialize;
 
 use crate::schema::JsonSchema;
 
+pub type Updates = opensovd_core::Updates<UpdateDetail, UpdateStatus>;
+
 #[derive(Clone)]
 pub struct AppState<V> {
     pub vendor_info: Option<V>,
     pub topology: Topology,
+    pub updates: Updates,
 }
 
 impl<V> FromRef<AppState<V>> for Topology {
@@ -107,7 +122,12 @@ pub(crate) fn versioned_uri(parts: &Parts) -> String {
     format!("{}/{API_VERSION}", base_uri(parts))
 }
 
-pub fn router<V>(vendor_info: Option<V>, topology: Topology, base_uri: BaseUri) -> Router
+pub fn router<V>(
+    vendor_info: Option<V>,
+    topology: Topology,
+    base_uri: BaseUri,
+    updates: Updates,
+) -> Router
 where
     V: Serialize + Clone + Send + Sync + 'static,
     VersionInfo<V>: JsonSchema,
@@ -115,12 +135,14 @@ where
     let state = AppState {
         vendor_info,
         topology,
+        updates,
     };
 
     let v1_routes = Router::new()
         .merge(entities::routes::<V>())
         .merge(bulkdata::routes::<V>())
-        .merge(data::routes::<V>());
+        .merge(data::routes::<V>())
+        .merge(updates::routes::<V>());
 
     let router = Router::new()
         .nest(&format!("/{API_VERSION}"), v1_routes)

@@ -8,6 +8,7 @@ pub mod data;
 pub mod discovery;
 pub mod error;
 pub mod types;
+pub mod updates;
 pub mod version;
 
 pub use error::{ErrorCode, GenericError};

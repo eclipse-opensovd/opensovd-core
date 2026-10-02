@@ -24,5 +24,6 @@ pub use connect_info::UdsConnectInfo;
 pub use connect_info::{ConnectInfo, TcpConnectInfo};
 pub use opensovd_core::{DataProvider, Topology};
 pub use opensovd_models::version::VendorInfo;
+pub use routes::Updates;
 pub use schema::JsonSchema;
 pub use server::{BuilderError, Listener, Server, ServerBuilder};

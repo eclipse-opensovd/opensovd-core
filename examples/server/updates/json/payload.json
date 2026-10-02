@@ -1,0 +1,4 @@
+{
+  "prepare": ["starting preparation", "finished preparation"],
+  "execute": ["executing update"]
+}

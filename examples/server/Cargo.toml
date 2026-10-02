@@ -24,6 +24,9 @@ path = "systemd/systemd.rs"
 name = "auth"
 path = "auth/auth.rs"
 
+[[example]]
+name = "updates"
+path = "updates/updates.rs"
 
 [[example]]
 name = "mtls"
@@ -46,10 +49,13 @@ opensovd-mocks = { workspace = true }
 opensovd-models = { workspace = true }
 opensovd-providers = { workspace = true }
 opensovd-server = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true, features = ["std"] }
 sysinfo = { workspace = true }
 tempfile = { workspace = true }
-tokio = { workspace = true, features = ["net", "rt-multi-thread", "macros", "fs", "io-util"] }
+tokio = { workspace = true, features = ["net", "rt-multi-thread", "macros", "fs", "io-util", "time"] }
 tracing = { workspace = true }
+uuid = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 sd-notify = { workspace = true }

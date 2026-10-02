@@ -10,6 +10,7 @@ mod data;
 mod discovery;
 mod entity;
 mod topology;
+mod updates;
 
 pub use bulkdata::{
     BulkData, BulkDataError, BulkDataMetadata, BulkDataProvider, CategoryFilter,
@@ -22,3 +23,7 @@ pub use data::{
 pub use discovery::{DiscoveryError, DiscoveryProvider, DiscoveryStream};
 pub use entity::{App, Area, Component, EntityCollection, EntityKind, EntityRef};
 pub use topology::{Topology, TopologyError, TopologyEvent, TopologyReadGuard, TopologyWriteGuard};
+pub use updates::{
+    ActiveUpdate, Phase, Status, UpdateDescriptor, UpdateError, UpdateFeedback, UpdateProvider,
+    Updates,
+};
