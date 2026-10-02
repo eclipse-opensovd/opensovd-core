@@ -25,16 +25,8 @@
 //! cargo run --example client -- --unix-socket @opensovd --url http://localhost/sovd
 //! ```
 
-use std::time::Duration;
-
-use bytes::Bytes;
 use clap::Parser;
-use http::{HeaderMap, Request, Response};
-use http_body_util::Full;
 use opensovd_client::{Client, Discovery, SovdInfo};
-use tower_http::classify::ServerErrorsFailureClass;
-use tower_http::trace::TraceLayer;
-use tracing::Span;
 
 #[derive(Parser)]
 #[command(name = "client")]
@@ -145,51 +137,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let discovery = Client::builder()
         .base_uri(&cli.url)?
-        .layer(
-            TraceLayer::new_for_http()
-                .make_span_with(|req: &Request<Full<Bytes>>| {
-                    tracing::debug_span!(
-                        target: "cli",
-                        "http",
-                        method = %req.method(),
-                        url = %req.uri(),
-                        status_code = tracing::field::Empty,
-                        latency_us = tracing::field::Empty,
-                    )
-                })
-                .on_request(|_req: &Request<Full<Bytes>>, _span: &Span| {
-                    tracing::debug!(target: "cli", "Requesting");
-                })
-                .on_response(
-                    |res: &Response<hyper::body::Incoming>, latency: Duration, span: &Span| {
-                        span.record("status_code", res.status().as_u16());
-                        span.record(
-                            "latency_us",
-                            u64::try_from(latency.as_micros()).unwrap_or(u64::MAX),
-                        );
-                    },
-                )
-                .on_eos(|_: Option<&HeaderMap>, _duration: Duration, _span: &Span| {
-                    tracing::debug!(target: "cli", "Stream closed");
-                })
-                .on_failure(
-                    |ec: ServerErrorsFailureClass, latency: Duration, span: &Span| {
-                        span.record(
-                            "latency_us",
-                            u64::try_from(latency.as_micros()).unwrap_or(u64::MAX),
-                        );
-                        match ec {
-                            ServerErrorsFailureClass::StatusCode(status) => {
-                                span.record("status_code", status.as_u16());
-                                tracing::error!(target: "cli", %status, "Request failed");
-                            }
-                            ServerErrorsFailureClass::Error(err) => {
-                                tracing::error!(target: "cli", error = %err, "Request failed");
-                            }
-                        }
-                    },
-                ),
-        )
+        .layer(opensovd_extra::trace::client_layer())
         .discovery()?;
     discover_and_run(&discovery).await?;
     Ok(())

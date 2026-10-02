@@ -1361,17 +1361,12 @@ dependencies = [
 name = "opensovd-examples-client"
 version = "0.1.1"
 dependencies = [
- "bytes",
  "clap",
- "http",
- "http-body-util",
- "hyper",
  "libcli",
  "opensovd-client",
+ "opensovd-extra",
  "serde_json",
  "tokio",
- "tower-http",
- "tracing",
 ]
 
 [[package]]
@@ -1418,6 +1413,7 @@ dependencies = [
  "tower",
  "tower-http",
  "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -1453,6 +1449,7 @@ dependencies = [
  "libcli-build",
  "mock-http-connector",
  "opensovd-client",
+ "opensovd-extra",
  "opensovd-models",
  "rmcp",
  "serde_json",

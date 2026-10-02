@@ -3,26 +3,34 @@
 
 //! HTTP request tracing middleware.
 
-use std::time::Duration;
-
-use http::{Request, Response};
 use tower::Layer;
-use tower_http::classify::{ServerErrorsAsFailures, ServerErrorsFailureClass, SharedClassifier};
-use tower_http::trace::{MakeSpan, OnFailure, OnRequest, OnResponse, TraceLayer};
-use tracing::Span;
+use tower_http::classify::{ServerErrorsAsFailures, SharedClassifier};
+use tower_http::trace::TraceLayer;
 
-const SERVER_TARGET: &str = "srv";
+use self::logs::{Hooks, Logs};
 
-type ServerTrace = TraceLayer<
+type Trace<L> = TraceLayer<
     SharedClassifier<ServerErrorsAsFailures>,
-    ServerMakeSpan,
-    ServerOnRequest,
-    ServerOnResponse,
+    Hooks<L>,
+    Hooks<L>,
+    Hooks<L>,
     (),
     (),
-    ServerOnFailure,
+    Hooks<L>,
 >;
 
+fn trace_layer<L: Logs>() -> Trace<L> {
+    let hooks = Hooks::default();
+    TraceLayer::new_for_http()
+        .make_span_with(hooks)
+        .on_request(hooks)
+        .on_response(hooks)
+        .on_failure(hooks)
+        .on_body_chunk(())
+        .on_eos(())
+}
+
+/// Traces the requests a server handles.
 #[must_use]
 pub fn server_layer() -> ServerLayer {
     ServerLayer
@@ -33,74 +41,333 @@ pub fn server_layer() -> ServerLayer {
 pub struct ServerLayer;
 
 impl<S> Layer<S> for ServerLayer {
-    type Service = <ServerTrace as Layer<S>>::Service;
+    type Service = <Trace<Self> as Layer<S>>::Service;
 
     fn layer(&self, inner: S) -> Self::Service {
-        TraceLayer::new_for_http()
-            .make_span_with(ServerMakeSpan)
-            .on_request(ServerOnRequest)
-            .on_response(ServerOnResponse)
-            .on_failure(ServerOnFailure)
-            .on_body_chunk(())
-            .on_eos(())
-            .layer(inner)
+        trace_layer::<Self>().layer(inner)
     }
 }
 
-#[derive(Clone, Copy)]
-pub struct ServerMakeSpan;
+/// Traces the requests a client sends: finished ones at debug, failed ones at
+/// error.
+#[must_use]
+pub fn client_layer() -> ClientLayer {
+    ClientLayer
+}
 
-impl<B> MakeSpan<B> for ServerMakeSpan {
-    fn make_span(&mut self, req: &Request<B>) -> Span {
-        tracing::info_span!(
-            target: SERVER_TARGET,
-            "http",
-            method = %req.method(),
-            uri = %req.uri(),
-            status = tracing::field::Empty,
-            latency_us = tracing::field::Empty,
-            error = tracing::field::Empty,
-        )
+/// The layer [`client_layer`] returns.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct ClientLayer;
+
+impl<S> Layer<S> for ClientLayer {
+    type Service = <Trace<Self> as Layer<S>>::Service;
+
+    fn layer(&self, inner: S) -> Self::Service {
+        trace_layer::<Self>().layer(inner)
     }
 }
 
-#[derive(Clone, Copy)]
-pub struct ServerOnRequest;
+mod logs {
+    use std::marker::PhantomData;
+    use std::time::Duration;
 
-impl<B> OnRequest<B> for ServerOnRequest {
-    fn on_request(&mut self, _req: &Request<B>, _span: &Span) {
-        tracing::trace!(target: SERVER_TARGET, "Request started");
+    use http::{Request, Response};
+    use tower_http::classify::ServerErrorsFailureClass;
+    use tower_http::trace::{MakeSpan, OnFailure, OnRequest, OnResponse};
+    use tracing::Span;
+    use tracing::field::Empty;
+
+    use super::{ClientLayer, ServerLayer};
+
+    const SERVER_TARGET: &str = "srv";
+    const CLIENT_TARGET: &str = "cli";
+
+    /// The log calls of a layer. Targets and levels are fixed per call, so
+    /// each layer has its own.
+    pub trait Logs: Copy + Default {
+        fn span<B>(req: &Request<B>) -> Span;
+        fn started() {}
+        fn finished();
+        fn failed();
     }
-}
 
-#[derive(Clone, Copy)]
-pub struct ServerOnResponse;
+    impl Logs for ServerLayer {
+        fn span<B>(req: &Request<B>) -> Span {
+            tracing::info_span!(
+                target: SERVER_TARGET,
+                "http",
+                method = %req.method(),
+                uri = %req.uri(),
+                status = Empty,
+                latency_us = Empty,
+                error = Empty,
+            )
+        }
 
-impl<B> OnResponse<B> for ServerOnResponse {
-    fn on_response(self, response: &Response<B>, latency: Duration, span: &Span) {
-        let status = response.status();
-        span.record("status", status.as_u16());
-        span.record(
-            "latency_us",
-            u64::try_from(latency.as_micros()).unwrap_or(u64::MAX),
-        );
-        if status.is_server_error() {
-            tracing::error!(target: SERVER_TARGET, "Request failed");
-        } else {
+        fn started() {
+            tracing::trace!(target: SERVER_TARGET, "Request started");
+        }
+
+        fn finished() {
             tracing::info!(target: SERVER_TARGET, "Request finished");
         }
+
+        fn failed() {
+            tracing::error!(target: SERVER_TARGET, "Request failed");
+        }
+    }
+
+    impl Logs for ClientLayer {
+        fn span<B>(req: &Request<B>) -> Span {
+            tracing::info_span!(
+                target: CLIENT_TARGET,
+                "http",
+                method = %req.method(),
+                uri = %req.uri(),
+                status = Empty,
+                latency_us = Empty,
+                error = Empty,
+            )
+        }
+
+        fn finished() {
+            tracing::debug!(target: CLIENT_TARGET, "Request finished");
+        }
+
+        fn failed() {
+            tracing::error!(target: CLIENT_TARGET, "Request failed");
+        }
+    }
+
+    /// The tower-http callbacks, shared by both layers.
+    #[derive(Clone, Copy, Debug, Default)]
+    pub struct Hooks<L>(PhantomData<L>);
+
+    impl<L: Logs, B> MakeSpan<B> for Hooks<L> {
+        fn make_span(&mut self, req: &Request<B>) -> Span {
+            L::span(req)
+        }
+    }
+
+    impl<L: Logs, B> OnRequest<B> for Hooks<L> {
+        fn on_request(&mut self, _req: &Request<B>, _span: &Span) {
+            L::started();
+        }
+    }
+
+    impl<L: Logs, B> OnResponse<B> for Hooks<L> {
+        fn on_response(self, response: &Response<B>, latency: Duration, span: &Span) {
+            let status = response.status();
+            span.record("status", status.as_u16());
+            span.record(
+                "latency_us",
+                u64::try_from(latency.as_micros()).unwrap_or(u64::MAX),
+            );
+            if status.is_server_error() {
+                L::failed();
+            } else {
+                L::finished();
+            }
+        }
+    }
+
+    /// Logs connection and response body errors; `on_response` logs server
+    /// errors.
+    impl<L: Logs> OnFailure<ServerErrorsFailureClass> for Hooks<L> {
+        fn on_failure(&mut self, error: ServerErrorsFailureClass, _latency: Duration, span: &Span) {
+            if let ServerErrorsFailureClass::Error(error) = error {
+                span.record("error", error);
+                L::failed();
+            }
+        }
     }
 }
 
-/// Logs errors of the response body; `ServerOnResponse` logs server errors.
-#[derive(Clone, Copy)]
-pub struct ServerOnFailure;
+#[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use std::convert::Infallible;
+    use std::fmt;
+    use std::sync::{Arc, Mutex};
 
-impl OnFailure<ServerErrorsFailureClass> for ServerOnFailure {
-    fn on_failure(&mut self, error: ServerErrorsFailureClass, _latency: Duration, span: &Span) {
-        if let ServerErrorsFailureClass::Error(error) = error {
-            span.record("error", error);
-            tracing::error!(target: SERVER_TARGET, "Request failed");
+    use http::{Request, Response, StatusCode};
+    use tower::{Layer, ServiceExt, service_fn};
+    use tracing::field::{Field, Visit};
+    use tracing::span::{Attributes, Id, Record};
+    use tracing::subscriber::DefaultGuard;
+    use tracing::{Event, Level, Subscriber};
+    use tracing_subscriber::layer::{Context, SubscriberExt};
+
+    use super::{client_layer, server_layer};
+
+    type Logged = (Level, &'static str, String);
+
+    /// Records events and span fields while its guard lives.
+    #[derive(Clone, Default)]
+    struct Capture {
+        events: Arc<Mutex<Vec<Logged>>>,
+        fields: Arc<Mutex<Vec<(&'static str, String)>>>,
+    }
+
+    impl Capture {
+        fn install() -> (Self, DefaultGuard) {
+            let capture = Self::default();
+            let subscriber = tracing_subscriber::registry().with(capture.clone());
+            (capture, tracing::subscriber::set_default(subscriber))
         }
+
+        fn events(&self) -> Vec<Logged> {
+            self.events.lock().unwrap().clone()
+        }
+
+        fn field(&self, name: &str) -> Option<String> {
+            let fields = self.fields.lock().unwrap();
+            let field = fields.iter().rev().find(|(field, _)| *field == name);
+            field.map(|(_, value)| value.clone())
+        }
+    }
+
+    struct Collect<'a>(&'a mut Vec<(&'static str, String)>);
+
+    impl Visit for Collect<'_> {
+        fn record_debug(&mut self, field: &Field, value: &dyn fmt::Debug) {
+            self.0.push((field.name(), format!("{value:?}")));
+        }
+
+        fn record_str(&mut self, field: &Field, value: &str) {
+            self.0.push((field.name(), value.to_owned()));
+        }
+    }
+
+    impl<S: Subscriber> tracing_subscriber::Layer<S> for Capture {
+        fn on_new_span(&self, attrs: &Attributes<'_>, _id: &Id, _ctx: Context<'_, S>) {
+            attrs.record(&mut Collect(&mut self.fields.lock().unwrap()));
+        }
+
+        fn on_record(&self, _id: &Id, values: &Record<'_>, _ctx: Context<'_, S>) {
+            values.record(&mut Collect(&mut self.fields.lock().unwrap()));
+        }
+
+        fn on_event(&self, event: &Event<'_>, _ctx: Context<'_, S>) {
+            let mut fields = Vec::new();
+            event.record(&mut Collect(&mut fields));
+            let message = fields
+                .into_iter()
+                .find(|(field, _)| *field == "message")
+                .map(|(_, value)| value)
+                .unwrap_or_default();
+            let metadata = event.metadata();
+            let logged = (*metadata.level(), metadata.target(), message);
+            self.events.lock().unwrap().push(logged);
+        }
+    }
+
+    fn request() -> Request<String> {
+        Request::new(String::new())
+    }
+
+    async fn ok(_req: Request<String>) -> Result<Response<String>, Infallible> {
+        Ok(Response::new(String::new()))
+    }
+
+    async fn internal_error(_req: Request<String>) -> Result<Response<String>, Infallible> {
+        let mut response = Response::new(String::new());
+        *response.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
+        Ok(response)
+    }
+
+    async fn refused(_req: Request<String>) -> Result<Response<String>, &'static str> {
+        Err("connection refused")
+    }
+
+    fn logged(level: Level, target: &'static str, message: &str) -> Logged {
+        (level, target, message.to_owned())
+    }
+
+    #[tokio::test]
+    async fn server_layer_logs_finished_requests_at_info() {
+        let (capture, _guard) = Capture::install();
+        let service = server_layer().layer(service_fn(ok));
+        service.oneshot(request()).await.unwrap();
+        assert_eq!(
+            capture.events(),
+            [
+                logged(Level::TRACE, "srv", "Request started"),
+                logged(Level::INFO, "srv", "Request finished"),
+            ]
+        );
+        assert_eq!(capture.field("status").as_deref(), Some("200"));
+    }
+
+    #[tokio::test]
+    async fn server_layer_logs_server_errors_once() {
+        let (capture, _guard) = Capture::install();
+        let service = server_layer().layer(service_fn(internal_error));
+        service.oneshot(request()).await.unwrap();
+        assert_eq!(
+            capture.events(),
+            [
+                logged(Level::TRACE, "srv", "Request started"),
+                logged(Level::ERROR, "srv", "Request failed"),
+            ]
+        );
+        assert_eq!(capture.field("status").as_deref(), Some("500"));
+    }
+
+    #[tokio::test]
+    async fn server_layer_logs_service_errors() {
+        let (capture, _guard) = Capture::install();
+        let service = server_layer().layer(service_fn(refused));
+        assert!(service.oneshot(request()).await.is_err());
+        assert_eq!(
+            capture.events(),
+            [
+                logged(Level::TRACE, "srv", "Request started"),
+                logged(Level::ERROR, "srv", "Request failed"),
+            ]
+        );
+        assert_eq!(
+            capture.field("error").as_deref(),
+            Some("connection refused")
+        );
+    }
+
+    #[tokio::test]
+    async fn client_layer_logs_finished_requests_at_debug() {
+        let (capture, _guard) = Capture::install();
+        let service = client_layer().layer(service_fn(ok));
+        service.oneshot(request()).await.unwrap();
+        assert_eq!(
+            capture.events(),
+            [logged(Level::DEBUG, "cli", "Request finished")]
+        );
+        assert_eq!(capture.field("status").as_deref(), Some("200"));
+    }
+
+    #[tokio::test]
+    async fn client_layer_logs_server_errors() {
+        let (capture, _guard) = Capture::install();
+        let service = client_layer().layer(service_fn(internal_error));
+        service.oneshot(request()).await.unwrap();
+        assert_eq!(
+            capture.events(),
+            [logged(Level::ERROR, "cli", "Request failed")]
+        );
+    }
+
+    #[tokio::test]
+    async fn client_layer_logs_connection_errors() {
+        let (capture, _guard) = Capture::install();
+        let service = client_layer().layer(service_fn(refused));
+        assert!(service.oneshot(request()).await.is_err());
+        assert_eq!(
+            capture.events(),
+            [logged(Level::ERROR, "cli", "Request failed")]
+        );
+        assert_eq!(
+            capture.field("error").as_deref(),
+            Some("connection refused")
+        );
     }
 }

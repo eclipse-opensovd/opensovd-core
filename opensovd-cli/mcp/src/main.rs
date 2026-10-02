@@ -199,7 +199,7 @@ impl ServerHandler for McpServer {
 async fn main() -> ExitCode {
     let cli = cli::Cli::parse();
 
-    if let Err(e) = libcli::init_tracing("info", Some(&cli.log)) {
+    if let Err(e) = libcli::init_tracing("info,cli=debug", Some(&cli.log)) {
         eprintln!("Failed to initialize tracing: {e}");
         return ExitCode::FAILURE;
     }
@@ -221,7 +221,10 @@ async fn serve(url: &str) -> anyhow::Result<()> {
         build_date = %env!("BUILD_DATE"),
         "{}", cli::ABOUT
     );
-    let client = Client::connect(url)?;
+    let client = Client::builder()
+        .base_uri(url)?
+        .layer(opensovd_extra::trace::client_layer())
+        .build()?;
     let service = McpServer::new(client)
         .serve(rmcp::transport::stdio())
         .await?;
