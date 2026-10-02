@@ -78,28 +78,29 @@ pub struct ServerOnResponse;
 
 impl<B> OnResponse<B> for ServerOnResponse {
     fn on_response(self, response: &Response<B>, latency: Duration, span: &Span) {
-        span.record("status", response.status().as_u16());
+        let status = response.status();
+        span.record("status", status.as_u16());
         span.record(
             "latency_us",
             u64::try_from(latency.as_micros()).unwrap_or(u64::MAX),
         );
-        tracing::info!(target: SERVER_TARGET, "Request finished");
+        if status.is_server_error() {
+            tracing::error!(target: SERVER_TARGET, "Request failed");
+        } else {
+            tracing::info!(target: SERVER_TARGET, "Request finished");
+        }
     }
 }
 
+/// Logs errors of the response body; `ServerOnResponse` logs server errors.
 #[derive(Clone, Copy)]
 pub struct ServerOnFailure;
 
 impl OnFailure<ServerErrorsFailureClass> for ServerOnFailure {
-    fn on_failure(&mut self, error: ServerErrorsFailureClass, latency: Duration, span: &Span) {
-        span.record(
-            "latency_us",
-            u64::try_from(latency.as_micros()).unwrap_or(u64::MAX),
-        );
-        if let ServerErrorsFailureClass::StatusCode(status) = error {
-            span.record("status", status.as_u16());
+    fn on_failure(&mut self, error: ServerErrorsFailureClass, _latency: Duration, span: &Span) {
+        if let ServerErrorsFailureClass::Error(error) = error {
+            span.record("error", error);
+            tracing::error!(target: SERVER_TARGET, "Request failed");
         }
-        span.record("error", tracing::field::display(error));
-        tracing::error!(target: SERVER_TARGET, "Request failed");
     }
 }
