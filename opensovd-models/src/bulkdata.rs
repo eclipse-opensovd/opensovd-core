@@ -90,7 +90,7 @@ pub struct DeleteBulkDataResult {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{ErrorCode, GenericError};
+    use crate::ErrorCode;
 
     #[test]
     fn bulk_data_descriptor_minimal_deserialize() {

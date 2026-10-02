@@ -35,7 +35,7 @@ where
 pub(super) async fn app_list(
     State(topology): State<Topology>,
     parts: Parts,
-    axum_extra::extract::Query(query): axum_extra::extract::Query<EntitiesQuery>,
+    Query(query): Query<EntitiesQuery>,
 ) -> Result<Json<Response<Entities>>> {
     let base = super::super::versioned_uri(&parts);
     let items = topology

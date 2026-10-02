@@ -3,7 +3,7 @@
 
 [workspace]
 members = ["benches", "examples/client", "examples/server", "opensovd-mocks", "opensovd-client", "opensovd-core", "opensovd-extra", "opensovd-models", "opensovd-providers", "opensovd-server", "opensovd-cli/lib", "opensovd-cli/build", "opensovd-cli/gateway", "opensovd-cli/mcp"]
-resolver = "2"
+resolver = "3"
 
 [workspace.package]
 version = "0.1.1"
@@ -75,6 +75,8 @@ uuid = { version = "1" }
 
 [workspace.lints.rust]
 unused = { level = "deny", priority = -1 }
+redundant_imports = "deny"
+unused_qualifications = "deny"
 unsafe_code = "deny"
 dead_code = "deny"
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage,coverage_nightly)'] }

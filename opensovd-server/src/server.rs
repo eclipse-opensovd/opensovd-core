@@ -3,7 +3,6 @@
 
 //! Server builder and listener types.
 
-use std::future::Future;
 use std::pin::Pin;
 
 use axum::Router;
@@ -237,10 +236,7 @@ impl<Vendor, Authn, Authz, Layer> ServerBuilder<Vendor, Authn, Authz, Layer> {
     /// # Errors
     ///
     /// Returns an error if the URI is malformed.
-    pub fn base_uri(
-        mut self,
-        uri: impl TryInto<http::Uri>,
-    ) -> std::result::Result<Self, BuilderError> {
+    pub fn base_uri(mut self, uri: impl TryInto<http::Uri>) -> Result<Self, BuilderError> {
         let uri: http::Uri = uri.try_into().map_err(|_| BuilderError::InvalidUri)?;
         self.base = BaseConfig {
             path: uri.path().to_string(),

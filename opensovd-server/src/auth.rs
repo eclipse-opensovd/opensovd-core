@@ -3,7 +3,6 @@
 
 //! Authentication and authorization middleware.
 
-use std::future::Future;
 use std::marker::PhantomData;
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -78,10 +77,7 @@ where
 {
     type Rejection = AuthError;
 
-    async fn from_request_parts(
-        parts: &mut http::request::Parts,
-        _state: &S,
-    ) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
         parts
             .extensions
             .get::<T>()
@@ -175,9 +171,9 @@ pub struct AuthenticationMiddleware<S, A> {
     authenticator: A,
 }
 
-impl<S, A> Service<axum::http::Request<Body>> for AuthenticationMiddleware<S, A>
+impl<S, A> Service<http::Request<Body>> for AuthenticationMiddleware<S, A>
 where
-    S: Service<axum::http::Request<Body>, Response = Response> + Clone + Send + 'static,
+    S: Service<http::Request<Body>, Response = Response> + Clone + Send + 'static,
     S::Future: Send,
     A: Authenticator,
 {
@@ -189,7 +185,7 @@ where
         self.inner.poll_ready(cx)
     }
 
-    fn call(&mut self, req: axum::http::Request<Body>) -> Self::Future {
+    fn call(&mut self, req: http::Request<Body>) -> Self::Future {
         let authenticator = self.authenticator.clone();
         let mut inner = self.inner.clone();
 
@@ -202,7 +198,7 @@ where
                     parts.extensions.insert(identity);
 
                     // Reconstruct request and continue
-                    let req = axum::http::Request::from_parts(parts, body);
+                    let req = http::Request::from_parts(parts, body);
                     inner.call(req).await
                 }
                 Err(auth_error) => {
@@ -288,9 +284,9 @@ pub struct AuthorizationMiddleware<S, Z, I> {
     _identity: PhantomData<I>,
 }
 
-impl<S, Z, I> Service<axum::http::Request<Body>> for AuthorizationMiddleware<S, Z, I>
+impl<S, Z, I> Service<http::Request<Body>> for AuthorizationMiddleware<S, Z, I>
 where
-    S: Service<axum::http::Request<Body>, Response = Response> + Clone + Send + 'static,
+    S: Service<http::Request<Body>, Response = Response> + Clone + Send + 'static,
     S::Future: Send,
     Z: Authorizer<I>,
     I: Clone + Send + Sync + 'static,
@@ -303,7 +299,7 @@ where
         self.inner.poll_ready(cx)
     }
 
-    fn call(&mut self, req: axum::http::Request<Body>) -> Self::Future {
+    fn call(&mut self, req: http::Request<Body>) -> Self::Future {
         let authorizer = self.authorizer.clone();
         let mut inner = self.inner.clone();
 
@@ -318,7 +314,7 @@ where
             // Check authorization
             match authorizer.authorize(identity, &parts).await {
                 Ok(()) => {
-                    let req = axum::http::Request::from_parts(parts, body);
+                    let req = http::Request::from_parts(parts, body);
                     inner.call(req).await
                 }
                 Err(auth_error) => Ok(auth_error.into_response()),
@@ -331,7 +327,7 @@ where
 #[cfg_attr(coverage_nightly, coverage(off))]
 #[allow(clippy::string_slice)]
 mod tests {
-    use axum::{Router, body::Body, http::Request, routing::get};
+    use axum::{Router, http::Request, routing::get};
     use http_body_util::BodyExt;
     use tower::ServiceExt;
 

@@ -283,7 +283,7 @@ async fn test_discovery_adds_component() {
 
 #[tokio::test]
 async fn test_service() {
-    let svc = tower::service_fn(|_req: http::Request<opensovd_server::Body>| async {
+    let svc = tower::service_fn(|_req: Request<opensovd_server::Body>| async {
         Ok::<_, std::convert::Infallible>(http::Response::new(http_body_util::Full::new(
             bytes::Bytes::from("from service"),
         )))

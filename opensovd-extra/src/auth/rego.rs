@@ -151,7 +151,7 @@ allow if {
 
     fn make_authorizer() -> RegorusAuthorizer {
         RegorusAuthorizer::new(
-            &mut [("test", &mut POLICY.as_bytes() as &mut dyn std::io::Read)],
+            &mut [("test", &mut POLICY.as_bytes() as &mut dyn Read)],
             &mut [],
         )
         .unwrap()
@@ -221,7 +221,7 @@ allow if {
         let result = RegorusAuthorizer::new(
             &mut [(
                 "bad",
-                &mut "not valid rego {{{{".as_bytes() as &mut dyn std::io::Read,
+                &mut "not valid rego {{{{".as_bytes() as &mut dyn Read,
             )],
             &mut [],
         );

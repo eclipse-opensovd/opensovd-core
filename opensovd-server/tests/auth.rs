@@ -49,11 +49,7 @@ impl Authenticator for ExtractBearer {
 struct RequireAdmin;
 
 impl Authorizer<Claims> for RequireAdmin {
-    async fn authorize(
-        &self,
-        identity: &Claims,
-        _parts: &opensovd_server::Parts,
-    ) -> Result<(), AuthError> {
+    async fn authorize(&self, identity: &Claims, _parts: &Parts) -> Result<(), AuthError> {
         if identity.role == "admin" {
             Ok(())
         } else {
