@@ -17,13 +17,14 @@
 ```rust,no_run
 use std::time::Duration;
 
-use opensovd_client::{Client, Error, SovdInfo, VendorInfo};
+use opensovd_client::{Client, Error, RetryPolicy, SovdInfo, VendorInfo};
 
 # async fn run() -> Result<(), Box<dyn std::error::Error>> {
 // Point at the SOVD server root (no version identifier).
 let discovery = Client::builder()
     .base_uri("http://localhost:7690/sovd")?
     .timeout(Duration::from_secs(5))
+    .retry(RetryPolicy::new(3).backoff(Duration::from_millis(200)))
     .discovery()?;
 
 // See what the server advertises.
@@ -47,7 +48,10 @@ match client.list_components().send().await {
 # }
 ```
 
-If no timeout is configured, requests have no deadline.
+If no timeout is configured, requests have no deadline. Without a retry policy,
+failures are returned immediately. Retries are opt-in via [`RetryPolicy`] and
+apply only to GET requests; retryable conditions are transport errors, HTTP
+502/503/504, and per-attempt timeouts.
 
 On Unix, `Discovery::connect_unix` / `connect_unix_abstract` reach `version-info`
 over a Unix domain socket. A runnable example lives in `examples/client`.

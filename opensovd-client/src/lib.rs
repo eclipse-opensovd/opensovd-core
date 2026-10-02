@@ -10,6 +10,7 @@ mod discovery;
 pub mod entities;
 mod error;
 mod list;
+mod retry;
 #[cfg(unix)]
 mod unix;
 
@@ -19,5 +20,6 @@ pub use error::{Error, Result};
 pub use opensovd_models::Response;
 pub use opensovd_models::data::DataCategory;
 pub use opensovd_models::version::{SovdInfo, VendorInfo, VersionInfo};
+pub use retry::RetryPolicy;
 #[cfg(unix)]
 pub use unix::UnixConnector;
