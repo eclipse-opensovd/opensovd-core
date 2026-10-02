@@ -46,6 +46,10 @@ http-body-util = { version = "0.1", default-features = false }
 hyper = { version = "1", default-features = false }
 hyper-util = { version = "0.1", default-features = false }
 libc = { version = "0.2", default-features = false }
+mdns-sd = { version = "0.21", default-features = false }
+if-addrs = { version = "0.15", default-features = false }
+socket2 = { version = "0.6", default-features = false }
+rustix = { version = "1", default-features = false }
 percent-encoding = { version = "2", default-features = false }
 pin-project = { version = "1", default-features = false }
 regorus = { version = "0.11", default-features = false, features = ["arc", "glob"] }

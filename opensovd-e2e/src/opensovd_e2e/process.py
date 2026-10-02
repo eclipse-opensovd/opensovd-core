@@ -288,6 +288,7 @@ def spawn_process(
     args: list[str],
     ready_banner: re.Pattern | None = None,
     crate: str | None = None,
+    wrap: list[str] | None = None,
 ) -> ProcessUnderTest:
     """Spawn the process under test with the given arguments.
 
@@ -301,6 +302,7 @@ def spawn_process(
             skip). The match is stored on ProcessUnderTest.match for consumers.
         crate: cargo workspace package name to build when --opensovd-run is
             unset; required on that path.
+        wrap: Command prefix to run the process through, e.g. `NetworkNamespace.wrap`.
 
     Returns:
         A running ProcessUnderTest instance (caller must call close())
@@ -316,4 +318,4 @@ def spawn_process(
             )
         binary_path = _build_crate_binary(config, crate)
         cmd = [str(binary_path), *args]
-    return ProcessUnderTest.spawn(cmd, ready_banner=ready_banner)
+    return ProcessUnderTest.spawn([*(wrap or []), *cmd], ready_banner=ready_banner)

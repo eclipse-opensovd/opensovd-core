@@ -26,6 +26,9 @@ opensovd-gateway --unix-socket @opensovd
 
 # Enable mock topology for testing
 opensovd-gateway --mock
+
+# Announce via mDNS on the diagnostic port
+opensovd-gateway --url http://0.0.0.0:7690/sovd --mdns ABC123456789 --mdns-interface eth1
 ```
 
 Mock data comes from the shared `opensovd-mocks` crate used across examples and tests.
@@ -59,6 +62,16 @@ Mock data comes from the shared `opensovd-mocks` crate used across examples and 
 | `--tls-client-auth` | `required` (default) rejects clients without a certificate; `optional` accepts them |
 
 An `https://` `--url` without `--tls-cert` only advertises https, for a TLS-terminating proxy in front of the gateway.
+
+### mDNS Options
+
+Announces the gateway as `_sovd._tcp` with the `identification` and `accessurl` TXT records. Loopback addresses are rejected. `0.0.0.0` announces all IPv4 addresses, `[::]` all addresses the listener accepts. UDP port 5353 must be open.
+
+| Option             | Description                                                   |
+|--------------------|---------------------------------------------------------------|
+| `--mdns ID`        | Vehicle identification to announce, e.g. the VIN (`off` disables) |
+| `--mdns-host`      | Host label published as `HOST.local` (default: derived from the identification) |
+| `--mdns-interface` | Announce only on these interfaces (comma-separated)           |
 
 ## Contributing
 

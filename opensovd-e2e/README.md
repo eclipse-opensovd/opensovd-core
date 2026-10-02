@@ -72,6 +72,11 @@ uv run pytest --opensovd-run=./target/release/my-binary
   `--opensovd-target`, `--opensovd-features`, `--opensovd-coverage`.
 - **Fixtures:** `crate_binary`, `binary_args`, `ready_banner`, `process`
   (override any of them for binary-specific behaviour, e.g. an HTTP client).
+- **Network namespace:** the `netns` fixture yields a `NetworkNamespace`, a
+  private network namespace with only `lo`. Pass `wrap=netns.wrap` to
+  `spawn_process` to run the binary inside; everything inside is killed after
+  the test or when pytest dies. Linux only, skipped without unprivileged user
+  namespaces.
 - **Requirement traceability:** the `@pytest.mark.req("...")` marker, a
   Requirements column in the HTML report, and a `requirements-coverage.txt`
   matrix.

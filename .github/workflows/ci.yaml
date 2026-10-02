@@ -130,6 +130,10 @@ jobs:
         run: $RUN cargo test --locked --all-features
 
       - if: contains(matrix.tests, 'pytest')
+        name: Allow unprivileged user namespaces for the network namespace tests
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
+      - if: contains(matrix.tests, 'pytest')
         name: opensovd-e2e plugin self-tests
         run: $RUN uv run --locked pytest opensovd-e2e/tests
 
@@ -259,6 +263,8 @@ jobs:
       - uses: ./.github/actions/nix-setup
         with:
           cargo-cache: 'true'
+      - name: Allow unprivileged user namespaces for the network namespace tests
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
 
       # --opensovd-coverage sets up cargo-llvm-cov instrumentation and writes the
       # merged report (coverage.json + HTML + Cobertura). test_rust.py runs the
