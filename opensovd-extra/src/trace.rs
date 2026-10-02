@@ -10,34 +10,34 @@ use tower_http::classify::ServerErrorsFailureClass;
 use tower_http::trace::{MakeSpan, OnFailure, OnRequest, OnResponse, TraceLayer};
 use tracing::Span;
 
-const TARGET: &str = "srv";
+const SERVER_TARGET: &str = "srv";
 
 #[must_use]
-pub fn trace_layer() -> TraceLayer<
+pub fn server_layer() -> TraceLayer<
     tower_http::classify::SharedClassifier<tower_http::classify::ServerErrorsAsFailures>,
-    HttpMakeSpan,
-    HttpOnRequest,
-    HttpOnResponse,
+    ServerMakeSpan,
+    ServerOnRequest,
+    ServerOnResponse,
     (),
     (),
-    HttpOnFailure,
+    ServerOnFailure,
 > {
     TraceLayer::new_for_http()
-        .make_span_with(HttpMakeSpan)
-        .on_request(HttpOnRequest)
-        .on_response(HttpOnResponse)
-        .on_failure(HttpOnFailure)
+        .make_span_with(ServerMakeSpan)
+        .on_request(ServerOnRequest)
+        .on_response(ServerOnResponse)
+        .on_failure(ServerOnFailure)
         .on_body_chunk(())
         .on_eos(())
 }
 
 #[derive(Clone, Copy)]
-pub struct HttpMakeSpan;
+pub struct ServerMakeSpan;
 
-impl<B> MakeSpan<B> for HttpMakeSpan {
+impl<B> MakeSpan<B> for ServerMakeSpan {
     fn make_span(&mut self, req: &Request<B>) -> Span {
         tracing::info_span!(
-            target: TARGET,
+            target: SERVER_TARGET,
             "http",
             method = %req.method(),
             uri = %req.uri(),
@@ -49,32 +49,32 @@ impl<B> MakeSpan<B> for HttpMakeSpan {
 }
 
 #[derive(Clone, Copy)]
-pub struct HttpOnRequest;
+pub struct ServerOnRequest;
 
-impl<B> OnRequest<B> for HttpOnRequest {
+impl<B> OnRequest<B> for ServerOnRequest {
     fn on_request(&mut self, _req: &Request<B>, _span: &Span) {
-        tracing::trace!(target: TARGET, "Request started");
+        tracing::trace!(target: SERVER_TARGET, "Request started");
     }
 }
 
 #[derive(Clone, Copy)]
-pub struct HttpOnResponse;
+pub struct ServerOnResponse;
 
-impl<B> OnResponse<B> for HttpOnResponse {
+impl<B> OnResponse<B> for ServerOnResponse {
     fn on_response(self, response: &Response<B>, latency: Duration, span: &Span) {
         span.record("status", response.status().as_u16());
         span.record(
             "latency_us",
             u64::try_from(latency.as_micros()).unwrap_or(u64::MAX),
         );
-        tracing::info!(target: TARGET, "Request finished");
+        tracing::info!(target: SERVER_TARGET, "Request finished");
     }
 }
 
 #[derive(Clone, Copy)]
-pub struct HttpOnFailure;
+pub struct ServerOnFailure;
 
-impl OnFailure<ServerErrorsFailureClass> for HttpOnFailure {
+impl OnFailure<ServerErrorsFailureClass> for ServerOnFailure {
     fn on_failure(&mut self, error: ServerErrorsFailureClass, latency: Duration, span: &Span) {
         span.record(
             "latency_us",
@@ -84,6 +84,6 @@ impl OnFailure<ServerErrorsFailureClass> for HttpOnFailure {
             span.record("status", status.as_u16());
         }
         span.record("error", tracing::field::display(error));
-        tracing::error!(target: TARGET, "Request failed");
+        tracing::error!(target: SERVER_TARGET, "Request failed");
     }
 }

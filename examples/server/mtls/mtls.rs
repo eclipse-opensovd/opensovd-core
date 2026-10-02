@@ -43,7 +43,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .tls(tls)
         .base_uri("https://127.0.0.1:8443/sovd")?
         .topology(topology)
-        .layer(libcli::trace::trace_layer())
+        .layer(opensovd_extra::trace::server_layer())
         .build()?;
 
     tracing::info!("mTLS server on https://127.0.0.1:8443/sovd");

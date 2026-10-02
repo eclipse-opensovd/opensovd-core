@@ -41,7 +41,7 @@ futures = { workspace = true, features = ["std", "async-await"] }
 jsonwebtoken = { workspace = true }
 libcli = { workspace = true }
 opensovd-core = { workspace = true }
-opensovd-extra = { workspace = true, features = ["auth"] }
+opensovd-extra = { workspace = true, features = ["auth", "trace"] }
 opensovd-mocks = { workspace = true }
 opensovd-models = { workspace = true }
 opensovd-providers = { workspace = true }

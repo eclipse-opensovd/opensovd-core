@@ -3,8 +3,6 @@
 
 //! Shared CLI utilities for `OpenSOVD` binaries.
 
-pub mod trace;
-
 use std::fmt;
 use std::path::Path;
 

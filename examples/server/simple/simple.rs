@@ -197,7 +197,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .base_uri("http://127.0.0.1:7690/sovd")?
         .listener(listener)
         .topology(topology)
-        .layer(libcli::trace::trace_layer())
+        .layer(opensovd_extra::trace::server_layer())
         .build()?;
 
     tracing::info!("Server running");

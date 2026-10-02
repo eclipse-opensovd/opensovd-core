@@ -174,7 +174,7 @@ where
     }
 
     let server = builder
-        .layer(libcli::trace::trace_layer())
+        .layer(opensovd_extra::trace::server_layer())
         .layer(tower::util::option_layer(cors))
         .base_uri(uri)?
         .vendor_info(VENDOR_INFO)

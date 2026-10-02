@@ -43,7 +43,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .topology(topology)
         .authenticator(jwt)
         .authorizer(rego)
-        .layer(libcli::trace::trace_layer())
+        .layer(opensovd_extra::trace::server_layer())
         .build()?;
 
     let token = make_token(SECRET, ISSUER)?;

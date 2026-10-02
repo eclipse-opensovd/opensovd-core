@@ -1083,10 +1083,8 @@ name = "libcli"
 version = "0.1.1"
 dependencies = [
  "chrono",
- "http",
  "libc",
  "tokio",
- "tower-http",
  "tracing",
  "tracing-subscriber",
 ]
@@ -1415,6 +1413,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.20",
  "tokio",
+ "tower-http",
  "tracing",
 ]
 

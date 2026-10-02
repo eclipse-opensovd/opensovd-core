@@ -20,3 +20,6 @@ pub mod tls;
 
 #[cfg(feature = "tls")]
 pub use tls::{ClientAuth, ServerTlsConfig, TlsError};
+
+#[cfg(feature = "trace")]
+pub mod trace;
