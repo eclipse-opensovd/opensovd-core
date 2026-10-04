@@ -19,8 +19,6 @@ cargo-deny = "0.20.2"
 git-cliff = "2.14.1"
 gh = "2.102.0"
 jq = "1.8.2"
-node = "24.21.0"
-"npm:@usebruno/cli" = "4.0.0"
 
 [env]
 UV_PYTHON = { value = "{% if tools.python %}{{ tools.python.path }}{% endif %}", tools = true }

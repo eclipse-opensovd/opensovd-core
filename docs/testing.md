@@ -1,10 +1,6 @@
 # Testing
 
-pytest serves as the unified test driver, orchestrating tests across different tools:
-
-- **cargo**: Rust unit and integration tests
-- **pytest**: Python integration tests
-- **Bruno**: API conformance tests
+pytest is the test driver: it runs the Rust unit and integration tests through cargo and the Python integration tests.
 
 Run all tests:
 
@@ -53,10 +49,7 @@ def test_graceful_shutdown(gateway):
 ## Testing with Bruno
 
 [Bruno](https://www.usebruno.com/) is used for interactive API testing and conformance testing against the SOVD specification.
-
-> **Note:** pytest invokes the Bruno CLI (`bru run`) as a subprocess when running Bruno tests. See [`tests/bruno/conftest.py`](../tests/bruno/conftest.py) for the implementation.
->
-> **Note:** Bruno tests are automatically skipped when the `bru` CLI is not installed. Install it with `npm install -g @usebruno/cli` to enable them.
+The collection runs against a gateway started with `cargo run --bin opensovd-gateway`; it is not part of the pytest suite.
 
 ### Interactive API Testing
 
@@ -68,7 +61,7 @@ def test_graceful_shutdown(gateway):
 
 ### CLI Testing
 
-Run all tests:
+Install the CLI with `npm install -g @usebruno/cli` and run all tests:
 
 ```bash
 cd tests/bruno

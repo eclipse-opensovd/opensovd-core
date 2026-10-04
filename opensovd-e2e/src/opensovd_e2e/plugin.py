@@ -95,8 +95,7 @@ def _setup_coverage(config):
     subprocess.run(["cargo", "llvm-cov", "clean", "--workspace"], cwd=project_root, check=True)
 
     # Render the report at teardown. Config cleanups run after every
-    # sessionfinish hook (incl. the trylast hook in tests/bruno/conftest.py that
-    # closes the shared gateway), so all instrumented processes have exited and
+    # sessionfinish hook, so all instrumented processes have exited and
     # flushed their profile data. Registered only on success, so the UsageError
     # path above never triggers a report.
     config.add_cleanup(lambda: _write_coverage_report(project_root))
