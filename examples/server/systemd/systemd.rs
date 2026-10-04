@@ -44,7 +44,7 @@ mod systemd {
             .build()?;
 
         sd_notify::notify(&[NotifyState::Ready])?;
-        tracing::info!(addr = %addr, "Server running");
+        tracing::info!(target: "systemd", addr = %addr, "Server running");
         server.serve().await?;
         Ok(())
     }
