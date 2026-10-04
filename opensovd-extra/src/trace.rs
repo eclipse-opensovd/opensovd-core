@@ -4,24 +4,17 @@
 //! HTTP request tracing middleware.
 
 use tower::Layer;
-use tower_http::classify::{ServerErrorsAsFailures, SharedClassifier};
+use tower_http::classify::SharedClassifier;
 use tower_http::trace::TraceLayer;
 
-use self::logs::{Hooks, Logs};
+use self::logs::{Classify, Hooks, Logs};
 
-type Trace<L> = TraceLayer<
-    SharedClassifier<ServerErrorsAsFailures>,
-    Hooks<L>,
-    Hooks<L>,
-    Hooks<L>,
-    (),
-    (),
-    Hooks<L>,
->;
+type Trace<L> =
+    TraceLayer<SharedClassifier<Classify>, Hooks<L>, Hooks<L>, Hooks<L>, (), (), Hooks<L>>;
 
 fn trace_layer<L: Logs>() -> Trace<L> {
     let hooks = Hooks::default();
-    TraceLayer::new_for_http()
+    TraceLayer::new(SharedClassifier::new(Classify))
         .make_span_with(hooks)
         .on_request(hooks)
         .on_response(hooks)
@@ -68,12 +61,13 @@ impl<S> Layer<S> for ClientLayer {
 }
 
 mod logs {
+    use std::fmt::Display;
     use std::marker::PhantomData;
     use std::time::Duration;
 
     use axum::extract::MatchedPath;
-    use http::{Request, Response};
-    use tower_http::classify::ServerErrorsFailureClass;
+    use http::{HeaderMap, Request, Response};
+    use tower_http::classify::{ClassifiedResponse, ClassifyEos, ClassifyResponse};
     use tower_http::trace::{MakeSpan, OnFailure, OnRequest, OnResponse};
     use tracing::Span;
     use tracing::field::Empty;
@@ -142,6 +136,45 @@ mod logs {
         }
     }
 
+    /// Why a request failed after `on_response` or instead of it.
+    #[derive(Debug)]
+    pub enum Failure {
+        /// The service returned an error, e.g. a refused connection.
+        Service(String),
+        /// The response body failed after its headers were logged.
+        Body(String),
+    }
+
+    /// Checks every response at the end of its body, so that body errors
+    /// reach `on_failure`. `on_response` already logs server errors.
+    #[derive(Clone, Copy, Debug, Default)]
+    pub struct Classify;
+
+    impl ClassifyResponse for Classify {
+        type FailureClass = Failure;
+        type ClassifyEos = Self;
+
+        fn classify_response<B>(self, _res: &Response<B>) -> ClassifiedResponse<Failure, Self> {
+            ClassifiedResponse::RequiresEos(self)
+        }
+
+        fn classify_error<E: Display + 'static>(self, error: &E) -> Failure {
+            Failure::Service(error.to_string())
+        }
+    }
+
+    impl ClassifyEos for Classify {
+        type FailureClass = Failure;
+
+        fn classify_eos(self, _trailers: Option<&HeaderMap>) -> Result<(), Failure> {
+            Ok(())
+        }
+
+        fn classify_error<E: Display + 'static>(self, error: &E) -> Failure {
+            Failure::Body(error.to_string())
+        }
+    }
+
     /// The tower-http callbacks, shared by both layers.
     #[derive(Clone, Copy, Debug, Default)]
     pub struct Hooks<L>(PhantomData<L>);
@@ -178,15 +211,20 @@ mod logs {
         }
     }
 
-    /// Logs connection and response body errors; `on_response` logs server
-    /// errors.
-    impl<L: Logs> OnFailure<ServerErrorsFailureClass> for Hooks<L> {
-        fn on_failure(&mut self, error: ServerErrorsFailureClass, latency: Duration, span: &Span) {
-            if let ServerErrorsFailureClass::Error(error) = error {
-                span.record("error", error);
-                record_latency(span, latency);
-                L::failed();
+    /// Logs service and response body errors. A body error keeps the latency
+    /// that `on_response` recorded.
+    impl<L: Logs> OnFailure<Failure> for Hooks<L> {
+        fn on_failure(&mut self, failure: Failure, latency: Duration, span: &Span) {
+            match failure {
+                Failure::Service(error) => {
+                    span.record("error", error);
+                    record_latency(span, latency);
+                }
+                Failure::Body(error) => {
+                    span.record("error", error);
+                }
             }
+            L::failed();
         }
     }
 }
@@ -197,9 +235,14 @@ mod logs {
 mod tests {
     use std::convert::Infallible;
     use std::fmt;
+    use std::pin::Pin;
     use std::sync::{Arc, Mutex};
+    use std::task::Poll;
 
+    use bytes::Bytes;
     use http::{Request, Response, StatusCode};
+    use http_body::{Body, Frame};
+    use http_body_util::BodyExt;
     use tower::{Layer, ServiceExt, service_fn};
     use tracing::field::{Field, Visit};
     use tracing::span::{Attributes, Id, Record};
@@ -227,6 +270,11 @@ mod tests {
 
         fn events(&self) -> Vec<Logged> {
             self.events.lock().unwrap().clone()
+        }
+
+        fn count(&self, name: &str) -> usize {
+            let fields = self.fields.lock().unwrap();
+            fields.iter().filter(|(field, _)| *field == name).count()
         }
 
         fn field(&self, name: &str) -> Option<String> {
@@ -289,6 +337,25 @@ mod tests {
         Err("connection refused")
     }
 
+    /// A body that fails on its first frame.
+    struct Broken;
+
+    impl Body for Broken {
+        type Data = Bytes;
+        type Error = &'static str;
+
+        fn poll_frame(
+            self: Pin<&mut Self>,
+            _cx: &mut std::task::Context<'_>,
+        ) -> Poll<Option<Result<Frame<Bytes>, &'static str>>> {
+            Poll::Ready(Some(Err("body broke")))
+        }
+    }
+
+    async fn broken(_req: Request<String>) -> Result<Response<Broken>, Infallible> {
+        Ok(Response::new(Broken))
+    }
+
     fn logged(level: Level, target: &'static str, message: &str) -> Logged {
         (level, target, message.to_owned())
     }
@@ -297,7 +364,8 @@ mod tests {
     async fn server_layer_logs_finished_requests_at_info() {
         let (capture, _guard) = Capture::install();
         let service = server_layer().layer(service_fn(ok));
-        service.oneshot(request()).await.unwrap();
+        let response = service.oneshot(request()).await.unwrap();
+        response.into_body().collect().await.unwrap();
         assert_eq!(
             capture.events(),
             [
@@ -306,6 +374,24 @@ mod tests {
             ]
         );
         assert_eq!(capture.field("status").as_deref(), Some("200"));
+    }
+
+    #[tokio::test]
+    async fn server_layer_logs_body_errors() {
+        let (capture, _guard) = Capture::install();
+        let service = server_layer().layer(service_fn(broken));
+        let response = service.oneshot(request()).await.unwrap();
+        assert!(response.into_body().collect().await.is_err());
+        assert_eq!(
+            capture.events(),
+            [
+                logged(Level::TRACE, "srv", "Request started"),
+                logged(Level::INFO, "srv", "Request finished"),
+                logged(Level::ERROR, "srv", "Request failed"),
+            ]
+        );
+        assert_eq!(capture.field("error").as_deref(), Some("body broke"));
+        assert_eq!(capture.count("latency_us"), 1);
     }
 
     #[tokio::test]
