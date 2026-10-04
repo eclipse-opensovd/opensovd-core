@@ -6,29 +6,45 @@
 use std::time::Duration;
 
 use http::{Request, Response};
-use tower_http::classify::ServerErrorsFailureClass;
+use tower::Layer;
+use tower_http::classify::{ServerErrorsAsFailures, ServerErrorsFailureClass, SharedClassifier};
 use tower_http::trace::{MakeSpan, OnFailure, OnRequest, OnResponse, TraceLayer};
 use tracing::Span;
 
 const SERVER_TARGET: &str = "srv";
 
-#[must_use]
-pub fn server_layer() -> TraceLayer<
-    tower_http::classify::SharedClassifier<tower_http::classify::ServerErrorsAsFailures>,
+type ServerTrace = TraceLayer<
+    SharedClassifier<ServerErrorsAsFailures>,
     ServerMakeSpan,
     ServerOnRequest,
     ServerOnResponse,
     (),
     (),
     ServerOnFailure,
-> {
-    TraceLayer::new_for_http()
-        .make_span_with(ServerMakeSpan)
-        .on_request(ServerOnRequest)
-        .on_response(ServerOnResponse)
-        .on_failure(ServerOnFailure)
-        .on_body_chunk(())
-        .on_eos(())
+>;
+
+#[must_use]
+pub fn server_layer() -> ServerLayer {
+    ServerLayer
+}
+
+/// The layer [`server_layer`] returns.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct ServerLayer;
+
+impl<S> Layer<S> for ServerLayer {
+    type Service = <ServerTrace as Layer<S>>::Service;
+
+    fn layer(&self, inner: S) -> Self::Service {
+        TraceLayer::new_for_http()
+            .make_span_with(ServerMakeSpan)
+            .on_request(ServerOnRequest)
+            .on_response(ServerOnResponse)
+            .on_failure(ServerOnFailure)
+            .on_body_chunk(())
+            .on_eos(())
+            .layer(inner)
+    }
 }
 
 #[derive(Clone, Copy)]
