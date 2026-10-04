@@ -42,7 +42,7 @@ const VENDOR_INFO: OpenSovdInfo = OpenSovdInfo {
 async fn main() -> ExitCode {
     let cli = cli::Cli::parse();
 
-    if let Err(e) = libcli::init_tracing("gw=info,srv=info,tower_http=debug,axum=trace", None) {
+    if let Err(e) = libcli::init_tracing("warn,gw=info,srv=info,tower_http=debug", None) {
         eprintln!("Failed to initialize tracing: {e}");
         return ExitCode::FAILURE;
     }
