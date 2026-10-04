@@ -158,14 +158,18 @@ mod logs {
         }
     }
 
+    fn record_latency(span: &Span, latency: Duration) {
+        span.record(
+            "latency_us",
+            u64::try_from(latency.as_micros()).unwrap_or(u64::MAX),
+        );
+    }
+
     impl<L: Logs, B> OnResponse<B> for Hooks<L> {
         fn on_response(self, response: &Response<B>, latency: Duration, span: &Span) {
             let status = response.status();
             span.record("status", status.as_u16());
-            span.record(
-                "latency_us",
-                u64::try_from(latency.as_micros()).unwrap_or(u64::MAX),
-            );
+            record_latency(span, latency);
             if status.is_server_error() {
                 L::failed();
             } else {
@@ -177,9 +181,10 @@ mod logs {
     /// Logs connection and response body errors; `on_response` logs server
     /// errors.
     impl<L: Logs> OnFailure<ServerErrorsFailureClass> for Hooks<L> {
-        fn on_failure(&mut self, error: ServerErrorsFailureClass, _latency: Duration, span: &Span) {
+        fn on_failure(&mut self, error: ServerErrorsFailureClass, latency: Duration, span: &Span) {
             if let ServerErrorsFailureClass::Error(error) = error {
                 span.record("error", error);
+                record_latency(span, latency);
                 L::failed();
             }
         }
@@ -334,6 +339,7 @@ mod tests {
             capture.field("error").as_deref(),
             Some("connection refused")
         );
+        assert!(capture.field("latency_us").is_some());
     }
 
     #[tokio::test]
@@ -372,5 +378,6 @@ mod tests {
             capture.field("error").as_deref(),
             Some("connection refused")
         );
+        assert!(capture.field("latency_us").is_some());
     }
 }
