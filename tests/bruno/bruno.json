@@ -3,7 +3,6 @@
   "name": "sovd",
   "type": "collection",
   "ignore": [
-    "node_modules",
-    "__pycache__"
+    "node_modules"
   ]
 }
