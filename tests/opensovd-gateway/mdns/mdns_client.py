@@ -80,7 +80,9 @@ def fetch(zc: Zeroconf, instance: str, path: str) -> None:
         return
     url = httpx.URL(accessurl.decode() + path)
     address = info.parsed_addresses()[0]
-    response = httpx.get(url.copy_with(host=address), headers={"Host": url.netloc.decode()})
+    response = httpx.get(
+        url.copy_with(host=address), headers={"Host": url.netloc.decode()}, trust_env=False
+    )
     emit("fetched", url=str(url), address=address, status=response.status_code)
 
 
