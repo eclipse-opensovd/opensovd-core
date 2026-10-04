@@ -120,7 +120,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         if let Some(name) = socket.strip_prefix('@') {
             #[cfg(target_os = "linux")]
             {
-                let discovery = Discovery::connect_unix_abstract(&cli.url, name)?;
+                let discovery = Client::builder()
+                    .base_uri(&cli.url)?
+                    .unix_socket_abstract(name)
+                    .layer(opensovd_extra::trace::client_layer())
+                    .discovery()?;
                 discover_and_run(&discovery).await?;
                 return Ok(());
             }
@@ -130,7 +134,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 return Err("abstract Unix sockets are only supported on Linux".into());
             }
         }
-        let discovery = Discovery::connect_unix(&cli.url, socket)?;
+        let discovery = Client::builder()
+            .base_uri(&cli.url)?
+            .unix_socket(socket)
+            .layer(opensovd_extra::trace::client_layer())
+            .discovery()?;
         discover_and_run(&discovery).await?;
         return Ok(());
     }
