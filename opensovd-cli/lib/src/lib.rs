@@ -100,7 +100,7 @@ fn env_filter(default_filter: &str) -> tracing_subscriber::EnvFilter {
 /// Initialize tracing with `CompactFormat` and `EnvFilter`.
 ///
 /// Uses `RUST_LOG` if set, otherwise falls back to `default_filter`.
-/// Output goes to stderr by default; pass a `log_file` path to write
+/// Output goes to stdout by default; pass a `log_file` path to write
 /// to a file instead (useful for stdio-based protocols like MCP).
 ///
 /// # Errors
