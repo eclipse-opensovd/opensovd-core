@@ -395,6 +395,19 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn server_layer_records_the_matched_route() {
+        let (capture, _guard) = Capture::install();
+        let router = axum::Router::new()
+            .route("/components/{id}", axum::routing::get(|| async { "" }))
+            .layer(server_layer());
+        let request = Request::get("/components/ecu")
+            .body(axum::body::Body::empty())
+            .unwrap();
+        router.oneshot(request).await.unwrap();
+        assert_eq!(capture.field("route").as_deref(), Some("/components/{id}"));
+    }
+
+    #[tokio::test]
     async fn server_layer_logs_server_errors_once() {
         let (capture, _guard) = Capture::install();
         let service = server_layer().layer(service_fn(internal_error));
