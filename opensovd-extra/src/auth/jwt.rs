@@ -114,7 +114,7 @@ impl Authenticator for JwtAuthenticator {
 
         let token_data =
             decode::<Claims>(header, &self.decoding_key, &self.validation).map_err(|e| {
-                tracing::debug!(error = %e, "JWT validation failed");
+                tracing::debug!(target: "srv", error = %e, "JWT validation failed");
                 AuthError::Unauthenticated
             })?;
 

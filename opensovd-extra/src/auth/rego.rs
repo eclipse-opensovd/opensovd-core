@@ -35,14 +35,14 @@ impl RegorusAuthorizer {
         for (i, (name, reader)) in policies.iter_mut().enumerate() {
             let mut rego = String::new();
             reader.read_to_string(&mut rego)?;
-            tracing::info!(index = i, policy = %name, "Loading rego policy");
+            tracing::info!(target: "srv", index = i, policy = %name, "Loading rego policy");
             engine.add_policy((*name).to_owned(), rego)?;
         }
 
         for (i, reader) in data.iter_mut().enumerate() {
             let mut json = String::new();
             reader.read_to_string(&mut json)?;
-            tracing::info!(index = i, "Loading rego data");
+            tracing::info!(target: "srv", index = i, "Loading rego data");
             engine.add_data(regorus::Value::from_json_str(&json)?)?;
         }
 
@@ -66,7 +66,7 @@ impl RegorusAuthorizer {
             let path = path.as_ref();
             let rego =
                 std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
-            tracing::info!(index = i, policy = %path.display(), "Loading rego policy");
+            tracing::info!(target: "srv", index = i, policy = %path.display(), "Loading rego policy");
             engine.add_policy(path.display().to_string(), rego)?;
         }
 
@@ -74,7 +74,7 @@ impl RegorusAuthorizer {
             let path = path.as_ref();
             let json =
                 std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
-            tracing::info!(index = i, "Loading rego data");
+            tracing::info!(target: "srv", index = i, "Loading rego data");
             engine.add_data(regorus::Value::from_json_str(&json)?)?;
         }
 
@@ -94,7 +94,7 @@ impl Authorizer<Claims> for RegorusAuthorizer {
         // The clone carries all loaded policies and data.
         let mut eval_engine = {
             let guard = self.engine.read().map_err(|e| {
-                tracing::error!(error = %e, "Policy engine rwlock poisoned");
+                tracing::error!(target: "srv", error = %e, "Policy engine rwlock poisoned");
                 AuthError::unauthorized()
             })?;
             guard.clone()
@@ -114,7 +114,7 @@ impl Authorizer<Claims> for RegorusAuthorizer {
         let allowed = match eval_engine.eval_bool_query("data.sovd.authz.allow".to_owned(), false) {
             Ok(result) => result,
             Err(e) => {
-                tracing::error!(error = %e, "Rego policy evaluation failed");
+                tracing::error!(target: "srv", error = %e, "Rego policy evaluation failed");
                 false
             }
         };

@@ -13,7 +13,7 @@ pub trait JsonSchema {
 impl<T: schemars::JsonSchema> JsonSchema for T {
     fn schema() -> serde_json::Value {
         serde_json::to_value(schemars::schema_for!(T)).unwrap_or_else(|e| {
-            tracing::warn!(error = %e, type_name = std::any::type_name::<T>(), "Failed to generate JSON schema");
+            tracing::warn!(target: "srv", error = %e, type_name = std::any::type_name::<T>(), "Failed to generate JSON schema");
             serde_json::Value::Null
         })
     }

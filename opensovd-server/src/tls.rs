@@ -57,7 +57,7 @@ impl axum::serve::Listener for TlsListener {
                 tcp = self.inner.accept() => {
                     match tcp {
                         Ok((stream, addr)) => {
-                            tracing::debug!(peer = %addr, "TCP connection accepted");
+                            tracing::debug!(target: "srv", peer = %addr, "TCP connection accepted");
                             // try to grab a slot, if all 256 are taken, drop the connection
                             match Arc::clone(&self.semaphore).try_acquire_owned() {
                                 Ok(permit) => {
@@ -72,22 +72,22 @@ impl axum::serve::Listener for TlsListener {
                                         ).await;
                                         match result {
                                             Ok(Ok(tls)) => {
-                                                tracing::debug!(peer = %addr, "TLS handshake complete");
+                                                tracing::debug!(target: "srv", peer = %addr, "TLS handshake complete");
                                                 let _ = tx.send((tls, addr)).await;
                                             }
-                                            Ok(Err(e)) => tracing::warn!(peer = %addr, error = %e, "TLS handshake failed"),
-                                            Err(_) => tracing::warn!(peer = %addr, "TLS handshake timed out"),
+                                            Ok(Err(e)) => tracing::warn!(target: "srv", peer = %addr, error = %e, "TLS handshake failed"),
+                                            Err(_) => tracing::warn!(target: "srv", peer = %addr, "TLS handshake timed out"),
                                         }
                                     });
                                 }
                                 Err(_) => {
                                     // handshake queue full — drop the stream, TCP RST sent to client
-                                    tracing::warn!(peer = %addr, "handshake queue full, dropping connection");
+                                    tracing::warn!(target: "srv", peer = %addr, "handshake queue full, dropping connection");
                                 }
                             }
                         }
                         Err(e) => {
-                            tracing::error!(error = %e, "TCP accept error");
+                            tracing::error!(target: "srv", error = %e, "TCP accept error");
                             // brief pause so we don't spin at 100% CPU on persistent errors
                             tokio::time::sleep(Duration::from_millis(10)).await;
                         }
