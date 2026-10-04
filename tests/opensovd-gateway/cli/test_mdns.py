@@ -69,6 +69,13 @@ def test_requires_identification(request, crate_binary):
 
 
 @pytest.mark.parametrize("value", ["", " "])
+def test_rejects_empty_identification(request, crate_binary, value):
+    code, out = run(request, crate_binary, "--url", "http://0.0.0.0:0/sovd", "--mdns", value)
+    assert code == 2
+    assert "identification must not be empty" in out
+
+
+@pytest.mark.parametrize("value", ["", " "])
 def test_empty_env_disables_mdns(request, crate_binary, monkeypatch, value):
     monkeypatch.setenv("SOVD_MDNS", value)
     args = ["--url", "http://0.0.0.0:0/sovd"]

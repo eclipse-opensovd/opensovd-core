@@ -250,6 +250,12 @@ fn check_mdns(
             format!("invalid value '{value}' for '{arg}': {reason}"),
         )
     };
+    if matches.value_source("mdns") == Some(ValueSource::CommandLine)
+        && cli.mdns.identification().is_none()
+    {
+        let reason = "identification must not be empty";
+        return Err(invalid("--mdns <ID>", "", &reason));
+    }
     let enabled = cli.mdns.identification().is_some();
     #[cfg(unix)]
     if enabled && cli.unix_socket.is_some() {
