@@ -6,6 +6,7 @@
 browse                         report services as they are added, updated and removed
 register INSTANCE HOST ADDR    hold an instance name and host name until SIGTERM
 fetch INSTANCE PATH            resolve INSTANCE and GET PATH below its accessurl
+resolve INSTANCE               report the IPv4 addresses INSTANCE is advertised with
 """
 
 import argparse
@@ -13,12 +14,25 @@ import json
 import signal
 import socket
 import threading
+import time
 
 import httpx
-from zeroconf import IPVersion, ServiceBrowser, ServiceInfo, ServiceStateChange, Zeroconf
+from zeroconf import (
+    DNSAddress,
+    DNSOutgoing,
+    DNSQuestion,
+    IPVersion,
+    ServiceBrowser,
+    ServiceInfo,
+    ServiceStateChange,
+    Zeroconf,
+)
+from zeroconf.const import _CLASS_IN, _FLAGS_QR_QUERY, _TYPE_A
 
 SERVICE_TYPE = "_sovd._tcp.local."
 RESOLVE_TIMEOUT_MS = 3000
+REQUERY_DELAY_S = 1.1
+ANSWER_WAIT_S = 0.5
 
 
 def emit(event: str, **fields) -> None:
@@ -86,6 +100,26 @@ def fetch(zc: Zeroconf, instance: str, path: str) -> None:
     emit("fetched", url=str(url), address=address, status=response.status_code)
 
 
+def resolve(zc: Zeroconf, instance: str) -> None:
+    info = ServiceInfo(SERVICE_TYPE, f"{instance}.{SERVICE_TYPE}")
+    if not info.request(zc, RESOLVE_TIMEOUT_MS) or info.server is None:
+        emit("unresolved", name=instance)
+        return
+    # Interfaces answer with their own address at most once a second.
+    time.sleep(REQUERY_DELAY_S)
+    query = DNSOutgoing(_FLAGS_QR_QUERY)
+    query.add_question(DNSQuestion(info.server, _TYPE_A, _CLASS_IN))
+    zc.send(query)
+    time.sleep(ANSWER_WAIT_S)
+    records = zc.cache.entries_with_name(info.server.lower())
+    addresses = {
+        socket.inet_ntoa(r.address)
+        for r in records
+        if isinstance(r, DNSAddress) and len(r.address) == 4
+    }
+    emit("resolved", name=instance, addresses=sorted(addresses))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -97,6 +131,7 @@ def main() -> None:
     get = commands.add_parser("fetch")
     get.add_argument("instance")
     get.add_argument("path")
+    commands.add_parser("resolve").add_argument("instance")
     args = parser.parse_args()
 
     zc = Zeroconf(ip_version=IPVersion.V4Only)
@@ -108,6 +143,8 @@ def main() -> None:
                 register(zc, args.instance, args.host, args.address)
             case "fetch":
                 fetch(zc, args.instance, args.path)
+            case "resolve":
+                resolve(zc, args.instance)
     finally:
         zc.close()
 

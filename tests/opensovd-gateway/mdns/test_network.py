@@ -136,9 +136,11 @@ def test_follows_interfaces(start_gateway, mdns, netns):
     gateway.wait_for("Address added interface=sovd1 addr=198.51.100.1", 10.0)
     gateway.wait_for(announced("sovd1", "198.51.100.1"), 10.0)
     browser.event(lambda e: e["event"] == "updated" and "198.51.100.1" in e["addresses"])
+    assert mdns.resolve(INSTANCE) == ["192.0.2.1", "198.51.100.1"]
 
     netns.ip("link", "del", "sovd1")
     gateway.wait_for("Address removed interface=sovd1 addr=198.51.100.1", 10.0)
+    assert mdns.resolve(INSTANCE) == ["192.0.2.1"]
 
 
 def test_warns_without_a_usable_interface(start_gateway, netns):

@@ -48,6 +48,10 @@ class Mdns:
         out = self._netns.run(sys.executable, str(CLIENT), "fetch", instance, path).stdout
         return json.loads(out.splitlines()[-1])
 
+    def resolve(self, instance: str) -> list[str] | None:
+        out = self._netns.run(sys.executable, str(CLIENT), "resolve", instance).stdout
+        return json.loads(out.splitlines()[-1]).get("addresses")
+
     def close(self) -> None:
         for client in self._clients:
             client.close()
