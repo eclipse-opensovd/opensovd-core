@@ -19,6 +19,7 @@ import pytest
 _TOOLS = ("unshare", "nsenter", "setpriv", "ip")
 _UNSHARE = ("unshare", "--user", "--map-root-user", "--net", "--")
 _PDEATHSIG = ("setpriv", "--pdeathsig", "KILL", "--")
+_PIDNS = ("unshare", "--pid", "--kill-child", "--forward-signals", "--")
 _TIMEOUT = 5.0
 
 
@@ -35,6 +36,12 @@ def unavailable_reason() -> str | None:
     return None
 
 
+@functools.cache
+def own_pid_namespace() -> bool:
+    """Whether wrapped commands get their own PID namespace, which needs util-linux 2.42."""
+    return subprocess.run([*_UNSHARE, *_PIDNS, "true"], capture_output=True).returncode == 0
+
+
 def skip_unless_available() -> None:
     """Skip the calling test where no network namespace can be created."""
     if reason := unavailable_reason():
@@ -45,8 +52,10 @@ class NetworkNamespace:
     """A private user and network namespace with only a loopback interface.
 
     Commands prefixed with `wrap` run inside it and get SIGKILL when the test
-    process dies. `close` kills everything left inside, which removes the
-    namespace together with its interfaces.
+    process dies. With `own_pid_namespace`, each runs as init of its own PID
+    namespace, so the kernel also kills everything it forked. `close` kills
+    everything left inside, which removes the namespace together with its
+    interfaces.
     """
 
     def __init__(self):
@@ -66,6 +75,7 @@ class NetworkNamespace:
                 "--preserve-credentials",
                 "--",
                 *_PDEATHSIG,
+                *(_PIDNS if own_pid_namespace() else ()),
             ]
             self.ip("link", "set", "lo", "up")
         except BaseException:

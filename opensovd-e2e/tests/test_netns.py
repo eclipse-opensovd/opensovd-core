@@ -13,7 +13,7 @@ from pathlib import Path
 
 import opensovd_e2e
 import pytest
-from opensovd_e2e.netns import NetworkNamespace, skip_unless_available
+from opensovd_e2e.netns import NetworkNamespace, own_pid_namespace, skip_unless_available
 
 pytestmark = pytest.mark.skipif(sys.platform != "linux", reason="network namespaces need Linux")
 
@@ -74,7 +74,7 @@ def test_close_kills_everything_inside(netns):
 def test_close_kills_processes_forked_during_close(netns):
     shell = subprocess.Popen([*netns.wrap, "sh", "-c", "while :; do sleep 60 & sleep 0.005; done"])
     deadline = time.monotonic() + 5
-    while len(netns.pids()) < 3:
+    while len(netns.pids()) < 3 + own_pid_namespace():
         assert time.monotonic() < deadline, "shell did not start forking"
         time.sleep(0.01)
 
@@ -96,26 +96,37 @@ def test_failed_setup_leaves_nothing(monkeypatch):
     assert children() == before
 
 
-def test_dies_with_the_test_process():
+@pytest.mark.parametrize(
+    ("cmd", "forks"),
+    [("exec sleep infinity", False), ("sleep infinity & wait", True)],
+    ids=["direct", "forked"],
+)
+def test_dies_with_the_test_process(cmd, forks):
     skip_unless_available()
+    if forks and not own_pid_namespace():
+        pytest.skip("forked processes need util-linux 2.42 to die with the test process")
+    count = 2 + forks + own_pid_namespace()
     script = """
-        import subprocess, time
+        import subprocess, sys, time
         from opensovd_e2e.netns import NetworkNamespace
 
         netns = NetworkNamespace()
-        subprocess.Popen([*netns.wrap, "sleep", "infinity"])
-        while len(netns.pids()) < 2:
+        subprocess.Popen([*netns.wrap, "sh", "-c", sys.argv[1]])
+        while len(netns.pids()) < int(sys.argv[2]):
             time.sleep(0.01)
         print(netns.id, flush=True)
         time.sleep(60)
     """
     env = {**os.environ, "PYTHONPATH": str(Path(opensovd_e2e.__file__).parents[1])}
     parent = subprocess.Popen(
-        [sys.executable, "-c", textwrap.dedent(script)], stdout=subprocess.PIPE, text=True, env=env
+        [sys.executable, "-c", textwrap.dedent(script), cmd, str(count)],
+        stdout=subprocess.PIPE,
+        text=True,
+        env=env,
     )
     assert parent.stdout is not None
     netns = parent.stdout.readline().strip()
-    assert len(pids_in(netns)) == 2
+    assert len(pids_in(netns)) == count
 
     parent.kill()
     parent.wait()
