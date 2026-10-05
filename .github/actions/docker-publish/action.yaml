@@ -2,11 +2,11 @@
 # SPDX-License-Identifier: Apache-2.0
 
 name: Docker publish
-description: Build a multi-arch Docker image from prebuilt artifacts, smoke-test it, and push to GHCR.
+description: Build a multi-arch Docker image from prebuilt artifacts and push all its platforms to GHCR together.
 
 inputs:
   binary:
-    description: Cargo package name; also used as the image suffix and the local test tag.
+    description: Cargo package name; also used as the image suffix.
     required: true
   dockerfile:
     description: Path to the Dockerfile.
@@ -14,12 +14,8 @@ inputs:
   release-tag:
     description: Release tag (nightly | latest | vX.Y.Z).
     required: true
-  smoke-test-cmd:
-    description: Optional shell command to run against the loaded test image (tagged ${binary}:test). When empty, the load build and smoke step are skipped.
-    required: false
-    default: ''
   dist-path:
-    description: Directory holding the downloaded build artifacts.
+    description: Directory holding the downloaded image-<binary>-<triple> artifacts.
     required: false
     default: dist
 
@@ -32,16 +28,16 @@ runs:
       run: |
         shopt -s nullglob
         PLATFORMS=""
-        for src in ${{ inputs.dist-path }}/${{ inputs.binary }}-*; do
+        for src in ${{ inputs.dist-path }}/image-${{ inputs.binary }}-*; do
           [ -d "$src" ] || continue
           target=$(basename "$src")
-          target=${target#${{ inputs.binary }}-}
+          target=${target#image-${{ inputs.binary }}-}
           case "$target" in
             x86_64-*-linux-*)  arch=amd64 ;;
             aarch64-*-linux-*) arch=arm64 ;;
             *) continue ;;
           esac
-          ln -sfn "${{ inputs.binary }}-${target}" "${{ inputs.dist-path }}/${arch}"
+          ln -sfn "image-${{ inputs.binary }}-${target}" "${{ inputs.dist-path }}/${arch}"
           chmod +x "${{ inputs.dist-path }}/${arch}/${{ inputs.binary }}"
           [ -n "$PLATFORMS" ] && PLATFORMS="$PLATFORMS,"
           PLATFORMS="${PLATFORMS}linux/${arch}"
@@ -83,25 +79,6 @@ runs:
           org.opencontainers.image.source=${{ steps.cargo.outputs.repository }}
         annotations: |
           index:org.opencontainers.image.description=${{ steps.cargo.outputs.description }}
-
-    - if: inputs.smoke-test-cmd != ''
-      uses: docker/build-push-action@v7
-      with:
-        context: .
-        file: ${{ inputs.dockerfile }}
-        load: true
-        tags: ${{ inputs.binary }}:test
-        labels: ${{ steps.meta.outputs.labels }}
-        build-args: TARGETARCH=amd64
-        cache-from: |
-          type=gha,scope=${{ github.event.repository.name }}-${{ inputs.binary }}-${{ github.ref_name }}
-          type=gha,scope=${{ github.event.repository.name }}-${{ inputs.binary }}-main
-        cache-to: type=gha,mode=max,scope=${{ github.event.repository.name }}-${{ inputs.binary }}-${{ github.ref_name }}
-
-    - if: inputs.smoke-test-cmd != ''
-      name: Smoke test
-      shell: bash
-      run: ${{ inputs.smoke-test-cmd }}
 
     - id: push
       uses: docker/build-push-action@v7

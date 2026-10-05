@@ -16,26 +16,46 @@ binaries to work on, `binaries` in `mise.toml` by default, and pass arguments af
 `--` to cargo or pytest, so `mise run test:unit gateway -- --no-fail-fast` tests only
 the crates the gateway is built from.
 
+## Build Matrix
+
+The build job runs once per `binary` and `target` of its matrix. A binary `<name>` is
+the package `opensovd-<name>`, with its e2e tests in `tests/opensovd-<name>/` and its
+image in `docker/Dockerfile.<name>`; the docker matrix and `binaries` in `mise.toml`
+list it too. Each target entry sets:
+
+| Field       | Meaning                                                                       |
+|-------------|-------------------------------------------------------------------------------|
+| `triple`    | Rust target to build for                                                      |
+| `os`        | Runner                                                                        |
+| `tests`     | `test:` tasks the job runs: `unit`, `integration`                             |
+| `coverage`  | Run those tests instrumented through `mise run coverage` instead              |
+| `container` | Build and smoke-test the image for the triple's architecture (Linux only)     |
+
 ## Reports
 
 Every stage writes its report to `target/reports/<binary>/<triple>/<stage>/`:
 `test:unit` the nextest JUnit report as `unit/junit.xml`, `test:integration` an HTML
 report as `integration/index.html`, `coverage` an HTML report under `coverage/html/`
 with `coverage.json`, `cobertura.xml`, `summary.md`, `detail.md` and a shields.io
-`badge.json`. The jobs upload the directory, the coverage job posts each `summary.md`
-as a PR comment, and on main GitHub Pages serves every report under the same path.
+`badge.json`. The build jobs upload the directory as
+`reports-<binary>-<triple>`, coverage jobs post `summary.md` as a PR comment, and on
+main GitHub Pages serves every report under the same path.
+
+## Images
+
+On releases the docker job builds one image per binary from the binaries of its
+`container` targets and pushes all its platforms together.
 
 ## Jobs
 
 | Job            | Runs On                | Description                                                                           |
 |----------------|------------------------|---------------------------------------------------------------------------------------|
 | **prepare**    | Always                 | Entry point; determines release type and whether to run (skips nightly if no changes) |
-| **build**      | When `should_run=true` | Builds for Linux, Windows, macOS; runs tests and pytest                               |
+| **build**      | When `should_run=true` | Builds, tests or covers each binary per target; smoke-tests images on Linux           |
 | **licenses**   | When `should_run=true` | Checks licenses and sources with cargo-deny                                           |
 | **advisories** | When `should_run=true` | Checks security advisories with cargo-deny                                            |
-| **lint**       | When `should_run=true` | Runs the git hooks (prek), including rustfmt and clippy                               |
-| **coverage**   | When `should_run=true` | Generates coverage report, deploys to GitHub Pages on main                            |
-| **docker**     | main/tags/schedule     | Builds and pushes Docker images (gateway, mcp) to GHCR                                |
+| **lint**       | When `should_run=true` | Runs the git hooks (prek), including rustfmt and clippy, and the plugin self-tests    |
+| **docker**     | main/tags/schedule     | Pushes a multi-arch Docker image per binary to GHCR                                   |
 | **release**    | main/tags/schedule     | Creates GitHub release with artifacts and changelog                                   |
 | **gate**       | Always                 | Final check that all jobs passed (use for branch protection)                          |
 
@@ -50,14 +70,13 @@ flowchart TB
         licenses
         advisories
         lint
-        coverage
     end
-    prepare --> build & licenses & advisories & lint & coverage
+    prepare --> build & licenses & advisories & lint
     build --> docker & release
-    docker & release & licenses & advisories & lint & coverage --> gate
+    docker & release & licenses & advisories & lint --> gate
 ```
 
-Jobs `build`, `licenses`, `advisories`, `lint`, and `coverage` run in parallel after `prepare`.
+Jobs `build`, `licenses`, `advisories` and `lint` run in parallel after `prepare`.
 
 ## Nightly Skip Logic
 
