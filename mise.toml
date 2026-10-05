@@ -21,7 +21,7 @@ gh = "2.102.0"
 jq = "1.8.2"
 
 [env]
-UV_PYTHON = { value = "{{ tools.python.path }}", tools = true }
+UV_PYTHON = { value = "{% if tools.python %}{{ tools.python.path }}{% endif %}", tools = true }
 UV_PYTHON_DOWNLOADS = "never"
 
 [tasks.ci]
@@ -30,7 +30,7 @@ depends = ["lint", "build", "test", "licenses", "advisories"]
 
 [tasks.build]
 description = "Build the release binaries CI ships"
-run = "cargo build --locked --profile release-small"
+run = ["cargo build --locked --profile release-small -p opensovd-gateway", "cargo build --locked --profile release-small -p opensovd-mcp"]
 
 [tasks.lint]
 description = "Run the git hooks on all files"
@@ -40,6 +40,11 @@ run = "prek run --all-files --show-diff-on-failure"
 description = "Format the Rust code with the pinned nightly rustfmt"
 tools = { rust = { version = "nightly-2026-10-05", profile = "minimal", components = "rustfmt" } }
 run = "cargo fmt --all"
+
+[tasks."lint:commits"]
+description = "Check that commit messages follow Conventional Commits"
+usage = 'arg "[rev]" default="origin/main..HEAD" help="Commit or range to check"'
+run = "convco check {{ usage.rev | quote }}"
 
 [tasks.test]
 description = "Run all tests"
