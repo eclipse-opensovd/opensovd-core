@@ -16,6 +16,15 @@ binaries to work on, `binaries` in `mise.toml` by default, and pass arguments af
 `--` to cargo or pytest, so `mise run test:unit gateway -- --no-fail-fast` tests only
 the crates the gateway is built from.
 
+## Reports
+
+Every stage writes its report to `target/reports/<binary>/<triple>/<stage>/`:
+`test:unit` the nextest JUnit report as `unit/junit.xml`, `test:integration` an HTML
+report as `integration/index.html`, `coverage` an HTML report under `coverage/html/`
+with `coverage.json`, `cobertura.xml`, `summary.md`, `detail.md` and a shields.io
+`badge.json`. The jobs upload the directory, the coverage job posts each `summary.md`
+as a PR comment, and on main GitHub Pages serves every report under the same path.
+
 ## Jobs
 
 | Job            | Runs On                | Description                                                                           |

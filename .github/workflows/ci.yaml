@@ -98,6 +98,10 @@ jobs:
     env:
       OPENSOVD_CHANNEL: ${{ needs.prepare.outputs.channel }}
       OPENSOVD_COMMIT_SHA: ${{ needs.prepare.outputs.sha }}
+    # Git Bash on Windows, so the bash tasks run the same on every runner.
+    defaults:
+      run:
+        shell: bash
     strategy:
       fail-fast: false
       matrix:
@@ -127,22 +131,17 @@ jobs:
         run: mise run test:self
 
       - if: contains(matrix.tests, 'integration')
-        run: |
-          mise run test:integration -- \
-            --opensovd-target=${{ matrix.target }} \
-            --html=pytest-report.html \
-            --self-contained-html \
-            --metadata "Branch" "${{ github.ref_name }}" \
-            --metadata "Repository" "${{ github.repository }}" \
-            --metadata "Run ID" "${{ github.run_id }}" \
-            --metadata "Commit" "${{ github.sha }}" \
-            --metadata "Coverage_URL" "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/coverage/"
+        env:
+          CARGO_BUILD_TARGET: ${{ matrix.target }}
+        run: mise run test:integration
 
-      - if: contains(matrix.tests, 'integration')
+      # Every stage writes its report under target/reports/<binary>/<triple>/<stage>.
+      - if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v7
         with:
-          name: pytest-report
-          path: pytest-report.html
+          name: reports-${{ matrix.target }}
+          path: target/reports/
+          if-no-files-found: ignore
 
       - uses: actions/upload-artifact@v7
         with:
@@ -228,21 +227,15 @@ jobs:
           cache-on-failure: true
 
       # The task instruments the build with cargo-llvm-cov, runs the nextest
-      # suites and the e2e tests against the instrumented binaries, and merges
-      # both into coverage.json, HTML and Cobertura under target/coverage.
+      # suites and the e2e tests against the instrumented binaries, and writes
+      # a report per binary under target/reports/<binary>/<triple>/coverage.
       - name: Collect coverage (Rust + e2e)
         run: mise run coverage
 
-      - id: cov
-        run: |
-          PERCENT=$(jq -r '.data[0].totals.lines.percent | floor' coverage.json)
-          COLOR=$([[ $PERCENT -ge 80 ]] && echo 28A745 || ([[ $PERCENT -ge 60 ]] && echo B08800 || echo CB2431))
-          curl -s "https://img.shields.io/badge/coverage-${PERCENT}%25-${COLOR}" -o target/coverage/llvm-cov/html/badge.svg
-          bash scripts/coverage-report.sh coverage.json > coverage-comment.md
-          bash scripts/coverage-report.sh --detail coverage.json >> "$GITHUB_STEP_SUMMARY"
+      - run: cat target/reports/*/*/coverage/detail.md >> "$GITHUB_STEP_SUMMARY"
 
-      # Post or update a sticky PR comment, identified by the marker on line 1
-      # of the rendered body. Restricted to same-repo PRs since the token is
+      # Post or update a sticky PR comment per report, identified by the marker
+      # on its first line. Restricted to same-repo PRs since the token is
       # read-only for forks.
       - name: Comment coverage on PR
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
@@ -251,20 +244,22 @@ jobs:
           REPO: ${{ github.repository }}
           PR: ${{ github.event.pull_request.number }}
         run: |
-          jq -Rs '{body: .}' coverage-comment.md > comment.json
-          marker='<!-- coverage-report -->'
-          id=$(gh api --paginate "repos/${REPO}/issues/${PR}/comments" \
-            -q ".[] | select(.body | startswith(\"${marker}\")) | .id" | head -n1)
-          if [ -n "$id" ]; then
-            gh api --method PATCH "repos/${REPO}/issues/comments/${id}" --input comment.json >/dev/null
-          else
-            gh api --method POST "repos/${REPO}/issues/${PR}/comments" --input comment.json >/dev/null
-          fi
+          for summary in target/reports/*/*/coverage/summary.md; do
+            jq -Rs '{body: .}' "$summary" > comment.json
+            marker=$(head -n1 "$summary")
+            id=$(gh api --paginate "repos/${REPO}/issues/${PR}/comments" \
+              -q ".[] | select(.body | startswith(\"${marker}\")) | .id" | head -n1)
+            if [ -n "$id" ]; then
+              gh api --method PATCH "repos/${REPO}/issues/comments/${id}" --input comment.json >/dev/null
+            else
+              gh api --method POST "repos/${REPO}/issues/${PR}/comments" --input comment.json >/dev/null
+            fi
+          done
 
       - uses: actions/upload-artifact@v7
         with:
-          name: coverage-report
-          path: target/coverage/llvm-cov/html
+          name: reports-coverage
+          path: target/reports/
 
   pages:
     needs: [prepare, build, coverage]
@@ -276,19 +271,23 @@ jobs:
     steps:
       - uses: actions/download-artifact@v8
         with:
-          name: pytest-report
+          pattern: reports-*
           path: site
+          merge-multiple: true
 
-      - uses: actions/download-artifact@v8
-        with:
-          name: coverage-report
-          path: site/coverage
-        continue-on-error: true
-
-      - run: |
-          if [ -f site/pytest-report.html ]; then
-            mv site/pytest-report.html site/index.html
-          fi
+      # Link every report the build jobs produced, one per binary, target and stage.
+      - working-directory: site
+        run: |
+          items=
+          for stage in */*/*/; do
+            stage=${stage%/}
+            page=$(find "$stage" -name index.html | sort | head -n1)
+            [ -n "$page" ] || page=$(find "$stage" -type f | sort | head -n1)
+            if [ -n "$page" ]; then
+              items+="<li><a href=\"$page\">${stage//\// / }</a></li>"
+            fi
+          done
+          echo "<!doctype html><meta charset=\"utf-8\"><title>OpenSOVD reports</title><ul>${items}</ul>" > index.html
 
       - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v5

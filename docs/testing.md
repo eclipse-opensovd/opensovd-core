@@ -8,6 +8,8 @@ Run all tests:
 mise run test
 ```
 
+Each test task writes its report per binary to `target/reports/<binary>/<triple>/<stage>/`: `unit/junit.xml`, `integration/index.html` and `coverage/`.
+
 ## Testing with pytest
 
 ### Prerequisites
