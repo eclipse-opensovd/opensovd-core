@@ -1,8 +1,6 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 Contributors to the Eclipse Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-#![cfg_attr(coverage_nightly, feature(coverage_attribute))]
-
 use axum::Router;
 use axum::extract::ConnectInfo as AxumConnectInfo;
 use axum::routing::get;
@@ -21,7 +19,6 @@ async fn connect_info_handler(info: AxumConnectInfo<ConnectInfo>) -> String {
     }
 }
 
-#[cfg_attr(coverage_nightly, coverage(off))]
 #[tokio::test]
 async fn test_tcp_connect_info() {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -60,7 +57,6 @@ async fn test_tcp_connect_info() {
 }
 
 #[cfg(target_os = "linux")]
-#[cfg_attr(coverage_nightly, coverage(off))]
 #[expect(unsafe_code)]
 #[tokio::test]
 async fn test_uds_connect_info() {

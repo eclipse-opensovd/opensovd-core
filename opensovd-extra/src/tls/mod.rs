@@ -96,7 +96,6 @@ fn provider_or_default(provider: Option<Arc<CryptoProvider>>) -> Arc<CryptoProvi
 }
 
 #[cfg(test)]
-#[cfg_attr(coverage_nightly, coverage(off))]
 pub(crate) mod testutil {
     use std::io::Write;
 
@@ -136,7 +135,6 @@ pub(crate) mod testutil {
 }
 
 #[cfg(test)]
-#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::testutil::{ca, pem_file, server};
     use super::*;

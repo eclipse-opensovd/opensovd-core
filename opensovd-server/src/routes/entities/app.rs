@@ -121,7 +121,6 @@ pub(super) async fn app_capabilities(
 }
 
 #[cfg(test)]
-#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use axum::{body::Body, http::Request};
     use http_body_util::BodyExt;

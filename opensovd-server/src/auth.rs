@@ -316,7 +316,6 @@ where
 }
 
 #[cfg(test)]
-#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use axum::{Router, http::Request, routing::get};
     use http_body_util::BodyExt;

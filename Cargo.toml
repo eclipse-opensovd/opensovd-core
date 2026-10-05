@@ -81,7 +81,6 @@ redundant_imports = "deny"
 unused_qualifications = "deny"
 unsafe_code = "deny"
 dead_code = "deny"
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage,coverage_nightly)'] }
 rust_2024_compatibility = { level = "warn", priority = -1 }
 
 [workspace.lints.clippy]
