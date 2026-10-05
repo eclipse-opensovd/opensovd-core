@@ -9,6 +9,7 @@ SPDX-License-Identifier: Apache-2.0
 
 [![CI](https://github.com/eclipse-opensovd/opensovd-core/actions/workflows/ci.yaml/badge.svg?event=push&branch=main)](https://github.com/eclipse-opensovd/opensovd-core/actions/workflows/ci.yaml?query=event%3Apush+branch%3Amain)
 [![Coverage](https://img.shields.io/endpoint?url=https://eclipse-opensovd.github.io/opensovd-core/gateway/x86_64-unknown-linux-gnu/coverage/badge.json)](https://eclipse-opensovd.github.io/opensovd-core/gateway/x86_64-unknown-linux-gnu/coverage/html/)
+[![GHCR](https://img.shields.io/badge/ghcr.io-opensovd--gateway-blue?logo=github)](https://ghcr.io/eclipse-opensovd/opensovd-gateway)
 [![Chat](https://img.shields.io/badge/chat-slack-blue?logo=slack)](https://app.slack.com/client/T02MS1M89UH/C0958MQNGP2)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](../../LICENSE)
 [![Good First Issues](https://img.shields.io/github/issues-search/eclipse-opensovd/opensovd-core?query=is%3Aopen%20label%3A%22good%20first%20issue%22%20label%3Abin%3Agateway&label=good%20first%20issues&color=blue)](https://github.com/eclipse-opensovd/opensovd-core/issues?q=is%3Aopen%20label%3A%22good%20first%20issue%22%20label%3Abin%3Agateway)
