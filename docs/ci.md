@@ -11,6 +11,10 @@ The jobs run the tasks defined in `mise.toml`, so `mise run lint`,
 `mise run test`, `mise run coverage`, `mise run licenses` and
 `mise run advisories` reproduce them locally, and `mise run build` builds the
 binaries the build job ships. `mise run ci` runs all of them but coverage.
+`build`, `test:unit`, `test:integration` and `coverage` take the
+binaries to work on, `binaries` in `mise.toml` by default, and pass arguments after
+`--` to cargo or pytest, so `mise run test:unit gateway -- --no-fail-fast` tests only
+the crates the gateway is built from.
 
 ## Jobs
 

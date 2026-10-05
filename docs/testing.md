@@ -249,7 +249,7 @@ cargo run --example client -- --unix-socket @opensovd --url http://localhost/sov
 
 ## Testing with cargo
 
-`mise run test:unit` runs the Rust tests with cargo-nextest, then the doc tests with `cargo test --doc`. To run them directly:
+`mise run test:unit gateway` runs the tests of every workspace crate the gateway is built from with cargo-nextest, then their doc tests with `cargo test --doc`. To run them directly:
 
 ```bash
 # Run all Rust tests

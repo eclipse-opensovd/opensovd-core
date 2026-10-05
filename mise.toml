@@ -25,13 +25,28 @@ jq = "1.8.2"
 UV_PYTHON = { value = "{% if tools.python %}{{ tools.python.path }}{% endif %}", tools = true }
 UV_PYTHON_DOWNLOADS = "never"
 
+[vars]
+profile = "release-small"
+binaries = "gateway mcp"
+
+[task_templates.binaries]
+usage = '''
+arg "[binary]..." help="Binaries, all by default"
+arg "[-- args]..."
+'''
+
 [tasks.ci]
 description = "Run the checks CI runs"
 depends = ["lint", "build", "test", "licenses", "advisories"]
 
 [tasks.build]
-description = "Build the release binaries CI ships"
-run = ["cargo build --locked --profile release-small -p opensovd-gateway", "cargo build --locked --profile release-small -p opensovd-mcp"]
+description = "Build the release binaries"
+extends = "binaries"
+run = '''
+{%- for b in usage.binary or vars.binaries | split(pat=" ") -%}
+cargo build --locked --profile {{ vars.profile }} -p opensovd-{{ b }}{% for a in usage.args %} {{ a | quote }}{% endfor %}{% if not loop.last %} && {% endif %}
+{%- endfor -%}
+'''
 
 [tasks.lint]
 description = "Run the git hooks on all files"
@@ -48,7 +63,15 @@ depends = ["test:unit", "test:self", "test:integration"]
 
 [tasks."test:unit"]
 description = "Run the Rust tests"
-run = ["cargo test --locked --workspace --all-features --doc", "cargo nextest run --locked --workspace --all-features"]
+extends = "binaries"
+run = '''
+{%- for b in usage.binary or vars.binaries | split(pat=" ") -%}
+{%- set crates = [line | split(pat=" ") | first for line in exec(command="cargo tree --locked -p opensovd-" ~ b ~ " -e normal,build --prefix none --format {p}") | split(pat="\n") if config_root in line and "(*)" not in line] -%}
+cargo nextest run --locked{% for c in crates %} -p {{ c }}{% endfor %}{% for a in usage.args %} {{ a | quote }}{% endfor %}
+{%- for c in crates %}{% if loop.first %} && cargo test --locked --doc{% endif %} -p {{ c }}{% endfor %}
+{%- if not loop.last %} && {% endif %}
+{%- endfor -%}
+'''
 
 [tasks."test:self"]
 description = "Run the pytest plugin self-tests"
@@ -56,17 +79,27 @@ run = "uv run --locked pytest opensovd-e2e/tests"
 
 [tasks."test:integration"]
 description = "Run the e2e tests"
-run = "uv run --locked pytest tests/"
+extends = "binaries"
+run = '''
+uv run --locked pytest
+{%- for b in usage.binary or vars.binaries | split(pat=" ") %} tests/opensovd-{{ b }}{% endfor %} --opensovd-profile={{ vars.profile }}
+{%- for a in usage.args %} {{ a | quote }}{% endfor -%}
+'''
 
 [tasks.coverage]
 description = "Collect Rust and e2e coverage"
+extends = "binaries"
 env = { CARGO_TARGET_DIR = "{{ config_root }}/target/coverage" }
 run = '''
+{%- set bins = usage.binary or vars.binaries | split(pat=" ") -%}
 llvm_cov_env=$(cargo llvm-cov show-env --sh)
 eval "$llvm_cov_env"
 cargo llvm-cov clean --workspace
-cargo nextest run --locked --workspace --all-features
-uv run --locked pytest tests/
+{% for b in bins -%}
+{%- set crates = [line | split(pat=" ") | first for line in exec(command="cargo tree --locked -p opensovd-" ~ b ~ " -e normal,build --prefix none --format {p}") | split(pat="\n") if config_root in line and "(*)" not in line] -%}
+cargo nextest run --locked{% for c in crates %} -p {{ c }}{% endfor %}
+{% endfor -%}
+uv run --locked pytest{% for b in bins %} tests/opensovd-{{ b }}{% endfor %}{% for a in usage.args %} {{ a | quote }}{% endfor %}
 cargo llvm-cov report --json --output-path coverage.json
 cargo llvm-cov report --html
 cargo llvm-cov report --cobertura --output-path "$CARGO_TARGET_DIR/llvm-cov/html/cobertura.xml"

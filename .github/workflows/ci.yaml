@@ -130,7 +130,6 @@ jobs:
         run: |
           mise run test:integration -- \
             --opensovd-target=${{ matrix.target }} \
-            --opensovd-profile=${{ matrix.profile }} \
             --html=pytest-report.html \
             --self-contained-html \
             --metadata "Branch" "${{ github.ref_name }}" \
