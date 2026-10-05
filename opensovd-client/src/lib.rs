@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 Contributors to the Eclipse Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-#![expect(clippy::missing_errors_doc)]
+#![expect(clippy::missing_errors_doc, clippy::result_large_err)]
 #![doc = include_str!("../README.md")]
 
 mod client;

@@ -132,7 +132,7 @@ async fn data_list_without_filter_is_empty() {
 
     let filter = seen.lock().unwrap().clone().expect("provider was listed");
     assert!(filter.scope.is_none());
-    assert!(filter.tags.is_empty());
+    assert_eq!(filter.tags, Vec::<String>::new());
 }
 
 #[tokio::test]

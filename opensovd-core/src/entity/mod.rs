@@ -141,7 +141,7 @@ mod tests {
 
         assert_eq!(component.id(), "test-id");
         assert_eq!(component.name(), "Test Component");
-        assert!(component.tags().is_empty());
+        assert_eq!(component.tags(), Vec::<String>::new());
         assert!(component.metadata().is_empty());
     }
 

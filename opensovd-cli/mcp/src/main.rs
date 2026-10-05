@@ -108,6 +108,7 @@ impl McpServer {
 
 #[tool_handler(router = self.tool_router)]
 #[prompt_handler(router = self.prompt_router)]
+#[expect(clippy::unused_async_trait_impl)]
 impl ServerHandler for McpServer {
     fn get_info(&self) -> ServerInfo {
         let capabilities = ServerCapabilities::builder()

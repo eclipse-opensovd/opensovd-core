@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 Contributors to the Eclipse Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-#![expect(clippy::print_stdout)]
+#![expect(clippy::print_stdout, clippy::result_large_err)]
 
 //! CLI client example exercising the `opensovd-client` API.
 //!

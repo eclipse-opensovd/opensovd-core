@@ -280,12 +280,12 @@ url_api = "https://api.github.com/repos/astral-sh/ruff/releases/assets/586788044
 provenance = "github-attestations"
 
 [[tools.rust]]
-version = "nightly-2026-05-07"
+version = "1.99.0"
 backend = "core:rust"
-specifiers = ["nightly-2026-05-07"]
+specifiers = ["1.99.0"]
 
 [tools.rust.options]
-components = "clippy,llvm-tools,rust-analyzer,rustfmt"
+components = "clippy,llvm-tools,rustfmt"
 profile = "minimal"
 
 [[tools.ty]]

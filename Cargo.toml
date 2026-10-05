@@ -89,6 +89,7 @@ pedantic = { level = "deny", priority = -1 }
 cargo = { level = "deny", priority = -1 }
 multiple_crate_versions = "allow"
 allow_attributes = "deny"
+result_large_err = "deny"
 clone_on_ref_ptr = "deny"
 expect_used = "deny"
 indexing_slicing = "deny"
