@@ -8,7 +8,7 @@ SPDX-License-Identifier: Apache-2.0
 > Standardized diagnostic communication for connected vehicles.
 
 [![CI](https://github.com/eclipse-opensovd/opensovd-core/actions/workflows/ci.yaml/badge.svg?event=push&branch=main)](https://github.com/eclipse-opensovd/opensovd-core/actions/workflows/ci.yaml?query=event%3Apush+branch%3Amain)
-[![Coverage](https://eclipse-opensovd.github.io/opensovd-core/coverage/badge.svg)](https://eclipse-opensovd.github.io/opensovd-core/coverage/)
+[![Coverage](https://img.shields.io/endpoint?url=https://eclipse-opensovd.github.io/opensovd-core/gateway/x86_64-unknown-linux-gnu/coverage/badge.json)](https://eclipse-opensovd.github.io/opensovd-core/gateway/x86_64-unknown-linux-gnu/coverage/html/)
 [![GHCR](https://img.shields.io/badge/ghcr.io-opensovd--gateway-blue?logo=github)](https://ghcr.io/eclipse-opensovd/opensovd-gateway)
 [![Chat](https://img.shields.io/badge/chat-slack-blue?logo=slack)](https://app.slack.com/client/T02MS1M89UH/C0958MQNGP2)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)

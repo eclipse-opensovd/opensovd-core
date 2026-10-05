@@ -64,13 +64,21 @@ depends = ["test:unit", "test:self", "test:integration"]
 [tasks."test:unit"]
 description = "Run the Rust tests"
 extends = "binaries"
+shell = "bash -c"
 run = '''
-{%- for b in usage.binary or vars.binaries | split(pat=" ") -%}
+{%- set triple = env?.CARGO_BUILD_TARGET or [l | split(pat=": ") | last for l in exec(command="rustc -vV") | split(pat="\n") if "host: " in l] | first -%}
+set -e
+junit="${CARGO_TARGET_DIR:-target}/nextest/default/junit.xml"
+{% for b in usage.binary or vars.binaries | split(pat=" ") -%}
 {%- set crates = [line | split(pat=" ") | first for line in exec(command="cargo tree --locked -p opensovd-" ~ b ~ " -e normal,build --prefix none --format {p}") | split(pat="\n") if config_root in line and "(*)" not in line] -%}
-cargo nextest run --locked{% for c in crates %} -p {{ c }}{% endfor %}{% for a in usage.args %} {{ a | quote }}{% endfor %}
-{%- for c in crates %}{% if loop.first %} && cargo test --locked --doc{% endif %} -p {{ c }}{% endfor %}
-{%- if not loop.last %} && {% endif %}
-{%- endfor -%}
+report={{ ("target/reports/" ~ b ~ "/" ~ triple ~ "/unit") | quote }}
+rm -f "$junit"
+status=0
+cargo nextest run --locked{% for c in crates %} -p {{ c }}{% endfor %}{% for a in usage.args %} {{ a | quote }}{% endfor %} || status=$?
+if [ -f "$junit" ]; then mkdir -p "$report" && cp "$junit" "$report/junit.xml"; fi
+if [ "$status" -ne 0 ]; then exit "$status"; fi
+cargo test --locked --doc{% for c in crates %} -p {{ c }}{% endfor %}
+{% endfor -%}
 '''
 
 [tasks."test:self"]
@@ -81,28 +89,39 @@ run = "uv run --locked pytest opensovd-e2e/tests"
 description = "Run the e2e tests"
 extends = "binaries"
 run = '''
-uv run --locked pytest
-{%- for b in usage.binary or vars.binaries | split(pat=" ") %} tests/opensovd-{{ b }}{% endfor %} --opensovd-profile={{ vars.profile }}
-{%- for a in usage.args %} {{ a | quote }}{% endfor -%}
+{%- set triple = env?.CARGO_BUILD_TARGET or [l | split(pat=": ") | last for l in exec(command="rustc -vV") | split(pat="\n") if "host: " in l] | first -%}
+{%- for b in usage.binary or vars.binaries | split(pat=" ") -%}
+uv run --locked pytest tests/opensovd-{{ b }} --opensovd-profile={{ vars.profile }}
+{%- if env?.CARGO_BUILD_TARGET %} --opensovd-target={{ triple }}{% endif %}
+{{- " " }}--html=target/reports/{{ b }}/{{ triple }}/integration/index.html --self-contained-html --metadata Binary {{ b }} --metadata Target {{ triple }}
+{%- for a in usage.args %} {{ a | quote }}{% endfor %}
+{%- if not loop.last %} && {% endif %}
+{%- endfor -%}
 '''
 
 [tasks.coverage]
-description = "Collect Rust and e2e coverage"
+description = "Collect coverage"
 extends = "binaries"
 env = { CARGO_TARGET_DIR = "{{ config_root }}/target/coverage" }
 run = '''
-{%- set bins = usage.binary or vars.binaries | split(pat=" ") -%}
+{%- set triple = env?.CARGO_BUILD_TARGET or [l | split(pat=": ") | last for l in exec(command="rustc -vV") | split(pat="\n") if "host: " in l] | first -%}
 llvm_cov_env=$(cargo llvm-cov show-env --sh)
 eval "$llvm_cov_env"
-cargo llvm-cov clean --workspace
-{% for b in bins -%}
+report() { cargo llvm-cov report --ignore-filename-regex /opensovd-mocks/ "$@"; }
+{% for b in usage.binary or vars.binaries | split(pat=" ") -%}
 {%- set crates = [line | split(pat=" ") | first for line in exec(command="cargo tree --locked -p opensovd-" ~ b ~ " -e normal,build --prefix none --format {p}") | split(pat="\n") if config_root in line and "(*)" not in line] -%}
+dir={{ (config_root ~ "/target/reports/" ~ b ~ "/" ~ triple ~ "/coverage") | quote }}
+cargo llvm-cov clean --workspace
 cargo nextest run --locked{% for c in crates %} -p {{ c }}{% endfor %}
+uv run --locked pytest tests/opensovd-{{ b }}{% for a in usage.args %} {{ a | quote }}{% endfor %}
+rm -rf "$dir" && mkdir -p "$dir"
+report --json --output-path "$dir/coverage.json"
+report --html --output-dir "$dir"
+report --cobertura --output-path "$dir/cobertura.xml"
+scripts/coverage-report.sh --name {{ (b ~ " on " ~ triple) | quote }} "$dir/coverage.json" > "$dir/summary.md"
+scripts/coverage-report.sh --detail --name {{ (b ~ " on " ~ triple) | quote }} "$dir/coverage.json" > "$dir/detail.md"
+scripts/coverage-report.sh --badge "$dir/coverage.json" > "$dir/badge.json"
 {% endfor -%}
-uv run --locked pytest{% for b in bins %} tests/opensovd-{{ b }}{% endfor %}{% for a in usage.args %} {{ a | quote }}{% endfor %}
-cargo llvm-cov report --json --output-path coverage.json
-cargo llvm-cov report --html
-cargo llvm-cov report --cobertura --output-path "$CARGO_TARGET_DIR/llvm-cov/html/cobertura.xml"
 '''
 
 [tasks.licenses]
