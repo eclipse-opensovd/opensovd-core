@@ -1,11 +1,11 @@
 # Testing
 
-pytest is the test driver: it runs the Rust unit and integration tests through cargo and the Python integration tests.
+cargo-nextest runs the Rust unit and integration tests; pytest runs the end-to-end tests against the built binaries.
 
 Run all tests:
 
 ```bash
-uv run pytest
+mise run test
 ```
 
 ## Testing with pytest
@@ -249,16 +249,14 @@ cargo run --example client -- --unix-socket @opensovd --url http://localhost/sov
 
 ## Testing with cargo
 
-Run Rust unit and integration tests directly:
-
-> **Note:** pytest invokes `cargo test` as a subprocess when running the full test suite. See [`tests/test_rust.py`](../tests/test_rust.py) for the implementation.
+`mise run test:unit` runs the Rust tests with cargo-nextest, then the doc tests with `cargo test --doc`. To run them directly:
 
 ```bash
 # Run all Rust tests
-cargo test
+cargo nextest run --workspace
 
 # Run tests for a specific crate
-cargo test -p opensovd-gateway
+cargo nextest run -p opensovd-server
 ```
 
 | Type        | Location      | Description                   |
