@@ -47,8 +47,11 @@ futures = { workspace = true }
 http-body-util = { workspace = true }
 hyper = { workspace = true, features = ["client", "http1", "http2"] }
 hyper-util = { workspace = true, features = ["client-legacy", "http1", "http2", "tokio"] }
+jsonschema = { workspace = true }
 libc = { workspace = true }
 opensovd-mocks = { workspace = true }
+opensovd-providers = { workspace = true }
+schemars = { workspace = true, features = ["derive"] }
 tokio = { workspace = true, features = ["rt", "macros", "sync", "time"] }
 tower = { workspace = true, features = ["util"] }
 
