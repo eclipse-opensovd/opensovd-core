@@ -107,9 +107,11 @@ uv run --locked pytest tests/opensovd-{{ b }} --opensovd-profile={{ vars.profile
 [tasks.coverage]
 description = "Collect coverage"
 extends = "binaries"
+usage = 'flag "--tests <tests>" default="unit,integration" help="Test stages to cover"'
 env = { CARGO_TARGET_DIR = "{{ config_root }}/target/coverage" }
 run = '''
 {%- set triple = env?.CARGO_BUILD_TARGET or [l | split(pat=": ") | last for l in exec(command="rustc -vV") | split(pat="\n") if "host: " in l] | first -%}
+{%- set tests = usage.tests | split(pat=",") -%}
 llvm_cov_env=$(cargo llvm-cov show-env --sh)
 eval "$llvm_cov_env"
 report() { cargo llvm-cov report --ignore-filename-regex /opensovd-mocks/ "$@"; }
@@ -117,8 +119,10 @@ report() { cargo llvm-cov report --ignore-filename-regex /opensovd-mocks/ "$@"; 
 {%- set crates = [line | split(pat=" ") | first for line in exec(command="cargo tree --locked -p opensovd-" ~ b ~ " -e normal,build --prefix none --format {p}") | split(pat="\n") if config_root in line and "(*)" not in line] -%}
 dir={{ (config_root ~ "/target/reports/" ~ b ~ "/" ~ triple ~ "/coverage") | quote }}
 cargo llvm-cov clean --workspace
-cargo nextest run --locked --all-features{% for c in crates %} -p {{ c }}{% endfor %}
-uv run --locked pytest tests/opensovd-{{ b }}{% for a in usage.args %} {{ a | quote }}{% endfor %}
+{% if "unit" in tests %}cargo nextest run --locked --all-features{% for c in crates %} -p {{ c }}{% endfor %}
+{% endif -%}
+{% if "integration" in tests %}uv run --locked pytest tests/opensovd-{{ b }}{% for a in usage.args %} {{ a | quote }}{% endfor %}
+{% endif -%}
 rm -rf "$dir" && mkdir -p "$dir"
 report --json --output-path "$dir/coverage.json"
 report --html --output-dir "$dir"
@@ -127,6 +131,25 @@ scripts/coverage-report.sh --name {{ (b ~ " on " ~ triple) | quote }} "$dir/cove
 scripts/coverage-report.sh --detail --name {{ (b ~ " on " ~ triple) | quote }} "$dir/coverage.json" > "$dir/detail.md"
 scripts/coverage-report.sh --badge "$dir/coverage.json" > "$dir/badge.json"
 {% endfor -%}
+'''
+
+[tasks.container]
+description = "Build and smoke-test the images"
+extends = "binaries"
+run = '''
+{%- set triple = env?.CARGO_BUILD_TARGET or [l | split(pat=": ") | last for l in exec(command="rustc -vV") | split(pat="\n") if "host: " in l] | first -%}
+{%- set arch = "amd64" if "x86_64-" in triple and "-linux-" in triple else ("arm64" if "aarch64-" in triple and "-linux-" in triple else "") -%}
+{%- set build_dir = "target/" ~ (triple ~ "/" if env?.CARGO_BUILD_TARGET else "") ~ vars.profile -%}
+{%- if not arch -%}
+echo "no container platform for {{ triple }}" >&2 && exit 1
+{%- else -%}
+{%- for b in usage.binary or vars.binaries | split(pat=" ") -%}
+mkdir -p dist/{{ arch }} && cp {{ build_dir }}/opensovd-{{ b }} dist/{{ arch }}/
+{{- " " }}&& docker build --platform linux/{{ arch }} -f docker/Dockerfile.{{ b }} -t opensovd-{{ b }}:test .
+{{- " " }}&& uv run --locked pytest tests/opensovd-{{ b }}/cli/test_version.py --opensovd-run="docker run --rm opensovd-{{ b }}:test"
+{%- if not loop.last %} && {% endif %}
+{%- endfor -%}
+{%- endif -%}
 '''
 
 [tasks.licenses]
