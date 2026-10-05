@@ -124,6 +124,25 @@ scripts/coverage-report.sh --badge "$dir/coverage.json" > "$dir/badge.json"
 {% endfor -%}
 '''
 
+[tasks.container]
+description = "Build and smoke-test the images"
+extends = "binaries"
+run = '''
+{%- set triple = env?.CARGO_BUILD_TARGET or [l | split(pat=": ") | last for l in exec(command="rustc -vV") | split(pat="\n") if "host: " in l] | first -%}
+{%- set arch = "amd64" if "x86_64-" in triple and "-linux-" in triple else ("arm64" if "aarch64-" in triple and "-linux-" in triple else "") -%}
+{%- set build_dir = "target/" ~ (triple ~ "/" if env?.CARGO_BUILD_TARGET else "") ~ vars.profile -%}
+{%- if not arch -%}
+echo "no container platform for {{ triple }}" >&2 && exit 1
+{%- else -%}
+{%- for b in usage.binary or vars.binaries | split(pat=" ") -%}
+mkdir -p dist/{{ arch }} && cp {{ build_dir }}/opensovd-{{ b }} dist/{{ arch }}/
+{{- " " }}&& docker build --platform linux/{{ arch }} -f docker/Dockerfile.{{ b }} -t opensovd-{{ b }}:test .
+{{- " " }}&& uv run --locked pytest tests/opensovd-{{ b }}/cli/test_version.py --opensovd-run="docker run --rm opensovd-{{ b }}:test"
+{%- if not loop.last %} && {% endif %}
+{%- endfor -%}
+{%- endif -%}
+'''
+
 [tasks.licenses]
 description = "Check dependency licenses and sources"
 run = "cargo deny check licenses sources"
