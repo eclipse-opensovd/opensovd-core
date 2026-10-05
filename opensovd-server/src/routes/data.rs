@@ -32,6 +32,7 @@ use opensovd_models::data::{
 use serde_json::{Map, Value};
 
 use super::AppState;
+use super::entities::encode_path_segment;
 use super::error::{Error, Result};
 use crate::schema::JsonSchema;
 
@@ -154,19 +155,25 @@ fn data_filter(query: DataQuery) -> DataFilter {
     }
 }
 
-/// `$id` that makes a data value schema its own resource within the read schema.
-const DATA_SCHEMA_ID: &str = "urn:opensovd:data";
+/// `$id` of the schema of a data resource, unique per entity and data id.
+fn data_schema_id(collection: &str, entity_id: &str, data_id: &str) -> String {
+    format!(
+        "urn:opensovd:{collection}/{}/data/{}",
+        encode_path_segment(entity_id),
+        encode_path_segment(data_id)
+    )
+}
 
 /// Schema of a read response, with the data value schema in place of `data`.
 ///
-/// The data schema gets an `$id` unless it has one, so its references keep
-/// resolving against itself.
-fn read_response_schema(mut data: Value) -> Value {
+/// The data schema gets the `$id` `id` unless it has one, so its references
+/// keep resolving against itself.
+fn read_response_schema(id: &str, mut data: Value) -> Value {
     if let Some(object) = data.as_object_mut()
         && !matches!(object.get("$id"), Some(Value::String(_)))
     {
         let mut rest = std::mem::take(object);
-        object.insert("$id".into(), DATA_SCHEMA_ID.into());
+        object.insert("$id".into(), id.into());
         // ajv recurses forever on a `$ref` next to `$id`; `allOf` applies it the same way.
         if let Some(reference) = rest.remove("$ref") {
             let reference = serde_json::json!({ "$ref": reference });
@@ -251,14 +258,18 @@ async fn component_data_read(
         .ok_or_else(|| Error::ProviderNotAvailable("data".into()))?;
 
     let value = provider.read(&data_id, query.include_schema).await?;
+    let schema = query.include_schema.then(|| {
+        read_response_schema(
+            &data_schema_id("components", &component_id, &data_id),
+            value.schema.unwrap_or(Value::Bool(true)),
+        )
+    });
 
     Ok(Json(ReadResponse {
         id: data_id,
         data: value.data,
         errors: None,
-        schema: query
-            .include_schema
-            .then(|| read_response_schema(value.schema.unwrap_or(Value::Bool(true)))),
+        schema,
     }))
 }
 
@@ -409,14 +420,18 @@ async fn app_data_read(
         .ok_or_else(|| Error::ProviderNotAvailable("data".into()))?;
 
     let value = provider.read(&data_id, query.include_schema).await?;
+    let schema = query.include_schema.then(|| {
+        read_response_schema(
+            &data_schema_id("apps", &app_id, &data_id),
+            value.schema.unwrap_or(Value::Bool(true)),
+        )
+    });
 
     Ok(Json(ReadResponse {
         id: data_id,
         data: value.data,
         errors: None,
-        schema: query
-            .include_schema
-            .then(|| read_response_schema(value.schema.unwrap_or(Value::Bool(true)))),
+        schema,
     }))
 }
 
@@ -466,6 +481,16 @@ mod tests {
         assert_eq!(filter.tags, vec!["t"]);
     }
 
+    const ID: &str = "urn:opensovd:components/climate/data/level";
+
+    #[test]
+    fn data_schema_id_encodes_ids() {
+        assert_eq!(
+            data_schema_id("apps", "radio 1", "station/name"),
+            "urn:opensovd:apps/radio%201/data/station%2Fname"
+        );
+    }
+
     #[cfg(feature = "jsonschema")]
     #[test]
     fn read_response_schema_embeds_data_schema_as_resource() {
@@ -478,13 +503,13 @@ mod tests {
             },
             "$defs": { "GenericError": { "type": "integer" } },
         });
-        let schema = read_response_schema(data.clone());
+        let schema = read_response_schema(ID, data.clone());
         let mut embedded = schema.pointer("/properties/data").cloned().unwrap();
         assert_eq!(
             embedded
                 .as_object_mut()
                 .and_then(|object| object.remove("$id")),
-            Some(DATA_SCHEMA_ID.into())
+            Some(ID.into())
         );
         assert_eq!(embedded, data);
         assert_eq!(
@@ -505,21 +530,24 @@ mod tests {
             "properties": { "level": { "$ref": "#/$defs/Level" } },
             "$defs": { "Level": { "type": "integer" } },
         });
-        let schema = read_response_schema(data.clone());
+        let schema = read_response_schema(ID, data.clone());
         assert_eq!(schema.pointer("/properties/data"), Some(&data));
     }
 
     #[test]
     fn read_response_schema_moves_root_ref_into_all_of() {
-        let schema = read_response_schema(serde_json::json!({
-            "$ref": "#/$defs/Level",
-            "allOf": [{ "minimum": 1 }],
-            "$defs": { "Level": { "type": "integer" } },
-        }));
+        let schema = read_response_schema(
+            ID,
+            serde_json::json!({
+                "$ref": "#/$defs/Level",
+                "allOf": [{ "minimum": 1 }],
+                "$defs": { "Level": { "type": "integer" } },
+            }),
+        );
         assert_eq!(
             schema.pointer("/properties/data"),
             Some(&serde_json::json!({
-                "$id": DATA_SCHEMA_ID,
+                "$id": ID,
                 "allOf": [{ "minimum": 1 }, { "$ref": "#/$defs/Level" }],
                 "$defs": { "Level": { "type": "integer" } },
             }))
@@ -528,10 +556,11 @@ mod tests {
 
     #[test]
     fn read_response_schema_replaces_non_string_id() {
-        let schema = read_response_schema(serde_json::json!({ "$id": null, "type": "integer" }));
+        let schema =
+            read_response_schema(ID, serde_json::json!({ "$id": null, "type": "integer" }));
         assert_eq!(
             schema.pointer("/properties/data"),
-            Some(&serde_json::json!({ "$id": DATA_SCHEMA_ID, "type": "integer" }))
+            Some(&serde_json::json!({ "$id": ID, "type": "integer" }))
         );
     }
 }

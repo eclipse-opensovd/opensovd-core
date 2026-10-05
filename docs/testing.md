@@ -171,7 +171,7 @@ curl -s http://localhost:7690/sovd/v1/components/gateway/data/sw.version?include
         "type": "string"
       },
       "data": {
-        "$id": "urn:opensovd:data",
+        "$id": "urn:opensovd:components/gateway/data/sw.version",
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "title": "Value",
         "type": "object",

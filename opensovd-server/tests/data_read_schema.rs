@@ -248,3 +248,16 @@ async fn hand_written_schema_with_root_ref_matches() {
     let body = read_climate("level").await;
     assert_schema_holds(&body, |data| data["value"] = json!(9));
 }
+
+#[tokio::test]
+async fn each_data_resource_has_its_own_schema_id() {
+    for data_id in ["fan", "menu"] {
+        let body = read_climate(data_id).await;
+        assert_eq!(
+            body.pointer("/schema/properties/data/$id"),
+            Some(&json!(format!(
+                "urn:opensovd:components/Climate/data/{data_id}"
+            )))
+        );
+    }
+}

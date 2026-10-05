@@ -39,7 +39,9 @@ pub struct Metadata {
 #[derive(Debug, Clone)]
 pub struct Data {
     pub data: serde_json::Value,
-    /// JSON Schema 2020-12 of `data`, not of the read response.
+    /// JSON Schema 2020-12 of `data`, not of the read response. Without its own
+    /// `$id`, the server identifies it per data resource; a provider that sets
+    /// `$id` must keep it unique per schema.
     pub schema: Option<serde_json::Value>,
 }
 
