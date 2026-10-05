@@ -166,15 +166,15 @@ fn data_schema_id(collection: &str, entity_id: &str, data_id: &str) -> String {
 
 /// Schema of a read response, with the data value schema in place of `data`.
 ///
-/// The data schema gets the `$id` `id` unless it has one, so its references
-/// keep resolving against itself.
+/// The data schema keeps its own `$id` or gets `id`, so its references keep
+/// resolving against itself.
 fn read_response_schema(id: &str, mut data: Value) -> Value {
-    if let Some(object) = data.as_object_mut()
-        && !matches!(object.get("$id"), Some(Value::String(_)))
-    {
+    if let Some(object) = data.as_object_mut() {
         let mut rest = std::mem::take(object);
-        object.insert("$id".into(), id.into());
-        // ajv recurses forever on a `$ref` next to `$id`; `allOf` applies it the same way.
+        let own_id = rest.remove("$id").filter(Value::is_string);
+        object.insert("$id".into(), own_id.unwrap_or_else(|| id.into()));
+        // ajv recurses forever on a `$ref` next to the `$id` of a subschema;
+        // `allOf` applies it the same way.
         if let Some(reference) = rest.remove("$ref") {
             let reference = serde_json::json!({ "$ref": reference });
             match rest.get_mut("allOf") {
@@ -184,7 +184,7 @@ fn read_response_schema(id: &str, mut data: Value) -> Value {
                 }
             }
         }
-        object.extend(rest.into_iter().filter(|(key, _)| key != "$id"));
+        object.extend(rest);
     }
 
     let mut schema = match ReadResponse::schema() {
@@ -549,6 +549,26 @@ mod tests {
             Some(&serde_json::json!({
                 "$id": ID,
                 "allOf": [{ "minimum": 1 }, { "$ref": "#/$defs/Level" }],
+                "$defs": { "Level": { "type": "integer" } },
+            }))
+        );
+    }
+
+    #[test]
+    fn read_response_schema_moves_root_ref_next_to_own_id() {
+        let schema = read_response_schema(
+            ID,
+            serde_json::json!({
+                "$id": "urn:example:level",
+                "$ref": "#/$defs/Level",
+                "$defs": { "Level": { "type": "integer" } },
+            }),
+        );
+        assert_eq!(
+            schema.pointer("/properties/data"),
+            Some(&serde_json::json!({
+                "$id": "urn:example:level",
+                "allOf": [{ "$ref": "#/$defs/Level" }],
                 "$defs": { "Level": { "type": "integer" } },
             }))
         );
