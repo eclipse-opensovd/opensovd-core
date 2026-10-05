@@ -153,6 +153,13 @@ jobs:
           name: opensovd-${{ matrix.binary }}-${{ matrix.target.triple }}
           path: target/${{ matrix.target.triple }}/release-small/opensovd-${{ matrix.binary }}${{ runner.os == 'Windows' && '.exe' || '' }}
 
+      # The coverage job merges these into one report for all binaries.
+      - if: matrix.target.coverage
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-data-${{ matrix.binary }}-${{ matrix.target.triple }}
+          path: target/coverage-data/${{ matrix.binary }}-${{ matrix.target.triple }}.tar.gz
+
       # The docker job builds each binary's multi-arch image from these.
       - if: matrix.target.container && needs.prepare.outputs.release != 'none'
         uses: actions/upload-artifact@v7
@@ -193,6 +200,30 @@ jobs:
           else
             gh api --method POST "repos/${REPO}/issues/${PR}/comments" --input comment.json >/dev/null
           fi
+
+  coverage:
+    needs: [prepare, build]
+    if: needs.prepare.outputs.should_run == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/mise
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: coverage-data-*
+          path: target/coverage-data
+          merge-multiple: true
+
+      - run: mise run coverage --merge
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: reports-all-x86_64-unknown-linux-gnu-coverage
+          path: target/reports/
+
+      - run: cat target/reports/all/x86_64-unknown-linux-gnu/coverage/detail.md >> "$GITHUB_STEP_SUMMARY"
 
   licenses:
     needs: prepare
@@ -249,7 +280,7 @@ jobs:
         run: mise run lint:commits "$BASE_SHA..$HEAD_SHA"
 
   pages:
-    needs: [prepare, build]
+    needs: [prepare, build, coverage]
     if: needs.prepare.outputs.should_run == 'true' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     permissions:
@@ -378,7 +409,7 @@ jobs:
             artifacts/release/*
 
   gate:
-    needs: [prepare, git-lint, build, licenses, advisories, lint, pages, docker, release]
+    needs: [prepare, git-lint, build, coverage, licenses, advisories, lint, pages, docker, release]
     if: always()
     runs-on: ubuntu-24.04
     permissions: {}

@@ -105,32 +105,59 @@ uv run --locked pytest tests/opensovd-{{ b }} --opensovd-profile={{ vars.profile
 '''
 
 [tasks.coverage]
-description = "Collect coverage"
+description = "Collect coverage per binary, or merge the collected coverage"
 extends = "binaries"
-usage = 'flag "--tests <tests>" default="unit,integration" help="Test stages to cover"'
+usage = '''
+flag "--tests <tests>" default="unit,integration" help="Test stages to cover"
+flag "--merge" help="Report the binaries together from their collected coverage instead of running tests"
+'''
 env = { CARGO_TARGET_DIR = "{{ config_root }}/target/coverage" }
 run = '''
 {%- set triple = env?.CARGO_BUILD_TARGET or [l | split(pat=": ") | last for l in exec(command="rustc -vV") | split(pat="\n") if "host: " in l] | first -%}
 {%- set tests = usage.tests | split(pat=",") -%}
+{%- set binaries = usage.binary or vars.binaries | split(pat=" ") -%}
+{%- set data = config_root ~ "/target/coverage-data" -%}
+{%- set build_dir = (triple ~ "/" if env?.CARGO_BUILD_TARGET else "") ~ "debug" -%}
+{% if usage.merge %}export CARGO_TARGET_DIR="$CARGO_TARGET_DIR/merge"
+{% endif -%}
 llvm_cov_env=$(cargo llvm-cov show-env --sh)
 eval "$llvm_cov_env"
 report() { cargo llvm-cov report --ignore-filename-regex /opensovd-mocks/ "$@"; }
-{% for b in usage.binary or vars.binaries | split(pat=" ") -%}
+reports() {
+  rm -rf "$1" && mkdir -p "$1"
+  report --json --output-path "$1/coverage.json"
+  report --html --output-dir "$1"
+  report --cobertura --output-path "$1/cobertura.xml"
+  scripts/coverage-report.sh --name "$2" "$1/coverage.json" > "$1/summary.md"
+  scripts/coverage-report.sh --detail --name "$2" "$1/coverage.json" > "$1/detail.md"
+  scripts/coverage-report.sh --badge "$1/coverage.json" > "$1/badge.json"
+}
+{% if usage.merge -%}
+rm -rf "$CARGO_TARGET_DIR" && mkdir -p "$CARGO_TARGET_DIR"
+{% for b in binaries -%}
+tar -xzf {{ (data ~ "/" ~ b ~ "-" ~ triple ~ ".tar.gz") | quote }} -C "$CARGO_TARGET_DIR"
+{% endfor -%}
+reports {{ (config_root ~ "/target/reports/all/" ~ triple ~ "/coverage") | quote }} {{ (binaries | join(sep=" and ") ~ " on " ~ triple) | quote }}
+{% else -%}
+objcopy="$(rustc --print sysroot)/lib/rustlib/$(rustc --print host-tuple)/bin/llvm-objcopy"
+{% for b in binaries -%}
 {%- set crates = [line | split(pat=" ") | first for line in exec(command="cargo tree --locked -p opensovd-" ~ b ~ " -e normal,build --prefix none --format {p}") | split(pat="\n") if config_root in line and "(*)" not in line] -%}
-dir={{ (config_root ~ "/target/reports/" ~ b ~ "/" ~ triple ~ "/coverage") | quote }}
+{%- set stage = data ~ "/" ~ b ~ "-" ~ triple -%}
 cargo llvm-cov clean --workspace
+export LLVM_PROFILE_FILE="$CARGO_TARGET_DIR/{{ b }}-%p-%16m.profraw"
 {% if "unit" in tests %}cargo nextest run --locked --all-features{% for c in crates %} -p {{ c }}{% endfor %}
 {% endif -%}
 {% if "integration" in tests %}uv run --locked pytest tests/opensovd-{{ b }}{% for a in usage.args %} {{ a | quote }}{% endfor %}
 {% endif -%}
-rm -rf "$dir" && mkdir -p "$dir"
-report --json --output-path "$dir/coverage.json"
-report --html --output-dir "$dir"
-report --cobertura --output-path "$dir/cobertura.xml"
-scripts/coverage-report.sh --name {{ (b ~ " on " ~ triple) | quote }} "$dir/coverage.json" > "$dir/summary.md"
-scripts/coverage-report.sh --detail --name {{ (b ~ " on " ~ triple) | quote }} "$dir/coverage.json" > "$dir/detail.md"
-scripts/coverage-report.sh --badge "$dir/coverage.json" > "$dir/badge.json"
+reports {{ (config_root ~ "/target/reports/" ~ b ~ "/" ~ triple ~ "/coverage") | quote }} {{ (b ~ " on " ~ triple) | quote }}
+rm -rf {{ stage | quote }} && mkdir -p {{ (stage ~ "/" ~ build_dir ~ "/deps") | quote }}
+cp "$CARGO_TARGET_DIR"/{{ b }}-*.profraw {{ stage | quote }}
+find "$CARGO_TARGET_DIR/{{ build_dir }}" "$CARGO_TARGET_DIR/{{ build_dir }}/deps" -maxdepth 1 -type f -perm -u+x ! -name '*.so' ! -name '*.dylib' | while IFS= read -r object; do
+  "$objcopy" --only-section=__llvm_covfun --only-section=__llvm_covmap --only-section=__llvm_prf_names "$object" {{ stage | quote }}/"${object#"$CARGO_TARGET_DIR"/}"
+done
+tar -czf {{ (stage ~ ".tar.gz") | quote }} -C {{ stage | quote }} . && rm -rf {{ stage | quote }}
 {% endfor -%}
+{% endif -%}
 '''
 
 [tasks.container]
