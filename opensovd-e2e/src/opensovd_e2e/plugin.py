@@ -6,7 +6,6 @@
 import re
 import shlex
 from collections.abc import Iterable
-from pathlib import Path
 
 import pytest
 
@@ -43,12 +42,9 @@ def pytest_addoption(parser):
 
 
 def pytest_configure(config):
-    """Store config for report hooks, validate options, register the req marker."""
+    """Store config for report hooks and validate options."""
     global _config
     _config = config
-    config.addinivalue_line(
-        "markers", "req(id): requirement ID for traceability (e.g. req('SOVD-7.1.1'))"
-    )
     if config.getoption("--opensovd-run"):
         for flag in ("--opensovd-profile", "--opensovd-target", "--opensovd-features"):
             if config.getoption(flag):
@@ -122,38 +118,6 @@ def pytest_html_results_summary(prefix, summary, postfix):
             del metadata[key]  # Remove from Environment table to avoid duplication
 
 
-@pytest.hookimpl(optionalhook=True)
-def pytest_html_results_table_header(cells):
-    """Add Requirements column to HTML report table."""
-    cells.insert(2, "<th>Requirements</th>")
-
-
-@pytest.hookimpl(optionalhook=True)
-def pytest_html_results_table_row(report, cells):
-    """Populate Requirements column for each test."""
-    reqs = ", ".join(report.req) if hasattr(report, "req") and report.req else ""
-    cells.insert(2, f"<td>{reqs}</td>")
-
-
-def pytest_sessionfinish(session, exitstatus):
-    """Generate requirements traceability matrix."""
-    req_map: dict[str, list[str]] = {}
-    for item in session.items:
-        for marker in item.iter_markers(name="req"):
-            for req_id in marker.args:
-                req_map.setdefault(req_id, []).append(item.nodeid)
-
-    if req_map:
-        output = Path(session.config.rootpath) / "requirements-coverage.txt"
-        with output.open("w") as f:
-            f.write("# Requirements Traceability Matrix\n")
-            f.write(f"# Total requirements covered: {len(req_map)}\n\n")
-            for req_id, tests in sorted(req_map.items()):
-                f.write(f"{req_id}:\n")
-                for test in sorted(tests):
-                    f.write(f"  - {test}\n")
-
-
 def _find_process(funcargs: Iterable) -> ProcessUnderTest | None:
     """Find the ProcessUnderTest among a test's fixture values, if any.
 
@@ -173,15 +137,10 @@ def _find_process(funcargs: Iterable) -> ProcessUnderTest | None:
 
 @pytest.hookimpl(tryfirst=True, hookwrapper=True)
 def pytest_runtest_makereport(item, call):
-    """Capture req markers for the report, and process output on failure."""
+    """Capture process output on failure."""
     outcome = yield
     report = outcome.get_result()
 
-    # Capture requirement markers for HTML report
-    markers = list(item.iter_markers(name="req"))
-    report.req = [arg for m in markers for arg in m.args]
-
-    # Capture process output on failure
     if report.failed and hasattr(item, "funcargs"):
         proc = _find_process(item.funcargs.values())
         if proc and proc.has_output and not proc._output_printed:

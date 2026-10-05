@@ -29,7 +29,6 @@ pythonpath = ["tests", "opensovd-e2e/src"]
 addopts = "--import-mode=importlib"
 markers = [
     "schema: Tests that validate response schema",
-    # "req" marker is registered by the opensovd_e2e plugin.
 ]
 
 [tool.ruff]

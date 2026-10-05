@@ -20,7 +20,7 @@ classifiers = [
 dependencies = ["pytest>=9"]
 
 [project.optional-dependencies]
-# Enables the Requirements column and metadata links in the HTML report.
+# Enables the metadata links in the HTML report.
 html = ["pytest-html>=4", "pytest-metadata>=3"]
 
 # Auto-load the plugin in any project that installs this package, so consumers

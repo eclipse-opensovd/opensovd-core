@@ -6,9 +6,9 @@ SPDX-License-Identifier: Apache-2.0
 # opensovd-e2e
 
 Reusable pytest plugin for end-to-end testing of OpenSOVD binaries. It provides
-the generic harness - spawning the binary, waiting for a startup banner,
-capturing output, and requirement traceability - so any OpenSOVD repo can test
-its own binary without duplicating the setup. Project-specific bits (default
+the generic harness - spawning the binary, waiting for a startup banner and
+capturing output - so any OpenSOVD repo can test its own binary without
+duplicating the setup. Project-specific bits (default
 crate, server URL/banner, metadata) are layered on as fixture overrides in the
 consuming repo.
 
@@ -24,8 +24,8 @@ opensovd-e2e = { git = "https://github.com/eclipse-opensovd/opensovd-core", subd
 
 The plugin auto-activates once installed (via its `pytest11` entry point).
 
-For the Requirements column and metadata links in the HTML report, install the
-`html` extra (pulls in `pytest-html`/`pytest-metadata`):
+For metadata links in the HTML report, install the `html` extra (pulls in
+`pytest-html`/`pytest-metadata`):
 
 ```toml
 [tool.uv.sources]
@@ -72,6 +72,3 @@ uv run pytest --opensovd-run=./target/release/my-binary
   `--opensovd-target`, `--opensovd-features`.
 - **Fixtures:** `crate_binary`, `binary_args`, `ready_banner`, `process`
   (override any of them for binary-specific behaviour, e.g. an HTTP client).
-- **Requirement traceability:** the `@pytest.mark.req("...")` marker, a
-  Requirements column in the HTML report, and a `requirements-coverage.txt`
-  matrix.
