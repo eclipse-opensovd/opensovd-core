@@ -41,6 +41,11 @@ with `coverage.json`, `cobertura.xml`, `summary.md`, `detail.md` and a shields.i
 `reports-<binary>-<triple>`, coverage jobs post `summary.md` as a PR comment, and on
 main GitHub Pages serves every report under the same path.
 
+`coverage` also packs its profiles and the coverage mapping of the instrumented
+binaries into `target/coverage-data/<binary>-<triple>.tar.gz`. The coverage job merges
+them with `mise run coverage --merge` into `all/<triple>/coverage/`, the report behind
+the README badge.
+
 ## Images
 
 On releases the docker job builds one image per binary from the binaries of its
@@ -52,6 +57,7 @@ On releases the docker job builds one image per binary from the binaries of its
 |----------------|------------------------|---------------------------------------------------------------------------------------|
 | **prepare**    | Always                 | Entry point; determines release type and whether to run (skips nightly if no changes) |
 | **build**      | When `should_run=true` | Builds, tests or covers each binary per target; smoke-tests images on Linux           |
+| **coverage**   | When `should_run=true` | Merges the coverage of all binaries into one report                                   |
 | **licenses**   | When `should_run=true` | Checks licenses and sources with cargo-deny                                           |
 | **advisories** | When `should_run=true` | Checks security advisories with cargo-deny                                            |
 | **lint**       | When `should_run=true` | Runs the git hooks (prek), including rustfmt and clippy, and the plugin self-tests    |
@@ -72,8 +78,8 @@ flowchart TB
         lint
     end
     prepare --> build & licenses & advisories & lint
-    build --> docker & release
-    docker & release & licenses & advisories & lint --> gate
+    build --> coverage & docker & release
+    coverage & docker & release & licenses & advisories & lint --> gate
 ```
 
 Jobs `build`, `licenses`, `advisories` and `lint` run in parallel after `prepare`.
