@@ -228,7 +228,8 @@ impl DataProviderBuilder {
     /// Override the schema for the last added resource.
     ///
     /// Replaces the auto-derived schema entirely. Use this for complex
-    /// schemas that cannot be expressed with the builder methods.
+    /// schemas that cannot be expressed with the builder methods. The schema
+    /// must be JSON Schema 2020-12.
     #[must_use]
     pub fn schema(mut self, schema: impl Into<Value>) -> Self {
         if let Some(last) = self.resources.last_mut() {

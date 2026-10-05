@@ -14,25 +14,14 @@ def binary_args(request):
     return default_binary_args(request.config, "--mock")
 
 
-def validate_schema(data, is_data_item=False):
-    """Validate response data against its schema if present.
-
-    Args:
-        data: Response JSON data
-        is_data_item: True if this is a data item response (schema validates 'data' field)
-    """
+def validate_schema(data):
+    """Validate response data against its schema if present."""
     if "schema" not in data:
         return
 
     schema = data["schema"]
-
-    if is_data_item:
-        # Data item responses: schema describes the 'data' field
-        jsonschema.validate(instance=data["data"], schema=schema)
-    else:
-        # Standard responses: schema describes the entire response
-        assert "$schema" in schema, "Schema must have $schema property"
-        jsonschema.validate(instance=data, schema=schema)
+    assert "$schema" in schema, "Schema must have $schema property"
+    jsonschema.validate(instance=data, schema=schema)
 
 
 def get_json(client, url, params, include_schema):
@@ -136,7 +125,7 @@ def test_traverse_api(client, include_schema):
             assert "data" in data_value
             assert "id" in data_value
             if include_schema:
-                validate_schema(data_value, is_data_item=True)
+                validate_schema(data_value)
 
     # 4. GET /v1/areas list
     response = client.get("/v1/areas", params=params)
@@ -216,7 +205,7 @@ def test_traverse_api(client, include_schema):
                 assert "data" in data_value
                 assert "id" in data_value
                 if include_schema:
-                    validate_schema(data_value, is_data_item=True)
+                    validate_schema(data_value)
 
     # 8. GET component hosts
     hosts: dict[str, set[str]] = {}

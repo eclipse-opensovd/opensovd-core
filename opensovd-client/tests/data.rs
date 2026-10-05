@@ -107,6 +107,18 @@ async fn app_data() {
 
 #[tokio::test]
 async fn read_data_with_schema() {
+    let schema = json!({
+        "type": "object",
+        "properties": {
+            "id": {"type": "string"},
+            "data": {
+                "type": "object",
+                "properties": {"value": {"type": "number"}},
+                "required": ["value"]
+            }
+        },
+        "required": ["id", "data"]
+    });
     let mut builder = Connector::builder();
     builder
         .expect()
@@ -115,7 +127,7 @@ async fn read_data_with_schema() {
             json!({
                 "id": "voltage",
                 "data": {"value": 12.6},
-                "schema": {"type": "number"}
+                "schema": schema
             })
             .to_string(),
         )
@@ -130,7 +142,7 @@ async fn read_data_with_schema() {
         .await
         .unwrap();
     assert_eq!(result.id, "voltage");
-    assert_eq!(result.schema.unwrap(), json!({"type": "number"}));
+    assert_eq!(result.schema.unwrap(), schema);
 }
 
 #[tokio::test]

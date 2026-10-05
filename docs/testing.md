@@ -155,8 +155,8 @@ curl -s http://localhost:7690/sovd/v1/components/gateway/data/sw.version | jq
   }
 }
 
-# Read data with schema included
-curl -s http://localhost:7690/sovd/v1/components/gateway/data/sw.version?include-schema=true | jq
+# Read data with schema included (definitions omitted)
+curl -s http://localhost:7690/sovd/v1/components/gateway/data/sw.version?include-schema=true | jq 'del(.schema."$defs")'
 {
   "id": "sw.version",
   "data": {
@@ -164,14 +164,33 @@ curl -s http://localhost:7690/sovd/v1/components/gateway/data/sw.version?include
   },
   "schema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "title": "Value_for_String",
+    "title": "ReadResponse",
     "type": "object",
     "properties": {
-      "value": {
+      "id": {
         "type": "string"
-      }
+      },
+      "data": {
+        "$id": "urn:opensovd:data",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "Value",
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": ["value"]
+      },
+      "errors": {
+        "type": ["array", "null"],
+        "items": {
+          "$ref": "#/$defs/DataErrorEntry"
+        }
+      },
+      "schema": true
     },
-    "required": ["value"]
+    "required": ["id", "data"]
   }
 }
 ```
@@ -192,7 +211,7 @@ for comp in $(curl -s $BASE/components | jq -r '.items[].id'); do
   echo "Component: $comp"
   for id in $(curl -s $BASE/components/$comp/data | jq -r '.items[].id'); do
     resp=$(curl -s "$BASE/components/$comp/data/${id}?include-schema=true")
-    echo "$resp" | jq '.data' | jsonschema <(echo "$resp" | jq '.schema') 2>/dev/null && echo "  ${id}: VALID"
+    echo "$resp" | jsonschema <(echo "$resp" | jq '.schema') 2>/dev/null && echo "  ${id}: VALID"
   done
 done
 ```

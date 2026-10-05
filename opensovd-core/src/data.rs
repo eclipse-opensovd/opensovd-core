@@ -39,6 +39,7 @@ pub struct Metadata {
 #[derive(Debug, Clone)]
 pub struct Data {
     pub data: serde_json::Value,
+    /// JSON Schema 2020-12 of `data`, not of the read response.
     pub schema: Option<serde_json::Value>,
 }
 
