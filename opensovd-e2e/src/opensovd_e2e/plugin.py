@@ -3,10 +3,8 @@
 
 """Generic pytest plugin for end-to-end testing of OpenSOVD binaries."""
 
-import os
 import re
 import shlex
-import subprocess
 from collections.abc import Iterable
 from pathlib import Path
 
@@ -42,13 +40,6 @@ def pytest_addoption(parser):
     parser.addoption(
         "--opensovd-features", default="", help="Cargo features to enable (comma-separated)"
     )
-    parser.addoption(
-        "--opensovd-coverage",
-        action="store_true",
-        default=False,
-        help="Instrument the workspace with cargo-llvm-cov; writes coverage.json + HTML + "
-        "Cobertura at session end",
-    )
 
 
 def pytest_configure(config):
@@ -62,69 +53,6 @@ def pytest_configure(config):
         for flag in ("--opensovd-profile", "--opensovd-target", "--opensovd-features"):
             if config.getoption(flag):
                 raise pytest.UsageError(f"{flag} has no effect when --opensovd-run is set")
-    if config.getoption("--opensovd-coverage"):
-        _setup_coverage(config)
-
-
-def _setup_coverage(config):
-    """Clean prior coverage data and inject cargo-llvm-cov's instrumentation env.
-
-    Mirrors `source <(cargo llvm-cov show-env --export-prefix)`: the cargo builds
-    and the spawned binary both inherit os.environ, so RUSTFLAGS instruments the
-    build and LLVM_PROFILE_FILE makes the running binary emit profile data. Runs
-    from pytest_configure, before collection builds the first test binary.
-    """
-    if config.getoption("--opensovd-run"):
-        raise pytest.UsageError(
-            "--opensovd-coverage requires building from source; it cannot be combined "
-            "with --opensovd-run"
-        )
-    project_root = Path(config.rootpath)
-    show_env = subprocess.run(
-        ["cargo", "llvm-cov", "show-env"],
-        cwd=project_root,
-        check=True,
-        stdout=subprocess.PIPE,
-        text=True,
-    )
-    for line in show_env.stdout.splitlines():
-        key, sep, value = line.partition("=")
-        if sep:
-            # show-env quotes values; shlex unwraps single/double/unquoted alike.
-            os.environ[key] = shlex.split(value)[0] if value else ""
-    subprocess.run(["cargo", "llvm-cov", "clean", "--workspace"], cwd=project_root, check=True)
-
-    # Render the report at teardown. Config cleanups run after every
-    # sessionfinish hook, so all instrumented processes have exited and
-    # flushed their profile data. Registered only on success, so the UsageError
-    # path above never triggers a report.
-    config.add_cleanup(lambda: _write_coverage_report(project_root))
-
-
-def _write_coverage_report(project_root: Path):
-    """Render the merged coverage data to coverage.json, HTML, and Cobertura.
-
-    Reads the profile data via the env injected by _setup_coverage; no rebuild.
-    """
-    html_dir = project_root / "target" / "llvm-cov" / "html"
-    subprocess.run(
-        ["cargo", "llvm-cov", "report", "--json", "--output-path", "coverage.json"],
-        cwd=project_root,
-        check=True,
-    )
-    subprocess.run(["cargo", "llvm-cov", "report", "--html"], cwd=project_root, check=True)
-    subprocess.run(
-        [
-            "cargo",
-            "llvm-cov",
-            "report",
-            "--cobertura",
-            "--output-path",
-            str(html_dir / "cobertura.xml"),
-        ],
-        cwd=project_root,
-        check=True,
-    )
 
 
 @pytest.fixture(scope="module")

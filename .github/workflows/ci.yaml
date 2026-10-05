@@ -103,9 +103,9 @@ jobs:
       matrix:
         include:
           - {os: ubuntu-24.04, target: x86_64-unknown-linux-gnu, profile: release-small, tests: [unit, self, integration]}
-          - {os: ubuntu-24.04-arm, target: aarch64-unknown-linux-gnu, profile: release-small, tests: [unit], tools: rust}
-          - {os: windows-2025-vs2026, target: x86_64-pc-windows-msvc, profile: release-small, tests: [unit], tools: rust}
-          - {os: macos-15, target: aarch64-apple-darwin, profile: release-small, tests: [unit], tools: rust}
+          - {os: ubuntu-24.04-arm, target: aarch64-unknown-linux-gnu, profile: release-small, tests: [unit], tools: "rust,github:nextest-rs/nextest"}
+          - {os: windows-2025-vs2026, target: x86_64-pc-windows-msvc, profile: release-small, tests: [unit], tools: "rust,github:nextest-rs/nextest"}
+          - {os: macos-15, target: aarch64-apple-darwin, profile: release-small, tests: [unit], tools: "rust,github:nextest-rs/nextest"}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
@@ -225,12 +225,12 @@ jobs:
       - uses: ./.github/actions/mise
       - uses: Swatinem/rust-cache@v2
         with:
+          workspaces: ". -> target/coverage"
           cache-on-failure: true
 
-      # --opensovd-coverage sets up cargo-llvm-cov instrumentation and writes the
-      # merged report (coverage.json + HTML + Cobertura). test_rust.py runs the
-      # Rust unit/integration/doc tests (--all-features) and the e2e tests spawn
-      # the gateway, which inherits LLVM_PROFILE_FILE, so all of it is one report.
+      # The task instruments the build with cargo-llvm-cov, runs the nextest
+      # suites and the e2e tests against the instrumented binaries, and merges
+      # both into coverage.json, HTML and Cobertura under target/coverage.
       - name: Collect coverage (Rust + e2e)
         run: mise run coverage
 
@@ -238,7 +238,7 @@ jobs:
         run: |
           PERCENT=$(jq -r '.data[0].totals.lines.percent | floor' coverage.json)
           COLOR=$([[ $PERCENT -ge 80 ]] && echo 28A745 || ([[ $PERCENT -ge 60 ]] && echo B08800 || echo CB2431))
-          curl -s "https://img.shields.io/badge/coverage-${PERCENT}%25-${COLOR}" -o target/llvm-cov/html/badge.svg
+          curl -s "https://img.shields.io/badge/coverage-${PERCENT}%25-${COLOR}" -o target/coverage/llvm-cov/html/badge.svg
           bash scripts/coverage-report.sh coverage.json > coverage-comment.md
           bash scripts/coverage-report.sh --detail coverage.json >> "$GITHUB_STEP_SUMMARY"
 
@@ -265,7 +265,7 @@ jobs:
       - uses: actions/upload-artifact@v7
         with:
           name: coverage-report
-          path: target/llvm-cov/html
+          path: target/coverage/llvm-cov/html
 
   pages:
     needs: [prepare, build, coverage]

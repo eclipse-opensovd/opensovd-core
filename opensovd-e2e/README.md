@@ -69,7 +69,7 @@ uv run pytest --opensovd-run=./target/release/my-binary
 ## What it provides
 
 - **Options:** `--opensovd-run`, `--opensovd-args`, `--opensovd-profile`,
-  `--opensovd-target`, `--opensovd-features`, `--opensovd-coverage`.
+  `--opensovd-target`, `--opensovd-features`.
 - **Fixtures:** `crate_binary`, `binary_args`, `ready_banner`, `process`
   (override any of them for binary-specific behaviour, e.g. an HTTP client).
 - **Requirement traceability:** the `@pytest.mark.req("...")` marker, a
