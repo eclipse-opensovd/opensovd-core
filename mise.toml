@@ -57,6 +57,11 @@ description = "Check formatting with the pinned nightly rustfmt"
 tools = { rust = { version = "nightly-2026-05-07", profile = "minimal", components = "rustfmt" } }
 run = "cargo fmt --all -- --check"
 
+[tasks."lint:commits"]
+description = "Check that commit messages follow Conventional Commits"
+usage = 'arg "[rev]" default="origin/main..HEAD" help="Commit or range to check"'
+run = "convco check {{ usage.rev | quote }}"
+
 [tasks.test]
 description = "Run all tests"
 depends = ["test:unit", "test:self", "test:integration"]
