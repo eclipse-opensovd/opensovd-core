@@ -74,10 +74,10 @@ junit="${CARGO_TARGET_DIR:-target}/nextest/default/junit.xml"
 report={{ ("target/reports/" ~ b ~ "/" ~ triple ~ "/unit") | quote }}
 rm -f "$junit"
 status=0
-cargo nextest run --locked{% for c in crates %} -p {{ c }}{% endfor %}{% for a in usage.args %} {{ a | quote }}{% endfor %} || status=$?
+cargo nextest run --locked --all-features{% for c in crates %} -p {{ c }}{% endfor %}{% for a in usage.args %} {{ a | quote }}{% endfor %} || status=$?
 if [ -f "$junit" ]; then mkdir -p "$report" && cp "$junit" "$report/junit.xml"; fi
 if [ "$status" -ne 0 ]; then exit "$status"; fi
-cargo test --locked --doc{% for c in crates %} -p {{ c }}{% endfor %}
+cargo test --locked --doc --all-features{% for c in crates %} -p {{ c }}{% endfor %}
 {% endfor -%}
 '''
 
@@ -114,7 +114,7 @@ report() { cargo llvm-cov report --ignore-filename-regex /opensovd-mocks/ "$@"; 
 {%- set crates = [line | split(pat=" ") | first for line in exec(command="cargo tree --locked -p opensovd-" ~ b ~ " -e normal,build --prefix none --format {p}") | split(pat="\n") if config_root in line and "(*)" not in line] -%}
 dir={{ (config_root ~ "/target/reports/" ~ b ~ "/" ~ triple ~ "/coverage") | quote }}
 cargo llvm-cov clean --workspace
-{% if "unit" in tests %}cargo nextest run --locked{% for c in crates %} -p {{ c }}{% endfor %}
+{% if "unit" in tests %}cargo nextest run --locked --all-features{% for c in crates %} -p {{ c }}{% endfor %}
 {% endif -%}
 {% if "integration" in tests %}uv run --locked pytest tests/opensovd-{{ b }}{% for a in usage.args %} {{ a | quote }}{% endfor %}
 {% endif -%}
