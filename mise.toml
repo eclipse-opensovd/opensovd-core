@@ -1,0 +1,25 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 Contributors to the Eclipse Foundation
+# SPDX-License-Identifier: Apache-2.0
+
+min_version = "2026.9.18"
+
+[settings]
+idiomatic_version_file_enable_tools = ["rust"]
+lockfile_platforms = ["linux-x64", "linux-arm64", "macos-arm64", "windows-x64"]
+
+[tools]
+python = "3.13.15"
+uv = "0.12.17"
+prek = "0.5.4"
+ruff = "0.16.9"
+ty = "0.0.84"
+"github:convco/convco" = "0.6.3"
+cargo-deny = "0.20.2"
+"github:taiki-e/cargo-llvm-cov" = "0.9.0"
+git-cliff = "2.14.1"
+gh = "2.102.0"
+jq = "1.8.2"
+
+[env]
+UV_PYTHON = { value = "{{ tools.python.path }}", tools = true }
+UV_PYTHON_DOWNLOADS = "never"
