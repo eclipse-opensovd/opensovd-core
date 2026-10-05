@@ -37,14 +37,15 @@ Every stage writes its report to `target/reports/<binary>/<triple>/<stage>/`:
 `test:unit` the nextest JUnit report as `unit/junit.xml`, `test:integration` an HTML
 report as `integration/index.html`, `coverage` an HTML report under `coverage/html/`
 with `coverage.json`, `cobertura.xml`, `summary.md`, `detail.md` and a shields.io
-`badge.json`. The build jobs upload the directory as
-`reports-<binary>-<triple>`, coverage jobs post `summary.md` as a PR comment, and on
-main GitHub Pages serves every report under the same path.
+`badge.json`. The build jobs upload the directory as `reports-<binary>-<triple>`,
+and on main GitHub Pages serves every report under the same path.
 
 `coverage` also packs its profiles and the coverage mapping of the instrumented
 binaries into `target/coverage-data/<binary>-<triple>.tar.gz`. The coverage job merges
 them with `mise run coverage --merge` into `all/<triple>/coverage/`, the report behind
-the README badge.
+the README badge. On pull requests from this repository the coverage-comment job posts
+each coverage report's `summary.md` as a comment. It is the only job that can write to
+pull requests, so it runs no code from them.
 
 ## Images
 
@@ -58,6 +59,7 @@ On releases the docker job builds one image per binary from the binaries of its
 | **prepare**    | Always                 | Entry point; determines release type and whether to run (skips nightly if no changes) |
 | **build**      | When `should_run=true` | Builds, tests or covers each binary per target; smoke-tests images on Linux           |
 | **coverage**   | When `should_run=true` | Merges the coverage of all binaries into one report                                   |
+| **coverage-comment** | Same-repo PRs    | Posts each coverage summary as a PR comment                                           |
 | **licenses**   | When `should_run=true` | Checks licenses and sources with cargo-deny                                           |
 | **advisories** | When `should_run=true` | Checks security advisories with cargo-deny                                            |
 | **lint**       | When `should_run=true` | Runs the git hooks (prek), including rustfmt and clippy, and the plugin self-tests    |
@@ -79,7 +81,8 @@ flowchart TB
     end
     prepare --> build & licenses & advisories & lint
     build --> coverage & docker & release
-    coverage & docker & release & licenses & advisories & lint --> gate
+    coverage --> comment[coverage-comment]
+    comment & docker & release & licenses & advisories & lint --> gate
 ```
 
 Jobs `build`, `licenses`, `advisories` and `lint` run in parallel after `prepare`.

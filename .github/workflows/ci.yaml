@@ -96,7 +96,6 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
-      pull-requests: write
     env:
       OPENSOVD_CHANNEL: ${{ needs.prepare.outputs.channel }}
       OPENSOVD_COMMIT_SHA: ${{ needs.prepare.outputs.sha }}
@@ -180,27 +179,6 @@ jobs:
           REPORT: target/reports/${{ matrix.binary }}/${{ matrix.target.triple }}/coverage
         run: cat "$REPORT/detail.md" >> "$GITHUB_STEP_SUMMARY"
 
-      # Post or update a sticky PR comment per report, identified by the marker
-      # on its first line. Restricted to same-repo PRs since the token is
-      # read-only for forks.
-      - name: Comment coverage on PR
-        if: matrix.target.coverage && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-          PR: ${{ github.event.pull_request.number }}
-          SUMMARY: target/reports/${{ matrix.binary }}/${{ matrix.target.triple }}/coverage/summary.md
-        run: |
-          jq -Rs '{body: .}' "$SUMMARY" > comment.json
-          marker=$(head -n1 "$SUMMARY")
-          id=$(gh api --paginate "repos/${REPO}/issues/${PR}/comments" \
-            -q ".[] | select(.body | startswith(\"${marker}\")) | .id" | head -n1)
-          if [ -n "$id" ]; then
-            gh api --method PATCH "repos/${REPO}/issues/comments/${id}" --input comment.json >/dev/null
-          else
-            gh api --method POST "repos/${REPO}/issues/${PR}/comments" --input comment.json >/dev/null
-          fi
-
   coverage:
     needs: [prepare, build]
     if: needs.prepare.outputs.should_run == 'true'
@@ -224,6 +202,40 @@ jobs:
           path: target/reports/
 
       - run: cat target/reports/all/x86_64-unknown-linux-gnu/coverage/detail.md >> "$GITHUB_STEP_SUMMARY"
+
+  # The only job with a PR write token, so it checks out and runs nothing from
+  # the PR. Forks get a read-only token and are skipped.
+  coverage-comment:
+    needs: [build, coverage]
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    permissions:
+      pull-requests: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: reports-*-coverage
+          path: reports
+          merge-multiple: true
+
+      # Post or update a sticky comment per report, identified by the marker
+      # on its first line.
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          for summary in reports/*/*/coverage/summary.md; do
+            jq -Rs '{body: .}' "$summary" > comment.json
+            marker=$(head -n1 "$summary")
+            id=$(gh api --paginate "repos/${REPO}/issues/${PR}/comments" \
+              | jq -r --arg marker "$marker" '.[] | select(.body | startswith($marker)) | .id' | head -n1)
+            if [ -n "$id" ]; then
+              gh api --method PATCH "repos/${REPO}/issues/comments/${id}" --input comment.json >/dev/null
+            else
+              gh api --method POST "repos/${REPO}/issues/${PR}/comments" --input comment.json >/dev/null
+            fi
+          done
 
   licenses:
     needs: prepare
@@ -409,7 +421,7 @@ jobs:
             artifacts/release/*
 
   gate:
-    needs: [prepare, git-lint, build, coverage, licenses, advisories, lint, pages, docker, release]
+    needs: [prepare, git-lint, build, coverage, coverage-comment, licenses, advisories, lint, pages, docker, release]
     if: always()
     runs-on: ubuntu-24.04
     permissions: {}
