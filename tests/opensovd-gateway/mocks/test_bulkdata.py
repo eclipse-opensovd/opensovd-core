@@ -10,6 +10,9 @@ single-file and category-level delete, missing-provider 404, and
 malformed-multipart rejection.
 """
 
+import jsonschema
+import pytest
+
 BULK_DATA_HOST = "ota_manager"
 BASE = f"/v1/apps/{BULK_DATA_HOST}/bulk-data"
 
@@ -130,15 +133,16 @@ def test_list_invalid_date_returns_400(client):
     assert resp.status_code == 400
 
 
-def test_list_with_include_schema(client):
-    """include-schema=true returns a schema object alongside items."""
-    category = "cat-list-schema"
-    _upload(client, category, "schema.bin", b"data")
+@pytest.mark.parametrize("path", ["", "/cat-list-schema"], ids=["categories", "descriptors"])
+def test_include_schema(client, path):
+    """include-schema=true returns a schema that the response validates against."""
+    _upload(client, "cat-list-schema", "schema.bin", b"data")
 
-    resp = client.get(f"{BASE}/{category}", params={"include-schema": "true"})
+    resp = client.get(f"{BASE}{path}", params={"include-schema": "true"})
     assert resp.status_code == 200
     body = resp.json()
     assert "schema" in body, "expected schema key when include-schema=true"
+    jsonschema.validate(instance=body, schema=body["schema"])
 
 
 # ---------------------------------------------------------------------------

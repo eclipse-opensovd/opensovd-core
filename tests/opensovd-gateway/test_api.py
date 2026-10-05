@@ -15,10 +15,8 @@ def binary_args(request):
 
 
 def validate_schema(data):
-    """Validate response data against its schema if present."""
-    if "schema" not in data:
-        return
-
+    """Validate response data against the schema it carries."""
+    assert "schema" in data, "expected schema with include-schema=true"
     schema = data["schema"]
     assert "$schema" in schema, "Schema must have $schema property"
     jsonschema.validate(instance=data, schema=schema)
@@ -93,20 +91,16 @@ def test_traverse_api(client, include_schema):
         entities[component_item["href"]] = component
 
         # GET data-categories
-        response = client.get(f"/v1/components/{component_id}/data-categories", params=params)
+        response = client.get(f"/v1/components/{component_id}/data-categories")
         assert response.status_code == 200
         categories = response.json()
         assert "items" in categories
-        if include_schema:
-            validate_schema(categories)
 
         # GET data-groups
-        response = client.get(f"/v1/components/{component_id}/data-groups", params=params)
+        response = client.get(f"/v1/components/{component_id}/data-groups")
         assert response.status_code == 200
         groups = response.json()
         assert "items" in groups
-        if include_schema:
-            validate_schema(groups)
 
         # GET data list
         response = client.get(f"/v1/components/{component_id}/data", params=params)
@@ -173,20 +167,16 @@ def test_traverse_api(client, include_schema):
         # Verify data link in app capabilities (if app has data provider)
         if "data" in app:
             # GET app data-categories
-            response = client.get(f"/v1/apps/{app_id}/data-categories", params=params)
+            response = client.get(f"/v1/apps/{app_id}/data-categories")
             assert response.status_code == 200
             app_categories = response.json()
             assert "items" in app_categories
-            if include_schema:
-                validate_schema(app_categories)
 
             # GET app data-groups
-            response = client.get(f"/v1/apps/{app_id}/data-groups", params=params)
+            response = client.get(f"/v1/apps/{app_id}/data-groups")
             assert response.status_code == 200
             app_groups = response.json()
             assert "items" in app_groups
-            if include_schema:
-                validate_schema(app_groups)
 
             # GET app data list
             response = client.get(f"/v1/apps/{app_id}/data", params=params)
