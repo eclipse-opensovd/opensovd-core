@@ -53,9 +53,9 @@ description = "Run the git hooks on all files"
 run = "prek run --all-files --show-diff-on-failure"
 
 [tasks.fmt]
-description = "Check formatting with the pinned nightly rustfmt"
-tools = { rust = { version = "nightly-2026-05-07", profile = "minimal", components = "rustfmt" } }
-run = "cargo fmt --all -- --check"
+description = "Format the Rust code with the pinned nightly rustfmt"
+tools = { rust = { version = "nightly-2026-10-05", profile = "minimal", components = "rustfmt" } }
+run = "cargo fmt --all"
 
 [tasks."lint:commits"]
 description = "Check that commit messages follow Conventional Commits"
