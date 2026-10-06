@@ -1,0 +1,25 @@
+load("//bazel:rust_crate.bzl", "workspace_rust_library")
+
+package(default_visibility = ["//:workspace_crates"])
+
+exports_files(["Cargo.toml"])
+
+workspace_rust_library(
+    name = "opensovd_mocks",
+    srcs = glob(["src/**/*.rs"]),
+    crate_deps = [
+        "bytes",
+        "futures",
+    ],
+    crate_name = "opensovd_mocks",
+    crate_root = "src/lib.rs",
+    proc_macro_crate_deps = [
+        "async-trait",
+    ],
+    version = "0.1.1",
+    deps = [
+        "//opensovd-core:opensovd_core",
+        "//opensovd-models:opensovd_models",
+        "//opensovd-providers:opensovd_providers",
+    ],
+)

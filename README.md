@@ -52,11 +52,26 @@ curl -s http://127.0.0.1:7690/sovd/version-info | jq
 # Build
 cargo build
 
+# Build the gateway through Bazel
+bazel build //:opensovd-gateway
+
 # Run the gateway with mock data
 cargo run -p opensovd-gateway -- --mock
 ```
 
 For testing instructions, see the [Testing guide](docs/testing.md).
+
+The Bazel workspace uses `rules_rust` plus `crate_universe` to build the gateway as a native Bazel target. The root package exposes `//:opensovd-gateway`; package-local targets are internal implementation details. Cargo remains the authoritative test workflow.
+
+Use Bazel 8.6.0 directly or through Bazelisk so the workspace stays on the pinned version from `.bazelversion`.
+
+For Bazel-specific repository notes, see [README.bazel.md](README.bazel.md).
+
+When Cargo dependencies change, repin crate-universe with:
+
+```bash
+CARGO_BAZEL_REPIN=1 bazel sync --only=crate_index
+```
 
 ## Examples
 

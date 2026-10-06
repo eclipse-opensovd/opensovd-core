@@ -1,0 +1,44 @@
+load("//bazel:rust_crate.bzl", "workspace_rust_library")
+
+package(default_visibility = ["//:workspace_crates"])
+
+exports_files(["Cargo.toml"])
+
+workspace_rust_library(
+    name = "opensovd_server",
+    srcs = glob(["src/**/*.rs"]),
+    crate_deps = [
+        "axum",
+        "axum-extra",
+        "bytes",
+        "futures",
+        "http",
+        "http-body",
+        "percent-encoding",
+        "rustls",
+        "schemars",
+        "serde",
+        "serde_json",
+        "serde_path_to_error",
+        "thiserror",
+        "tokio",
+        "tokio-rustls",
+        "tower",
+        "tracing",
+        "uuid",
+    ],
+    crate_features = [
+        "http2",
+        "json-preserve-order",
+        "jsonschema",
+        "tls",
+    ],
+    crate_name = "opensovd_server",
+    crate_root = "src/lib.rs",
+    compile_data = ["README.md"],
+    version = "0.1.1",
+    deps = [
+        "//opensovd-core:opensovd_core",
+        "//opensovd-models:opensovd_models",
+    ],
+)
