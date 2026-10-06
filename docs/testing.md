@@ -185,7 +185,7 @@ curl -s http://localhost:7690/sovd/v1/components/gateway/data/sw.version?include
       "errors": {
         "type": ["array", "null"],
         "items": {
-          "$ref": "#/$defs/DataErrorEntry"
+          "$ref": "#/$defs/DataError"
         }
       },
       "schema": true
