@@ -18,8 +18,10 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
+  CARGO_BUILD_WARNINGS: deny
+  CARGO_INCREMENTAL: 0
+  CARGO_PROFILE_DEV_DEBUG: 0
   RUST_BACKTRACE: 1
-  RUN: nix develop --command
 
 jobs:
   prepare:
@@ -88,6 +90,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build:
+    name: build (${{ matrix.binary }}, ${{ matrix.target.triple }}${{ matrix.target.coverage && ', coverage' || '' }})
     needs: prepare
     if: needs.prepare.outputs.should_run == 'true'
     timeout-minutes: 30
@@ -96,71 +99,143 @@ jobs:
     env:
       OPENSOVD_CHANNEL: ${{ needs.prepare.outputs.channel }}
       OPENSOVD_COMMIT_SHA: ${{ needs.prepare.outputs.sha }}
-      # The flake covers everything but windows, which keeps rustup.
-      RUN: ${{ matrix.nix && 'nix develop --command' || '' }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - {os: ubuntu-24.04, target: x86_64-unknown-linux-gnu, profile: release-small, tests: [unittest, pytest], nix: true}
-          - {os: ubuntu-24.04-arm, target: aarch64-unknown-linux-gnu, profile: release-small, tests: [unittest], nix: true}
-          - {os: windows-2025-vs2026, target: x86_64-pc-windows-msvc, profile: release-small, tests: [unittest]}
-          - {os: macos-15, target: aarch64-apple-darwin, profile: release-small, tests: [unittest], nix: true}
-    runs-on: ${{ matrix.os }}
+    # Git Bash on Windows, so the bash tasks run the same on every runner.
     defaults:
       run:
         shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        binary: [gateway, mcp]
+        target:
+          - {triple: x86_64-unknown-linux-gnu, os: ubuntu-24.04, tests: [unit, integration], container: true}
+          - {triple: x86_64-unknown-linux-gnu, os: ubuntu-24.04, tests: [unit, integration], coverage: true}
+          - {triple: aarch64-unknown-linux-gnu, os: ubuntu-24.04-arm, tests: [unit], container: true}
+          - {triple: x86_64-pc-windows-msvc, os: windows-2025-vs2026, tests: [unit]}
+          - {triple: aarch64-apple-darwin, os: macos-15, tests: [unit]}
+    runs-on: ${{ matrix.target.os }}
     steps:
       - uses: actions/checkout@v7
-
-      - if: matrix.nix
-        uses: ./.github/actions/nix-setup
+      - uses: ./.github/actions/mise
+      - uses: Swatinem/rust-cache@v2
         with:
-          cargo-cache: 'true'
+          key: ${{ matrix.binary }}${{ matrix.target.coverage && '-coverage' || '' }}
+          workspaces: ${{ matrix.target.coverage && '. -> target/coverage' || '. -> target' }}
+          cache-on-failure: true
 
-      - if: ${{ !matrix.nix }}
-        uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          target: ${{ matrix.target }}
-          cache-shared-key: ci
+      # A coverage job builds and tests instrumented in one task; the others
+      # build the release binary and test it stage by stage.
+      - if: ${{ !matrix.target.coverage }}
+        env:
+          CARGO_BUILD_TARGET: ${{ matrix.target.triple }}
+        run: mise run build ${{ matrix.binary }}
 
-      - run: $RUN cargo build --locked --profile ${{ matrix.profile }} --target ${{ matrix.target }}
+      - if: ${{ !matrix.target.coverage && contains(matrix.target.tests, 'unit') }}
+        run: mise run test:unit ${{ matrix.binary }}
 
-      - if: contains(matrix.tests, 'unittest')
-        run: $RUN cargo test --locked --all-features
+      - if: ${{ !matrix.target.coverage && contains(matrix.target.tests, 'integration') }}
+        env:
+          CARGO_BUILD_TARGET: ${{ matrix.target.triple }}
+        run: mise run test:integration ${{ matrix.binary }}
 
-      - if: contains(matrix.tests, 'pytest')
-        name: opensovd-e2e plugin self-tests
-        run: $RUN uv run --locked pytest opensovd-e2e/tests
+      - if: matrix.target.coverage
+        run: mise run coverage ${{ matrix.binary }} --tests ${{ join(matrix.target.tests, ',') }}
 
-      - if: contains(matrix.tests, 'pytest')
-        run: |
-          $RUN uv run --locked pytest tests/ \
-            --opensovd-target=${{ matrix.target }} \
-            --opensovd-profile=${{ matrix.profile }} \
-            --html=pytest-report.html \
-            --self-contained-html \
-            --metadata "Branch" "${{ github.ref_name }}" \
-            --metadata "Repository" "${{ github.repository }}" \
-            --metadata "Run ID" "${{ github.run_id }}" \
-            --metadata "Commit" "${{ github.sha }}" \
-            --metadata "Coverage_URL" "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/coverage/"
+      - if: matrix.target.container
+        env:
+          CARGO_BUILD_TARGET: ${{ matrix.target.triple }}
+        run: mise run container ${{ matrix.binary }}
 
-      - if: contains(matrix.tests, 'pytest')
+      - if: ${{ !matrix.target.coverage }}
         uses: actions/upload-artifact@v7
         with:
-          name: pytest-report
-          path: pytest-report.html
+          name: opensovd-${{ matrix.binary }}-${{ matrix.target.triple }}
+          path: target/${{ matrix.target.triple }}/release-small/opensovd-${{ matrix.binary }}${{ runner.os == 'Windows' && '.exe' || '' }}
+
+      # The coverage job merges these into one report for all binaries.
+      - if: matrix.target.coverage
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-data-${{ matrix.binary }}-${{ matrix.target.triple }}
+          path: target/coverage-data/${{ matrix.binary }}-${{ matrix.target.triple }}.tar.gz
+
+      # The docker job builds each binary's multi-arch image from these.
+      - if: matrix.target.container && needs.prepare.outputs.release != 'none'
+        uses: actions/upload-artifact@v7
+        with:
+          name: image-opensovd-${{ matrix.binary }}-${{ matrix.target.triple }}
+          path: target/${{ matrix.target.triple }}/release-small/opensovd-${{ matrix.binary }}
+
+      # Every stage writes its report under target/reports/<binary>/<triple>/<stage>.
+      - if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: reports-${{ matrix.binary }}-${{ matrix.target.triple }}${{ matrix.target.coverage && '-coverage' || '' }}
+          path: target/reports/
+          if-no-files-found: ignore
+
+      - if: matrix.target.coverage
+        env:
+          REPORT: target/reports/${{ matrix.binary }}/${{ matrix.target.triple }}/coverage
+        run: cat "$REPORT/detail.md" >> "$GITHUB_STEP_SUMMARY"
+
+  coverage:
+    needs: [prepare, build]
+    if: needs.prepare.outputs.should_run == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/mise
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: coverage-data-*
+          path: target/coverage-data
+          merge-multiple: true
+
+      - run: mise run coverage --merge
 
       - uses: actions/upload-artifact@v7
         with:
-          name: opensovd-gateway-${{ matrix.target }}
-          path: target/${{ matrix.target }}/${{ matrix.profile }}/opensovd-gateway${{ runner.os == 'Windows' && '.exe' || '' }}
+          name: reports-all-x86_64-unknown-linux-gnu-coverage
+          path: target/reports/
 
-      - uses: actions/upload-artifact@v7
+      - run: cat target/reports/all/x86_64-unknown-linux-gnu/coverage/detail.md >> "$GITHUB_STEP_SUMMARY"
+
+  # The only job with a PR write token, so it checks out and runs nothing from
+  # the PR. Forks get a read-only token and are skipped.
+  coverage-comment:
+    needs: [build, coverage]
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    permissions:
+      pull-requests: write
+    steps:
+      - uses: actions/download-artifact@v8
         with:
-          name: opensovd-mcp-${{ matrix.target }}
-          path: target/${{ matrix.target }}/${{ matrix.profile }}/opensovd-mcp${{ runner.os == 'Windows' && '.exe' || '' }}
+          pattern: reports-*-coverage
+          path: reports
+          merge-multiple: true
+
+      # Post or update a sticky comment per report, identified by the marker
+      # on its first line.
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          for summary in reports/*/*/coverage/summary.md; do
+            jq -Rs '{body: .}' "$summary" > comment.json
+            marker=$(head -n1 "$summary")
+            id=$(gh api --paginate "repos/${REPO}/issues/${PR}/comments" \
+              | jq -r --arg marker "$marker" '.[] | select(.body | startswith($marker)) | .id' | head -n1)
+            if [ -n "$id" ]; then
+              gh api --method PATCH "repos/${REPO}/issues/comments/${id}" --input comment.json >/dev/null
+            else
+              gh api --method POST "repos/${REPO}/issues/${PR}/comments" --input comment.json >/dev/null
+            fi
+          done
 
   licenses:
     needs: prepare
@@ -168,14 +243,10 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: read
-    env:
-      RUN: nix develop .#lint --command
     steps:
       - uses: actions/checkout@v7
-      - uses: ./.github/actions/nix-setup
-        with:
-          shell: '.#lint'
-      - run: $RUN cargo deny check licenses sources
+      - uses: ./.github/actions/mise
+      - run: mise run licenses
 
   advisories:
     needs: prepare
@@ -183,14 +254,10 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: read
-    env:
-      RUN: nix develop .#lint --command
     steps:
       - uses: actions/checkout@v7
-      - uses: ./.github/actions/nix-setup
-        with:
-          shell: '.#lint'
-      - run: $RUN cargo deny check advisories
+      - uses: ./.github/actions/mise
+      - run: mise run advisories
 
   lint:
     needs: prepare
@@ -198,107 +265,31 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: read
-    env:
-      RUN: nix develop .#lint --command
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: ./.github/actions/nix-setup
+      - uses: ./.github/actions/mise
+      - uses: Swatinem/rust-cache@v2
         with:
-          cargo-cache: 'true'
-          shell: '.#lint'
-      - run: $RUN uv sync --locked
+          cache-on-failure: true
       # Cache prek hooks
       - uses: actions/cache@v6
         with:
           path: ~/.cache/prek
-          key: prek-${{ runner.os }}-${{ hashFiles('nix/git-hooks.nix', 'nix/dev/flake.lock', 'flake.lock') }}
+          key: prek-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
           restore-keys: |
             prek-${{ runner.os }}-
 
-      - run: $RUN prek run --all-files --show-diff-on-failure
+      - run: mise run lint
 
-      # This only evaluates, so it is cheap enough to cover every system from
-      # here rather than once per build leg.
-      - run: nix flake check --all-systems
+      - run: mise run test:self
 
-      - name: Validate commit subjects (Conventional Commits)
-        if: github.event_name == 'pull_request'
+      - if: github.event_name == 'pull_request'
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          set -euo pipefail
-          fail=0
-          for sha in $(git rev-list "$BASE_SHA..$HEAD_SHA"); do
-            git log -1 --format=%B "$sha" > /tmp/commit-msg
-            if ! $RUN prek run --hook-stage commit-msg \
-                --commit-msg-filename /tmp/commit-msg convco; then
-              echo "::error::Non-conventional commit subject: $(git log -1 --format='%h %s' "$sha")"
-              fail=1
-            fi
-          done
-          exit "$fail"
-
-  coverage:
-    needs: prepare
-    if: needs.prepare.outputs.should_run == 'true'
-    timeout-minutes: 30
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-      pull-requests: write
-    # Runs the CLI version tests too, so it needs the same stamping as build:
-    # on a tag push git describe would otherwise report the tag, not a sha.
-    env:
-      OPENSOVD_CHANNEL: ${{ needs.prepare.outputs.channel }}
-      OPENSOVD_COMMIT_SHA: ${{ needs.prepare.outputs.sha }}
-    steps:
-      - uses: actions/checkout@v7
-      - uses: ./.github/actions/nix-setup
-        with:
-          cargo-cache: 'true'
-
-      # --opensovd-coverage sets up cargo-llvm-cov instrumentation and writes the
-      # merged report (coverage.json + HTML + Cobertura). test_rust.py runs the
-      # Rust unit/integration/doc tests (--all-features) and the e2e tests spawn
-      # the gateway, which inherits LLVM_PROFILE_FILE, so all of it is one report.
-      - name: Collect coverage (Rust + e2e)
-        run: $RUN uv run pytest tests/ --opensovd-coverage
-
-      - id: cov
-        run: |
-          PERCENT=$(jq -r '.data[0].totals.lines.percent | floor' coverage.json)
-          COLOR=$([[ $PERCENT -ge 80 ]] && echo 28A745 || ([[ $PERCENT -ge 60 ]] && echo B08800 || echo CB2431))
-          curl -s "https://img.shields.io/badge/coverage-${PERCENT}%25-${COLOR}" -o target/llvm-cov/html/badge.svg
-          bash scripts/coverage-report.sh coverage.json > coverage-comment.md
-          bash scripts/coverage-report.sh --detail coverage.json >> "$GITHUB_STEP_SUMMARY"
-
-      # Post or update a sticky PR comment, identified by the marker on line 1
-      # of the rendered body. Restricted to same-repo PRs since the token is
-      # read-only for forks.
-      - name: Comment coverage on PR
-        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-          PR: ${{ github.event.pull_request.number }}
-        run: |
-          jq -Rs '{body: .}' coverage-comment.md > comment.json
-          marker='<!-- coverage-report -->'
-          id=$(gh api --paginate "repos/${REPO}/issues/${PR}/comments" \
-            -q ".[] | select(.body | startswith(\"${marker}\")) | .id" | head -n1)
-          if [ -n "$id" ]; then
-            gh api --method PATCH "repos/${REPO}/issues/comments/${id}" --input comment.json >/dev/null
-          else
-            gh api --method POST "repos/${REPO}/issues/${PR}/comments" --input comment.json >/dev/null
-          fi
-
-      - uses: actions/upload-artifact@v7
-        with:
-          name: coverage-report
-          path: target/llvm-cov/html
+        run: mise run lint:commits "$BASE_SHA..$HEAD_SHA"
 
   pages:
     needs: [prepare, build, coverage]
@@ -310,19 +301,23 @@ jobs:
     steps:
       - uses: actions/download-artifact@v8
         with:
-          name: pytest-report
+          pattern: reports-*
           path: site
+          merge-multiple: true
 
-      - uses: actions/download-artifact@v8
-        with:
-          name: coverage-report
-          path: site/coverage
-        continue-on-error: true
-
-      - run: |
-          if [ -f site/pytest-report.html ]; then
-            mv site/pytest-report.html site/index.html
-          fi
+      # Link every report the build jobs produced, one per binary, target and stage.
+      - working-directory: site
+        run: |
+          items=
+          for stage in */*/*/; do
+            stage=${stage%/}
+            page=$(find "$stage" -name index.html | sort | head -n1)
+            [ -n "$page" ] || page=$(find "$stage" -type f | sort | head -n1)
+            if [ -n "$page" ]; then
+              items+="<li><a href=\"$page\">${stage//\// / }</a></li>"
+            fi
+          done
+          echo "<!doctype html><meta charset=\"utf-8\"><title>OpenSOVD reports</title><ul>${items}</ul>" > index.html
 
       - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v5
@@ -345,22 +340,19 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        image:
-          - {binary: opensovd-gateway, dockerfile: docker/Dockerfile.gateway, smoke: 'nix develop --command uv run --locked pytest tests/opensovd-gateway/cli/test_version.py --opensovd-run="docker run --rm opensovd-gateway:test"'}
-          - {binary: opensovd-mcp, dockerfile: docker/Dockerfile.mcp, smoke: 'nix develop --command uv run --locked pytest tests/opensovd-mcp/cli/test_version.py --opensovd-run="docker run --rm opensovd-mcp:test"'}
+        binary: [gateway, mcp]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/download-artifact@v8
         with:
           path: dist
-          pattern: ${{ matrix.image.binary }}-*
-      - uses: ./.github/actions/nix-setup
+          pattern: image-opensovd-${{ matrix.binary }}-*
+      - uses: ./.github/actions/mise
       - uses: ./.github/actions/docker-publish
         with:
-          binary: ${{ matrix.image.binary }}
-          dockerfile: ${{ matrix.image.dockerfile }}
+          binary: opensovd-${{ matrix.binary }}
+          dockerfile: docker/Dockerfile.${{ matrix.binary }}
           release-tag: ${{ needs.prepare.outputs.release }}
-          smoke-test-cmd: ${{ matrix.image.smoke }}
 
   release:
     needs: [prepare, build]
@@ -374,31 +366,34 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: ./.github/actions/nix-setup
+      - uses: ./.github/actions/mise
 
       - uses: actions/download-artifact@v8
         with:
           path: artifacts
+          pattern: opensovd-*
 
+      # Each artifact opensovd-<binary>-<triple> holds one binary.
       - run: |
           VERSION="${{ needs.prepare.outputs.release }}"
           if [[ "${{ needs.prepare.outputs.channel }}" != "stable" ]]; then
-            $RUN git cliff --unreleased -o CHANGELOG.md
+            git cliff --unreleased -o CHANGELOG.md
           else
-            $RUN git cliff --current -o CHANGELOG.md
+            git cliff --current -o CHANGELOG.md
           fi
           mkdir -p artifacts/release
-          for binary in opensovd-gateway opensovd-mcp; do
-            for dir in artifacts/"${binary}-"*; do
-              [ -d "$dir" ] || continue
-              target=$(basename "$dir" | sed "s/${binary}-//")
-              if [[ "$target" == *windows* ]]; then
-                zip "artifacts/release/${binary}-${VERSION}-${target}.zip" "$dir/${binary}.exe"
-              else
-                chmod +x "$dir/${binary}"
-                tar -czf "artifacts/release/${binary}-${VERSION}-${target}.tar.gz" -C "$dir" "${binary}"
-              fi
-            done
+          for dir in artifacts/opensovd-*/; do
+            dir=${dir%/}
+            files=("$dir"/*)
+            file=${files[0]##*/}
+            binary=${file%.exe}
+            target=${dir#artifacts/"${binary}"-}
+            if [[ "$target" == *windows* ]]; then
+              zip "artifacts/release/${binary}-${VERSION}-${target}.zip" "$dir/${file}"
+            else
+              chmod +x "$dir/${file}"
+              tar -czf "artifacts/release/${binary}-${VERSION}-${target}.tar.gz" -C "$dir" "${file}"
+            fi
           done
           cd artifacts/release
           for file in *.tar.gz *.zip; do
@@ -426,7 +421,7 @@ jobs:
             artifacts/release/*
 
   gate:
-    needs: [prepare, git-lint, build, licenses, advisories, lint, coverage, pages, docker, release]
+    needs: [prepare, git-lint, build, coverage, coverage-comment, licenses, advisories, lint, pages, docker, release]
     if: always()
     runs-on: ubuntu-24.04
     permissions: {}

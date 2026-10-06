@@ -112,7 +112,6 @@ mod schema {
 }
 
 #[cfg(test)]
-#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
 
@@ -175,7 +174,6 @@ mod tests {
 }
 
 #[cfg(all(test, feature = "jsonschema"))]
-#[cfg_attr(coverage_nightly, coverage(off))]
 mod schema_tests {
     use super::*;
 

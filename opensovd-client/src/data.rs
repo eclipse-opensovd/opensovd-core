@@ -106,11 +106,6 @@ impl DataRequest<'_> {
     /// # Errors
     ///
     /// Returns an error if `value` cannot be serialized to JSON.
-    #[expect(
-        clippy::allow_attributes,
-        reason = "error size depends on serde_json/preserve_order"
-    )]
-    #[allow(clippy::result_large_err)]
     pub fn write(&self, value: &impl Serialize) -> Result<WriteDataRequest<'_>> {
         Ok(WriteDataRequest {
             client: self.client,

@@ -22,7 +22,7 @@ struct ExtractBearer;
 impl Authenticator for ExtractBearer {
     type Identity = Claims;
 
-    async fn authenticate(&self, parts: &Parts) -> Result<Self::Identity, AuthError> {
+    fn authenticate(&self, parts: &Parts) -> Result<Self::Identity, AuthError> {
         let header = parts
             .headers
             .get("authorization")
@@ -49,7 +49,7 @@ impl Authenticator for ExtractBearer {
 struct RequireAdmin;
 
 impl Authorizer<Claims> for RequireAdmin {
-    async fn authorize(&self, identity: &Claims, _parts: &Parts) -> Result<(), AuthError> {
+    fn authorize(&self, identity: &Claims, _parts: &Parts) -> Result<(), AuthError> {
         if identity.role == "admin" {
             Ok(())
         } else {

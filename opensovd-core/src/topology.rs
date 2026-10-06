@@ -423,7 +423,6 @@ impl Default for Topology {
 }
 
 #[cfg(test)]
-#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
     use crate::entity::EntityKind;

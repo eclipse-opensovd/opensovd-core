@@ -5,7 +5,7 @@
 
 use std::io::Read;
 use std::path::Path;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 use opensovd_server::{AuthError, Authorizer};
 use regorus::Engine;
@@ -15,7 +15,7 @@ use super::jwt::Claims;
 /// Rego policy authorizer backed by the regorus engine.
 #[derive(Clone)]
 pub struct RegorusAuthorizer {
-    engine: Arc<RwLock<Engine>>,
+    engine: Arc<Engine>,
 }
 
 impl RegorusAuthorizer {
@@ -47,7 +47,7 @@ impl RegorusAuthorizer {
         }
 
         Ok(Self {
-            engine: Arc::new(RwLock::new(engine)),
+            engine: Arc::new(engine),
         })
     }
 
@@ -79,26 +79,16 @@ impl RegorusAuthorizer {
         }
 
         Ok(Self {
-            engine: Arc::new(RwLock::new(engine)),
+            engine: Arc::new(engine),
         })
     }
 }
 
 impl Authorizer<Claims> for RegorusAuthorizer {
-    async fn authorize(
-        &self,
-        identity: &Claims,
-        parts: &http::request::Parts,
-    ) -> Result<(), AuthError> {
-        // Clone the engine out of the rwlock so the lock is held briefly.
-        // The clone carries all loaded policies and data.
-        let mut eval_engine = {
-            let guard = self.engine.read().map_err(|e| {
-                tracing::error!(target: "srv", error = %e, "Policy engine rwlock poisoned");
-                AuthError::unauthorized()
-            })?;
-            guard.clone()
-        };
+    fn authorize(&self, identity: &Claims, parts: &http::request::Parts) -> Result<(), AuthError> {
+        // Evaluation needs a mutable engine. The clone carries all loaded
+        // policies and data.
+        let mut eval_engine = Engine::clone(&self.engine);
 
         let input = serde_json::json!({
             "method": parts.method.as_str(),
@@ -128,7 +118,6 @@ impl Authorizer<Claims> for RegorusAuthorizer {
 }
 
 #[cfg(test)]
-#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
 
@@ -177,41 +166,41 @@ allow if {
             .0
     }
 
-    #[tokio::test]
-    async fn reader_get_allowed() {
+    #[test]
+    fn reader_get_allowed() {
         let authz = make_authorizer();
         let claims = make_claims(vec!["reader".to_owned()]);
         let parts = make_parts(http::Method::GET, "/components");
 
-        assert!(authz.authorize(&claims, &parts).await.is_ok());
+        assert!(authz.authorize(&claims, &parts).is_ok());
     }
 
-    #[tokio::test]
-    async fn reader_put_denied() {
+    #[test]
+    fn reader_put_denied() {
         let authz = make_authorizer();
         let claims = make_claims(vec!["reader".to_owned()]);
         let parts = make_parts(http::Method::PUT, "/components/ecu/data/speed");
 
-        let err = authz.authorize(&claims, &parts).await.unwrap_err();
+        let err = authz.authorize(&claims, &parts).unwrap_err();
         assert!(matches!(err, AuthError::Unauthorized));
     }
 
-    #[tokio::test]
-    async fn admin_put_allowed() {
+    #[test]
+    fn admin_put_allowed() {
         let authz = make_authorizer();
         let claims = make_claims(vec!["admin".to_owned()]);
         let parts = make_parts(http::Method::PUT, "/components/ecu/data/speed");
 
-        assert!(authz.authorize(&claims, &parts).await.is_ok());
+        assert!(authz.authorize(&claims, &parts).is_ok());
     }
 
-    #[tokio::test]
-    async fn no_roles_denied() {
+    #[test]
+    fn no_roles_denied() {
         let authz = make_authorizer();
         let claims = make_claims(vec![]);
         let parts = make_parts(http::Method::GET, "/components");
 
-        let err = authz.authorize(&claims, &parts).await.unwrap_err();
+        let err = authz.authorize(&claims, &parts).unwrap_err();
         assert!(matches!(err, AuthError::Unauthorized));
     }
 

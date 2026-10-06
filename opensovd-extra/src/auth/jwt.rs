@@ -101,10 +101,7 @@ impl JwtAuthenticator {
 impl Authenticator for JwtAuthenticator {
     type Identity = Claims;
 
-    async fn authenticate(
-        &self,
-        parts: &http::request::Parts,
-    ) -> Result<Self::Identity, AuthError> {
+    fn authenticate(&self, parts: &http::request::Parts) -> Result<Self::Identity, AuthError> {
         let header = parts
             .headers
             .get(http::header::AUTHORIZATION)
@@ -123,7 +120,6 @@ impl Authenticator for JwtAuthenticator {
 }
 
 #[cfg(test)]
-#[cfg_attr(coverage_nightly, coverage(off))]
 #[expect(clippy::arithmetic_side_effects, clippy::ignored_unit_patterns)]
 mod tests {
     use std::sync::LazyLock;
@@ -162,8 +158,8 @@ mod tests {
         }
     }
 
-    #[tokio::test]
-    async fn hs512_valid_token() {
+    #[test]
+    fn hs512_valid_token() {
         let auth = JwtAuthenticator::new(JwtAlgorithm::HS512, &HMAC_SECRET, TEST_ISSUER);
         let token = make_hs512_token(&valid_claims());
 
@@ -173,26 +169,26 @@ mod tests {
             .unwrap()
             .into_parts();
 
-        let claims = auth.authenticate(&parts).await.unwrap();
+        let claims = auth.authenticate(&parts).unwrap();
         assert_eq!(claims.sub, "user@example.com");
         assert_eq!(claims.roles, vec!["reader", "admin"]);
     }
 
-    #[tokio::test]
-    async fn hs512_missing_header_returns_unauthenticated() {
+    #[test]
+    fn hs512_missing_header_returns_unauthenticated() {
         let auth = JwtAuthenticator::new(JwtAlgorithm::HS512, &HMAC_SECRET, TEST_ISSUER);
 
         let (parts, _) = Request::builder().body(()).unwrap().into_parts();
 
-        let err = auth.authenticate(&parts).await.unwrap_err();
+        let err = auth.authenticate(&parts).unwrap_err();
         assert!(
             matches!(err, AuthError::Unauthenticated),
             "expected Unauthenticated, got {err:?}"
         );
     }
 
-    #[tokio::test]
-    async fn hs512_invalid_token_returns_error() {
+    #[test]
+    fn hs512_invalid_token_returns_error() {
         let auth = JwtAuthenticator::new(JwtAlgorithm::HS512, &HMAC_SECRET, TEST_ISSUER);
 
         let (parts, _) = Request::builder()
@@ -201,15 +197,15 @@ mod tests {
             .unwrap()
             .into_parts();
 
-        let err = auth.authenticate(&parts).await.unwrap_err();
+        let err = auth.authenticate(&parts).unwrap_err();
         assert!(
             matches!(err, AuthError::Unauthenticated),
             "expected InvalidCredentials, got {err:?}"
         );
     }
 
-    #[tokio::test]
-    async fn hs512_expired_token_returns_error() {
+    #[test]
+    fn hs512_expired_token_returns_error() {
         let auth = JwtAuthenticator::new(JwtAlgorithm::HS512, &HMAC_SECRET, TEST_ISSUER);
         let mut claims = valid_claims();
         claims.exp = 1; // long expired
@@ -221,15 +217,15 @@ mod tests {
             .unwrap()
             .into_parts();
 
-        let err = auth.authenticate(&parts).await.unwrap_err();
+        let err = auth.authenticate(&parts).unwrap_err();
         assert!(
             matches!(err, AuthError::Unauthenticated),
             "expected InvalidCredentials, got {err:?}"
         );
     }
 
-    #[tokio::test]
-    async fn hs512_wrong_secret_returns_error() {
+    #[test]
+    fn hs512_wrong_secret_returns_error() {
         let auth = JwtAuthenticator::new(JwtAlgorithm::HS512, b"different-secret", TEST_ISSUER);
         let token = make_hs512_token(&valid_claims());
 
@@ -239,7 +235,7 @@ mod tests {
             .unwrap()
             .into_parts();
 
-        let err = auth.authenticate(&parts).await.unwrap_err();
+        let err = auth.authenticate(&parts).unwrap_err();
         assert!(
             matches!(err, AuthError::Unauthenticated),
             "expected InvalidCredentials, got {err:?}"
@@ -282,8 +278,8 @@ mod tests {
         .unwrap()
     }
 
-    #[tokio::test]
-    async fn rs512_valid_token() {
+    #[test]
+    fn rs512_valid_token() {
         let auth = JwtAuthenticator::new(JwtAlgorithm::RS512, &RSA_KEYS.public_der, TEST_ISSUER);
         let token = make_rs512_token(&valid_claims());
 
@@ -293,13 +289,13 @@ mod tests {
             .unwrap()
             .into_parts();
 
-        let claims = auth.authenticate(&parts).await.unwrap();
+        let claims = auth.authenticate(&parts).unwrap();
         assert_eq!(claims.sub, "user@example.com");
         assert_eq!(claims.roles, vec!["reader", "admin"]);
     }
 
-    #[tokio::test]
-    async fn rs512_expired_token_returns_error() {
+    #[test]
+    fn rs512_expired_token_returns_error() {
         let auth = JwtAuthenticator::new(JwtAlgorithm::RS512, &RSA_KEYS.public_der, TEST_ISSUER);
         let mut claims = valid_claims();
         claims.exp = 1;
@@ -311,15 +307,15 @@ mod tests {
             .unwrap()
             .into_parts();
 
-        let err = auth.authenticate(&parts).await.unwrap_err();
+        let err = auth.authenticate(&parts).unwrap_err();
         assert!(
             matches!(err, AuthError::Unauthenticated),
             "expected InvalidCredentials, got {err:?}"
         );
     }
 
-    #[tokio::test]
-    async fn rs512_invalid_token_returns_error() {
+    #[test]
+    fn rs512_invalid_token_returns_error() {
         let auth = JwtAuthenticator::new(JwtAlgorithm::RS512, &RSA_KEYS.public_der, TEST_ISSUER);
 
         let (parts, _) = Request::builder()
@@ -328,15 +324,15 @@ mod tests {
             .unwrap()
             .into_parts();
 
-        let err = auth.authenticate(&parts).await.unwrap_err();
+        let err = auth.authenticate(&parts).unwrap_err();
         assert!(
             matches!(err, AuthError::Unauthenticated),
             "expected InvalidCredentials, got {err:?}"
         );
     }
 
-    #[tokio::test]
-    async fn hs512_wrong_issuer_returns_error() {
+    #[test]
+    fn hs512_wrong_issuer_returns_error() {
         let auth = JwtAuthenticator::new(JwtAlgorithm::HS512, &HMAC_SECRET, TEST_ISSUER);
         let mut claims = valid_claims();
         claims.iss = Some("wrong-issuer".to_owned());
@@ -348,7 +344,7 @@ mod tests {
             .unwrap()
             .into_parts();
 
-        let err = auth.authenticate(&parts).await.unwrap_err();
+        let err = auth.authenticate(&parts).unwrap_err();
         assert!(
             matches!(err, AuthError::Unauthenticated),
             "expected Unauthenticated, got {err:?}"

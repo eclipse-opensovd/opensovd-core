@@ -117,7 +117,6 @@ impl From<DataError> for ErrorDetails {
 }
 
 #[cfg(test)]
-#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use serde_json::json;
 

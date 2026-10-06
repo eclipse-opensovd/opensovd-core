@@ -99,7 +99,6 @@ impl ServerTlsConfig {
 }
 
 #[cfg(test)]
-#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::super::testutil::{ca, pem_file, server};
     use super::*;

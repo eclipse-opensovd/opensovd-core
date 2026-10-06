@@ -8,8 +8,7 @@ SPDX-License-Identifier: Apache-2.0
 > Standardized diagnostic communication for connected vehicles.
 
 [![CI](https://github.com/eclipse-opensovd/opensovd-core/actions/workflows/ci.yaml/badge.svg?event=push&branch=main)](https://github.com/eclipse-opensovd/opensovd-core/actions/workflows/ci.yaml?query=event%3Apush+branch%3Amain)
-[![Coverage](https://eclipse-opensovd.github.io/opensovd-core/coverage/badge.svg)](https://eclipse-opensovd.github.io/opensovd-core/coverage/)
-[![GHCR](https://img.shields.io/badge/ghcr.io-opensovd--gateway-blue?logo=github)](https://ghcr.io/eclipse-opensovd/opensovd-gateway)
+[![Coverage](https://img.shields.io/endpoint?url=https://eclipse-opensovd.github.io/opensovd-core/all/x86_64-unknown-linux-gnu/coverage/badge.json)](https://eclipse-opensovd.github.io/opensovd-core/all/x86_64-unknown-linux-gnu/coverage/html/)
 [![Chat](https://img.shields.io/badge/chat-slack-blue?logo=slack)](https://app.slack.com/client/T02MS1M89UH/C0958MQNGP2)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 [![Good First Issues](https://img.shields.io/github/issues/eclipse-opensovd/opensovd-core/good%20first%20issue?label=good%20first%20issues&color=blue)](https://github.com/eclipse-opensovd/opensovd-core/labels/good%20first%20issue)
@@ -46,7 +45,7 @@ curl -s http://127.0.0.1:7690/sovd/version-info | jq
 - [uv](https://docs.astral.sh/uv/) (optional) - Python package manager for running integration tests
 
 > [!TIP]
-> Open the project in a [Dev Container](https://containers.dev/) for a ready-to-use environment, or use the [Nix flake](flake.nix) (`nix develop`) locally. See [Development docs](docs/development.md) for details.
+> Open the project in a [Dev Container](https://containers.dev/) for a ready-to-use environment. See [Development docs](docs/development.md) for details.
 
 ```bash
 # Build

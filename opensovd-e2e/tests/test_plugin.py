@@ -14,12 +14,6 @@ def test_registers_options(pytester):
     result.stdout.fnmatch_lines(["*--opensovd-run*"])
 
 
-def test_registers_req_marker(pytester):
-    """The req traceability marker is self-registered (no unknown-mark warning)."""
-    result = pytester.runpytest(*PLUGIN, "--markers")
-    result.stdout.fnmatch_lines(["*@pytest.mark.req*"])
-
-
 def test_process_fixture_runs_command(pytester):
     """The generic `process` fixture spawns --opensovd-run and captures output."""
     pytester.makepyfile(

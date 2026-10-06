@@ -77,13 +77,18 @@ where
 {
     type Rejection = AuthError;
 
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
-        parts
-            .extensions
-            .get::<T>()
-            .cloned()
-            .map(Identity)
-            .ok_or(AuthError::Unauthenticated)
+    fn from_request_parts(
+        parts: &mut Parts,
+        _state: &S,
+    ) -> impl Future<Output = Result<Self, Self::Rejection>> + Send {
+        std::future::ready(
+            parts
+                .extensions
+                .get::<T>()
+                .cloned()
+                .map(Identity)
+                .ok_or(AuthError::Unauthenticated),
+        )
     }
 }
 
@@ -104,13 +109,10 @@ pub trait Authenticator: Clone + Send + Sync + 'static {
 
     /// Authenticate a request and extract the identity.
     ///
-    /// # Returns
-    /// * `Ok(Identity)` - Authentication succeeded
-    /// * `Err(AuthError::Unauthenticated)` - Authentication failed
-    fn authenticate(
-        &self,
-        parts: &Parts,
-    ) -> impl Future<Output = Result<Self::Identity, AuthError>> + Send;
+    /// # Errors
+    ///
+    /// Returns [`AuthError::Unauthenticated`] if authentication fails.
+    fn authenticate(&self, parts: &Parts) -> Result<Self::Identity, AuthError>;
 }
 
 /// No-op authenticator that allows all requests.
@@ -120,7 +122,7 @@ pub struct NoAuth;
 impl Authenticator for NoAuth {
     type Identity = ();
 
-    async fn authenticate(&self, _parts: &Parts) -> Result<Self::Identity, AuthError> {
+    fn authenticate(&self, _parts: &Parts) -> Result<Self::Identity, AuthError> {
         Ok(())
     }
 }
@@ -129,9 +131,9 @@ impl Authenticator for NoAuth {
 impl<A: Authenticator> Authenticator for Option<A> {
     type Identity = Option<A::Identity>;
 
-    async fn authenticate(&self, parts: &Parts) -> Result<Self::Identity, AuthError> {
+    fn authenticate(&self, parts: &Parts) -> Result<Self::Identity, AuthError> {
         match self {
-            Some(authenticator) => authenticator.authenticate(parts).await.map(Some),
+            Some(authenticator) => authenticator.authenticate(parts).map(Some),
             None => Ok(None),
         }
     }
@@ -173,8 +175,9 @@ pub struct AuthenticationMiddleware<S, A> {
 
 impl<S, A> Service<http::Request<Body>> for AuthenticationMiddleware<S, A>
 where
-    S: Service<http::Request<Body>, Response = Response> + Clone + Send + 'static,
-    S::Future: Send,
+    S: Service<http::Request<Body>, Response = Response>,
+    S::Future: Send + 'static,
+    S::Error: Send + 'static,
     A: Authenticator,
 {
     type Response = Response;
@@ -186,27 +189,22 @@ where
     }
 
     fn call(&mut self, req: http::Request<Body>) -> Self::Future {
-        let authenticator = self.authenticator.clone();
-        let mut inner = self.inner.clone();
+        let (mut parts, body) = req.into_parts();
 
-        Box::pin(async move {
-            let (mut parts, body) = req.into_parts();
+        match self.authenticator.authenticate(&parts) {
+            Ok(identity) => {
+                // Store identity in request extensions
+                parts.extensions.insert(identity);
 
-            match authenticator.authenticate(&parts).await {
-                Ok(identity) => {
-                    // Store identity in request extensions
-                    parts.extensions.insert(identity);
-
-                    // Reconstruct request and continue
-                    let req = http::Request::from_parts(parts, body);
-                    inner.call(req).await
-                }
-                Err(auth_error) => {
-                    // Return 401 response immediately
-                    Ok(auth_error.into_response())
-                }
+                // Reconstruct request and continue
+                let req = http::Request::from_parts(parts, body);
+                Box::pin(self.inner.call(req))
             }
-        })
+            Err(auth_error) => {
+                // Return 401 response immediately
+                Box::pin(std::future::ready(Ok(auth_error.into_response())))
+            }
+        }
     }
 }
 
@@ -227,14 +225,10 @@ pub trait Authorizer<I>: Clone + Send + Sync + 'static {
     /// * `identity` - The authenticated identity
     /// * `parts` - The request head (method, URI, headers, extensions, ...)
     ///
-    /// # Returns
-    /// * `Ok(())` - Authorization granted
-    /// * `Err(AuthError::Unauthorized(_))` - Authorization denied
-    fn authorize(
-        &self,
-        identity: &I,
-        parts: &Parts,
-    ) -> impl Future<Output = Result<(), AuthError>> + Send;
+    /// # Errors
+    ///
+    /// Returns [`AuthError::Unauthorized`] if authorization is denied.
+    fn authorize(&self, identity: &I, parts: &Parts) -> Result<(), AuthError>;
 }
 
 /// No-op authorizer that allows all authenticated requests.
@@ -242,7 +236,7 @@ pub trait Authorizer<I>: Clone + Send + Sync + 'static {
 pub struct AllowAll;
 
 impl<I: Sync> Authorizer<I> for AllowAll {
-    async fn authorize(&self, _: &I, _: &Parts) -> Result<(), AuthError> {
+    fn authorize(&self, _: &I, _: &Parts) -> Result<(), AuthError> {
         Ok(())
     }
 }
@@ -286,8 +280,9 @@ pub struct AuthorizationMiddleware<S, Z, I> {
 
 impl<S, Z, I> Service<http::Request<Body>> for AuthorizationMiddleware<S, Z, I>
 where
-    S: Service<http::Request<Body>, Response = Response> + Clone + Send + 'static,
-    S::Future: Send,
+    S: Service<http::Request<Body>, Response = Response>,
+    S::Future: Send + 'static,
+    S::Error: Send + 'static,
     Z: Authorizer<I>,
     I: Clone + Send + Sync + 'static,
 {
@@ -300,31 +295,27 @@ where
     }
 
     fn call(&mut self, req: http::Request<Body>) -> Self::Future {
-        let authorizer = self.authorizer.clone();
-        let mut inner = self.inner.clone();
+        let (parts, body) = req.into_parts();
 
-        Box::pin(async move {
-            let (parts, body) = req.into_parts();
+        // Get identity from extensions (set by AuthenticationLayer)
+        let Some(identity) = parts.extensions.get::<I>() else {
+            return Box::pin(std::future::ready(Ok(
+                AuthError::Unauthenticated.into_response()
+            )));
+        };
 
-            // Get identity from extensions (set by AuthenticationLayer)
-            let Some(identity) = parts.extensions.get::<I>() else {
-                return Ok(AuthError::Unauthenticated.into_response());
-            };
-
-            // Check authorization
-            match authorizer.authorize(identity, &parts).await {
-                Ok(()) => {
-                    let req = http::Request::from_parts(parts, body);
-                    inner.call(req).await
-                }
-                Err(auth_error) => Ok(auth_error.into_response()),
+        // Check authorization
+        match self.authorizer.authorize(identity, &parts) {
+            Ok(()) => {
+                let req = http::Request::from_parts(parts, body);
+                Box::pin(self.inner.call(req))
             }
-        })
+            Err(auth_error) => Box::pin(std::future::ready(Ok(auth_error.into_response()))),
+        }
     }
 }
 
 #[cfg(test)]
-#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use axum::{Router, http::Request, routing::get};
     use http_body_util::BodyExt;
@@ -352,7 +343,7 @@ mod tests {
     struct RejectAll;
 
     impl Authorizer<()> for RejectAll {
-        async fn authorize(&self, (): &(), _: &Parts) -> Result<(), AuthError> {
+        fn authorize(&self, (): &(), _: &Parts) -> Result<(), AuthError> {
             Err(AuthError::unauthorized())
         }
     }
@@ -387,7 +378,7 @@ mod tests {
     impl Authenticator for ExtractBearer {
         type Identity = BearerClaims;
 
-        async fn authenticate(&self, parts: &Parts) -> Result<BearerClaims, AuthError> {
+        fn authenticate(&self, parts: &Parts) -> Result<BearerClaims, AuthError> {
             parts
                 .headers
                 .get("authorization")

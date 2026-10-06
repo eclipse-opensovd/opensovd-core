@@ -17,8 +17,6 @@ def listening_url(match: re.Match) -> str:
     """Build a base URL string from a LISTENING_PATTERN match.
 
     The match is expected to capture (addr, transport, base) in groups 1-3.
-    Useful for consumers (e.g. Bruno) that only need the URL and not a full
-    SovdClient with an httpx connection pool.
     """
     addr, transport, base = match.group(1), match.group(2), match.group(3)
     if transport == "tcp":

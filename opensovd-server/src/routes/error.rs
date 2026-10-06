@@ -186,7 +186,6 @@ impl IntoResponse for Error {
 }
 
 #[cfg(test)]
-#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use http_body_util::BodyExt;
     use opensovd_core::EntityRef;

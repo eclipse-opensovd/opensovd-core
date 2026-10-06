@@ -4,46 +4,66 @@ This document describes the GitHub Actions CI/CD pipeline for opensovd.
 
 ## Build Environment
 
-The Linux and macOS jobs run inside the [Nix flake](../flake.nix) dev shell
-(`nix develop --command ...`), so CI and local development share one set of tool
-versions. Every in-shell command goes through the `RUN` variable, which holds
-`nix develop --command`. Windows has no Nix port and keeps `setup-rust-toolchain`,
-so the build job overrides `RUN` to empty there and each command still exists once.
+Every job that needs tools installs them from [`mise.toml`](../mise.toml) through
+`.github/actions/mise`, locked by `mise.lock`, the same set `mise install` gives a
+dev machine. The action takes the mise version from `.devcontainer/Dockerfile`.
+The jobs run the tasks defined in `mise.toml`, so `mise run lint`,
+`mise run test`, `mise run coverage`, `mise run licenses` and
+`mise run advisories` reproduce them locally, and `mise run build` builds the
+binaries the build job ships. `mise run ci` runs all of them but coverage.
+`build`, `test:unit`, `test:integration`, `coverage` and `container` take the
+binaries to work on, `binaries` in `mise.toml` by default, and pass arguments after
+`--` to cargo or pytest, so `mise run test:unit gateway -- --no-fail-fast` tests only
+the crates the gateway is built from.
 
-`.github/actions/nix-setup` installs Nix and restores the cargo cache. The store
-itself is served by cache.nixos.org; a 3.3 GB closure does not fit the Actions
-cache budget alongside the cargo caches.
+## Build Matrix
 
-Since the store is fetched per job, the flake exposes a second, smaller shell.
-`licenses`, `advisories` and `lint` run static checks only, so they enter
-`.#lint`, which leaves out the tools those jobs never call: 2.3 GB against the
-3.3 GB of the default shell. Each passes `shell: '.#lint'` to `nix-setup`, so the
-step that realises the shell fetches the same one, and overrides `RUN` to
-`nix develop .#lint --command`. The shell carries the whole hook set, so the
-floor is the Rust toolchain the rustfmt and clippy hooks need.
+The build job runs once per `binary` and `target` of its matrix. A binary `<name>` is
+the package `opensovd-<name>`, with its e2e tests in `tests/opensovd-<name>/` and its
+image in `docker/Dockerfile.<name>`; the docker matrix and `binaries` in `mise.toml`
+list it too. Each target entry sets:
 
-The `.nix` files go through the nixfmt hook, like every other file type. `lint`
-also runs `nix flake check --all-systems`, which evaluates the outputs for every
-system in about a second and builds none of them.
+| Field       | Meaning                                                                       |
+|-------------|-------------------------------------------------------------------------------|
+| `triple`    | Rust target to build for                                                      |
+| `os`        | Runner                                                                        |
+| `tests`     | `test:` tasks the job runs: `unit`, `integration`                             |
+| `coverage`  | Run those tests instrumented through `mise run coverage` instead              |
+| `container` | Build and smoke-test the image for the triple's architecture (Linux only)     |
 
-The git hooks are defined in [`nix/git-hooks.nix`](../nix/git-hooks.nix)
-and run through [git-hooks.nix](https://github.com/cachix/git-hooks.nix), which
-generates `.pre-commit-config.yaml` on shell entry. The hooks take their tools
-from the shell, so nothing is fetched per hook. They are kept out of
-`nix flake check`, because the cargo and ty hooks need the crates.io registry
-and a synced virtualenv that the sandbox does not provide.
+## Reports
+
+Every stage writes its report to `target/reports/<binary>/<triple>/<stage>/`:
+`test:unit` the nextest JUnit report as `unit/junit.xml`, `test:integration` an HTML
+report as `integration/index.html`, `coverage` an HTML report under `coverage/html/`
+with `coverage.json`, `cobertura.xml`, `summary.md`, `detail.md` and a shields.io
+`badge.json`. The build jobs upload the directory as `reports-<binary>-<triple>`,
+and on main GitHub Pages serves every report under the same path.
+
+`coverage` also packs its profiles and the coverage mapping of the instrumented
+binaries into `target/coverage-data/<binary>-<triple>.tar.gz`. The coverage job merges
+them with `mise run coverage --merge` into `all/<triple>/coverage/`, the report behind
+the README badge. On pull requests from this repository the coverage-comment job posts
+each coverage report's `summary.md` as a comment. It is the only job that can write to
+pull requests, so it runs no code from them.
+
+## Images
+
+On releases the docker job builds one image per binary from the binaries of its
+`container` targets and pushes all its platforms together.
 
 ## Jobs
 
 | Job            | Runs On                | Description                                                                           |
 |----------------|------------------------|---------------------------------------------------------------------------------------|
 | **prepare**    | Always                 | Entry point; determines release type and whether to run (skips nightly if no changes) |
-| **build**      | When `should_run=true` | Builds for Linux, Windows, macOS; runs tests and pytest                               |
+| **build**      | When `should_run=true` | Builds, tests or covers each binary per target; smoke-tests images on Linux           |
+| **coverage**   | When `should_run=true` | Merges the coverage of all binaries into one report                                   |
+| **coverage-comment** | Same-repo PRs    | Posts each coverage summary as a PR comment                                           |
 | **licenses**   | When `should_run=true` | Checks licenses and sources with cargo-deny                                           |
 | **advisories** | When `should_run=true` | Checks security advisories with cargo-deny                                            |
-| **lint**       | When `should_run=true` | Runs the git hooks (prek), including rustfmt and clippy                               |
-| **coverage**   | When `should_run=true` | Generates coverage report, deploys to GitHub Pages on main                            |
-| **docker**     | main/tags/schedule     | Builds and pushes Docker images (gateway, mcp) to GHCR                                |
+| **lint**       | When `should_run=true` | Runs the git hooks (prek), including rustfmt and clippy, and the plugin self-tests    |
+| **docker**     | main/tags/schedule     | Pushes a multi-arch Docker image per binary to GHCR                                   |
 | **release**    | main/tags/schedule     | Creates GitHub release with artifacts and changelog                                   |
 | **gate**       | Always                 | Final check that all jobs passed (use for branch protection)                          |
 
@@ -58,14 +78,14 @@ flowchart TB
         licenses
         advisories
         lint
-        coverage
     end
-    prepare --> build & licenses & advisories & lint & coverage
-    build --> docker & release
-    docker & release & licenses & advisories & lint & coverage --> gate
+    prepare --> build & licenses & advisories & lint
+    build --> coverage & docker & release
+    coverage --> comment[coverage-comment]
+    comment & docker & release & licenses & advisories & lint --> gate
 ```
 
-Jobs `build`, `licenses`, `advisories`, `lint`, and `coverage` run in parallel after `prepare`.
+Jobs `build`, `licenses`, `advisories` and `lint` run in parallel after `prepare`.
 
 ## Nightly Skip Logic
 
