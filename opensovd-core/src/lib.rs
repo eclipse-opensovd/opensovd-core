@@ -19,7 +19,7 @@ pub use data::{
 };
 pub use entity::{App, Area, Component, EntityKind, EntityRef};
 pub use log::{
-    LogConfiguration, LogContext, LogEntry, LogError, LogFilter, LogProvider, LogSeverity,
-    LogStream,
+    LogConfiguration, LogContext, LogEntry, LogError, LogFilter, LogProvider, LogResult,
+    LogSeverity, LogStream,
 };
 pub use topology::{Topology, TopologyError, TopologyEvent, TopologyReadGuard, TopologyWriteGuard};
