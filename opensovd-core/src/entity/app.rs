@@ -10,6 +10,7 @@ use std::sync::Arc;
 use crate::bulkdata::BulkDataProvider;
 use crate::data::DataProvider;
 use crate::entity::EntityRef;
+use crate::log::LogProvider;
 
 pub struct App {
     entity_ref: EntityRef,
@@ -21,6 +22,7 @@ pub struct App {
     translation_id: Option<String>,
     data_provider: Option<Box<dyn DataProvider>>,
     bulkdata_provider: Option<Arc<dyn BulkDataProvider>>,
+    log_provider: Option<Arc<dyn LogProvider>>,
 }
 
 impl fmt::Debug for App {
@@ -38,6 +40,7 @@ impl fmt::Debug for App {
                 "bulkdata_provider",
                 &self.bulkdata_provider.as_ref().map(|_| "..."),
             )
+            .field("log_provider", &self.log_provider.as_ref().map(|_| "..."))
             .finish()
     }
 }
@@ -55,6 +58,7 @@ impl App {
             translation_id: None,
             data_provider: None,
             bulkdata_provider: None,
+            log_provider: None,
         }
     }
 
@@ -85,6 +89,12 @@ impl App {
     #[must_use]
     pub fn with_bulkdata_provider(mut self, provider: impl BulkDataProvider) -> Self {
         self.bulkdata_provider = Some(Arc::new(provider));
+        self
+    }
+
+    #[must_use]
+    pub fn with_log_provider(mut self, provider: impl LogProvider) -> Self {
+        self.log_provider = Some(Arc::new(provider));
         self
     }
 
@@ -144,6 +154,11 @@ impl App {
     #[must_use]
     pub fn bulkdata_provider(&self) -> Option<Arc<dyn BulkDataProvider>> {
         self.bulkdata_provider.clone()
+    }
+
+    #[must_use]
+    pub fn log_provider(&self) -> Option<Arc<dyn LogProvider>> {
+        self.log_provider.clone()
     }
 
     #[must_use]

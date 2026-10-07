@@ -9,6 +9,7 @@ mod bulkdata;
 mod data;
 mod discovery;
 mod entity;
+mod log;
 mod topology;
 
 pub use bulkdata::{
@@ -21,4 +22,7 @@ pub use data::{
 };
 pub use discovery::{DiscoveryError, DiscoveryProvider, DiscoveryStream};
 pub use entity::{App, Area, Component, EntityCollection, EntityKind, EntityRef};
+pub use log::{
+    LogConfiguration, LogContext, LogEntry, LogError, LogFilter, LogProvider, LogSeverity,
+};
 pub use topology::{Topology, TopologyError, TopologyEvent, TopologyReadGuard, TopologyWriteGuard};
