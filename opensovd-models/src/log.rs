@@ -8,7 +8,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::UriReference;
+use crate::{UriReference, error::GenericError};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "jsonschema", derive(schemars::JsonSchema))]
@@ -46,6 +46,21 @@ pub struct LogEntry {
 pub struct LogResources {
     pub entries: UriReference,
     pub config: UriReference,
+    #[serde(
+        rename = "x-opensovd-live-entries",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub live_entries: Option<UriReference>,
+}
+
+/// Event envelope used by the OpenSOVD live-log SSE extension.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "jsonschema", derive(schemars::JsonSchema))]
+pub struct EventEnvelope<T> {
+    pub timestamp: DateTime<Utc>,
+    pub payload: Option<T>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<GenericError>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

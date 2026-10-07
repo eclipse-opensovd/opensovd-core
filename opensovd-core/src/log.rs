@@ -5,8 +5,11 @@
 
 //! SOVD logging provider trait and types.
 
+use std::pin::Pin;
+
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use futures_core::Stream;
 
 /// SOVD log severity, ordered from most to least severe.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -80,6 +83,13 @@ pub enum LogError {
 pub trait LogProvider: Send + Sync + 'static {
     async fn entries(&self, filter: LogFilter) -> Result<Vec<LogEntry>>;
 
+    /// Opens a live log stream for the OpenSOVD SSE extension.
+    async fn stream(&self, _filter: LogFilter) -> Result<LogStream> {
+        Err(LogError::Internal(
+            "live log streaming is not supported by this provider".into(),
+        ))
+    }
+
     async fn configuration(&self) -> Result<Vec<LogConfiguration>>;
 
     async fn configure(&self, configuration: Vec<LogConfiguration>) -> Result<()>;
@@ -89,3 +99,6 @@ pub trait LogProvider: Send + Sync + 'static {
 
 /// A result returned by a [`LogProvider`].
 pub type Result<T> = std::result::Result<T, LogError>;
+
+/// A stream of log entries for the OpenSOVD live-log extension.
+pub type LogStream = Pin<Box<dyn Stream<Item = Result<LogEntry>> + Send + 'static>>;
