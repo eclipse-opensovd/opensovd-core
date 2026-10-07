@@ -4,6 +4,41 @@
 // This file was created with the assistance of generative AI.
 
 //! SOVD logging provider trait and types.
+//!
+//! A [`LogProvider`] supplies log entries for an application or component.
+//! The provider owns log acquisition and filtering; the server passes the
+//! requested [`LogFilter`] to the provider without imposing a storage model.
+//! Providers can read from an in-memory buffer, a file, a DLT client, a
+//! realtime unit, or another backend.
+//!
+//! # Entity integration
+//!
+//! Attach a provider to an entity with [`crate::App::with_log_provider`] or
+//! [`crate::Component::with_log_provider`]. The server then exposes the
+//! corresponding SOVD log resources under the generic entity URI:
+//!
+//! ```text
+//! /sovd/v1/{entity-collection}/{entity-id}/logs
+//! /sovd/v1/{entity-collection}/{entity-id}/logs/entries
+//! /sovd/v1/{entity-collection}/{entity-id}/logs/config
+//! ```
+//!
+//! # Filtering
+//!
+//! [`LogFilter::severity`] is a threshold. Providers should return entries at
+//! or above the requested severity. Use [`LogSeverity::rank`] rather than enum
+//! declaration order when comparing levels: lower ranks are more severe, so an
+//! `Info` threshold includes fatal, error, warning, and info entries.
+//! Generic and AUTOSAR DLT spellings with the same level share a rank while
+//! remaining distinct wire values.
+//!
+//! # Live streaming
+//!
+//! The optional [`LogProvider::stream`] method supports the OpenSOVD live-log
+//! SSE extension. The server advertises it through the
+//! `x-opensovd-live-entries` discovery link and serves events at
+//! `/logs/entries/stream`. Events use a fixed `EventEnvelope<LogEntry>` shape;
+//! schema negotiation is therefore not part of the stream query.
 
 use std::pin::Pin;
 
