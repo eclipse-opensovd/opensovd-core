@@ -190,6 +190,11 @@ fn core_severity(value: LogSeverity) -> CoreLogSeverity {
         LogSeverity::Warn => CoreLogSeverity::Warn,
         LogSeverity::Info => CoreLogSeverity::Info,
         LogSeverity::Debug => CoreLogSeverity::Debug,
+        LogSeverity::DltFatal => CoreLogSeverity::DltFatal,
+        LogSeverity::DltError => CoreLogSeverity::DltError,
+        LogSeverity::DltWarn => CoreLogSeverity::DltWarn,
+        LogSeverity::DltInfo => CoreLogSeverity::DltInfo,
+        LogSeverity::DltDebug => CoreLogSeverity::DltDebug,
     }
 }
 
@@ -200,6 +205,11 @@ fn model_severity(value: CoreLogSeverity) -> LogSeverity {
         CoreLogSeverity::Warn => LogSeverity::Warn,
         CoreLogSeverity::Info => LogSeverity::Info,
         CoreLogSeverity::Debug => LogSeverity::Debug,
+        CoreLogSeverity::DltFatal => LogSeverity::DltFatal,
+        CoreLogSeverity::DltError => LogSeverity::DltError,
+        CoreLogSeverity::DltWarn => LogSeverity::DltWarn,
+        CoreLogSeverity::DltInfo => LogSeverity::DltInfo,
+        CoreLogSeverity::DltDebug => LogSeverity::DltDebug,
     }
 }
 
