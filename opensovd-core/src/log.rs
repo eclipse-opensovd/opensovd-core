@@ -11,12 +11,12 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use futures_core::Stream;
 
-/// SOVD log severity, ordered from most to least severe.
+/// SOVD log severity levels.
 ///
 /// The `Dlt*` variants preserve AUTOSAR DLT vocabulary when an entry uses an
 /// `AUTOSAR_DLT` context. Generic severities remain available for other
 /// contexts.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LogSeverity {
     Fatal,
     Error,
@@ -28,6 +28,24 @@ pub enum LogSeverity {
     DltWarn,
     DltInfo,
     DltDebug,
+}
+
+impl LogSeverity {
+    /// Returns the severity rank used for threshold filtering.
+    ///
+    /// Lower values represent more severe messages. Generic and AUTOSAR DLT
+    /// spellings intentionally share ranks so providers can filter either
+    /// representation without relying on enum declaration order.
+    #[must_use]
+    pub const fn rank(self) -> u8 {
+        match self {
+            Self::Fatal | Self::DltFatal => 0,
+            Self::Error | Self::DltError => 1,
+            Self::Warn | Self::DltWarn => 2,
+            Self::Info | Self::DltInfo => 3,
+            Self::Debug | Self::DltDebug => 4,
+        }
+    }
 }
 
 /// Context identifying the source and format of a log entry.
@@ -111,3 +129,48 @@ pub type LogResult<T> = std::result::Result<T, LogError>;
 
 /// A stream of log entries for the OpenSOVD live-log extension.
 pub type LogStream = Pin<Box<dyn Stream<Item = LogResult<LogEntry>> + Send + 'static>>;
+
+#[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
+mod tests {
+    use async_trait::async_trait;
+
+    use super::*;
+
+    struct Provider;
+
+    #[async_trait]
+    impl LogProvider for Provider {
+        async fn entries(&self, _filter: LogFilter) -> LogResult<Vec<LogEntry>> {
+            Ok(Vec::new())
+        }
+
+        async fn configuration(&self) -> LogResult<Vec<LogConfiguration>> {
+            Ok(Vec::new())
+        }
+
+        async fn configure(&self, _configuration: Vec<LogConfiguration>) -> LogResult<()> {
+            Ok(())
+        }
+
+        async fn reset_configuration(&self) -> LogResult<()> {
+            Ok(())
+        }
+    }
+
+    #[tokio::test]
+    async fn providers_without_stream_support_return_a_clear_error() {
+        let error = match Provider.stream(LogFilter::default()).await {
+            Ok(_) => panic!("default stream implementation unexpectedly succeeded"),
+            Err(error) => error,
+        };
+        assert!(matches!(error, LogError::Internal(message) if message.contains("not supported")));
+    }
+
+    #[test]
+    fn severity_rank_is_independent_of_enum_declaration_order() {
+        assert!(LogSeverity::DltFatal.rank() < LogSeverity::DltInfo.rank());
+        assert_eq!(LogSeverity::Info.rank(), LogSeverity::DltInfo.rank());
+        assert_eq!(LogSeverity::Debug.rank(), LogSeverity::DltDebug.rank());
+    }
+}
