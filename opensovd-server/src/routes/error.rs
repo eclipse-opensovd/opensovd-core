@@ -12,7 +12,7 @@ use axum::{
     response::{IntoResponse, Json, Response},
 };
 use axum_extra::{extract::QueryRejection, typed_header::TypedHeaderRejection};
-use opensovd_core::{BulkDataError, DataError, TopologyError};
+use opensovd_core::{BulkDataError, DataError, LogError, TopologyError};
 use opensovd_models::{ErrorCode, ErrorDetails, GenericError, JsonPointer};
 
 /// A `Result` alias where the `Err` variant is [`Error`].
@@ -29,6 +29,8 @@ pub enum Error {
     Data(#[from] DataError),
     #[error(transparent)]
     BulkData(#[from] BulkDataError),
+    #[error(transparent)]
+    Log(#[from] LogError),
     #[error("{0}")]
     BadPath(#[from] PathRejection),
     #[error("{0}")]
@@ -168,10 +170,15 @@ impl IntoResponse for Error {
                 let (status, error) = bulk_data_error(e);
                 (status, error.into())
             }
+            }
             Self::BadPath(rejection) => (
                 StatusCode::BAD_REQUEST,
                 GenericError::new(ErrorCode::IncompleteRequest, bad_path(rejection)).into(),
             ),
+            Self::Log(e) => {
+                let (status, error) = log_error(e);
+                (status, error.into())
+            }
             Self::BadQuery(_) => (
                 StatusCode::BAD_REQUEST,
                 GenericError::new(ErrorCode::IncompleteRequest, "Bad request").into(),
@@ -193,6 +200,25 @@ impl IntoResponse for Error {
             }
         };
         (status, Json(details)).into_response()
+    }
+}
+
+/// The status and body answering a log-provider error.
+fn log_error(e: &LogError) -> (StatusCode, GenericError) {
+    match e {
+        LogError::InvalidRequest(_) => (
+            StatusCode::BAD_REQUEST,
+            GenericError::new(ErrorCode::IncompleteRequest, e.to_string()),
+        ),
+        LogError::NotFound(_) => (
+            StatusCode::NOT_FOUND,
+            GenericError::with_vendor_code("resource-not-found", e.to_string()),
+        ),
+        LogError::NotSupported(_) => (
+            StatusCode::NOT_IMPLEMENTED,
+            GenericError::new(ErrorCode::ErrorResponse, e.to_string()),
+        ),
+        LogError::Internal(message) => (StatusCode::INTERNAL_SERVER_ERROR, internal(message)),
     }
 }
 

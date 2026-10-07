@@ -5,6 +5,7 @@ pub mod bulkdata;
 pub mod data;
 pub mod discovery;
 pub mod error;
+pub mod log;
 pub mod types;
 pub mod version;
 

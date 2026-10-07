@@ -6,6 +6,7 @@
 mod bulkdata;
 mod data;
 mod entity;
+mod log;
 mod topology;
 
 pub use bulkdata::{
@@ -17,4 +18,7 @@ pub use data::{
     TagInfo,
 };
 pub use entity::{App, Area, Component, EntityKind, EntityRef};
+pub use log::{
+    LogConfiguration, LogContext, LogEntry, LogError, LogFilter, LogProvider, LogSeverity,
+};
 pub use topology::{Topology, TopologyError, TopologyEvent, TopologyReadGuard, TopologyWriteGuard};

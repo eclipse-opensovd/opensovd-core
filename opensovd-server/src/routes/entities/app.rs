@@ -104,6 +104,10 @@ pub(super) async fn app_capabilities(
         .bulkdata_provider()
         .map(|_| format!("{base}/apps/{}/bulk-data", encode_path_segment(&app_id)).into());
 
+    let logs = entity
+        .log_provider()
+        .map(|_| format!("{base}/apps/{}/logs", encode_path_segment(&app_id)).into());
+
     Ok(Json(Response {
         data: EntityCapabilities {
             id: app_id,
@@ -114,6 +118,7 @@ pub(super) async fn app_capabilities(
             belongs_to,
             data,
             bulk_data,
+            logs,
             ..Default::default()
         },
         schema: query.include_schema.then(EntityCapabilities::schema),
