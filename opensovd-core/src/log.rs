@@ -12,6 +12,10 @@ use chrono::{DateTime, Utc};
 use futures_core::Stream;
 
 /// SOVD log severity, ordered from most to least severe.
+///
+/// The `Dlt*` variants preserve AUTOSAR DLT vocabulary when an entry uses an
+/// `AUTOSAR_DLT` context. Generic severities remain available for other
+/// contexts.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum LogSeverity {
     Fatal,
@@ -19,6 +23,11 @@ pub enum LogSeverity {
     Warn,
     Info,
     Debug,
+    DltFatal,
+    DltError,
+    DltWarn,
+    DltInfo,
+    DltDebug,
 }
 
 /// Context identifying the source and format of a log entry.

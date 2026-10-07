@@ -19,6 +19,16 @@ pub enum LogSeverity {
     Warn,
     Info,
     Debug,
+    #[serde(rename = "DLT_FATAL")]
+    DltFatal,
+    #[serde(rename = "DLT_ERROR")]
+    DltError,
+    #[serde(rename = "DLT_WARN")]
+    DltWarn,
+    #[serde(rename = "DLT_INFO")]
+    DltInfo,
+    #[serde(rename = "DLT_DEBUG")]
+    DltDebug,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
