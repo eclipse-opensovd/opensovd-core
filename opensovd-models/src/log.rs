@@ -109,10 +109,29 @@ pub struct LogEntriesQuery {
     pub include_schema: bool,
 }
 
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct LogResourcesQuery {
+    #[serde(default, rename = "include-schema")]
+    pub include_schema: bool,
+}
+
+pub type LogConfigurationQuery = LogResourcesQuery;
+
+#[derive(Debug, Clone, Default, Deserialize)]
+/// Filters accepted by the live stream. Schema negotiation is not part of the
+/// SSE query because every event uses the fixed `EventEnvelope<LogEntry>` shape.
+pub struct LogStreamQuery {
+    pub severity: Option<LogSeverity>,
+    #[serde(rename = "created-after")]
+    pub created_after: Option<DateTime<Utc>>,
+    #[serde(rename = "created-before")]
+    pub created_before: Option<DateTime<Utc>>,
+}
+
 #[cfg(test)]
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
-    use chrono::{TimeZone, Utc};
+    use chrono::TimeZone;
     use serde_json::json;
 
     use super::*;

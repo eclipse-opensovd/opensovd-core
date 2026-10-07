@@ -125,7 +125,7 @@ pub trait LogProvider: Send + Sync + 'static {
 }
 
 /// A result returned by a [`LogProvider`].
-pub type LogResult<T> = std::result::Result<T, LogError>;
+pub type LogResult<T> = Result<T, LogError>;
 
 /// A stream of log entries for the OpenSOVD live-log extension.
 pub type LogStream = Pin<Box<dyn Stream<Item = LogResult<LogEntry>> + Send + 'static>>;
@@ -160,9 +160,8 @@ mod tests {
 
     #[tokio::test]
     async fn providers_without_stream_support_return_a_clear_error() {
-        let error = match Provider.stream(LogFilter::default()).await {
-            Ok(_) => panic!("default stream implementation unexpectedly succeeded"),
-            Err(error) => error,
+        let Err(error) = Provider.stream(LogFilter::default()).await else {
+            panic!("default stream implementation unexpectedly succeeded")
         };
         assert!(matches!(error, LogError::Internal(message) if message.contains("not supported")));
     }

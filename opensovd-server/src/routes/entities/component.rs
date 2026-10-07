@@ -119,6 +119,14 @@ pub(super) async fn component_capabilities(
         .into()
     });
 
+    let logs = entity.log_provider().map(|_| {
+        format!(
+            "{base}/components/{}/logs",
+            encode_path_segment(&component_id)
+        )
+        .into()
+    });
+
     Ok(Json(Response {
         data: EntityCapabilities {
             id: component_id,
@@ -129,6 +137,7 @@ pub(super) async fn component_capabilities(
             belongs_to,
             data,
             bulk_data,
+            logs,
             ..Default::default()
         },
         schema: query.include_schema.then(EntityCapabilities::schema),
