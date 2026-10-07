@@ -78,7 +78,9 @@ async fn server_with_provider(
     let topology = Topology::new();
     {
         let mut state = topology.write().await;
-        state.add_component(Component::new("diag-ecu", "Diagnostic ECU"));
+        state.add_component(
+            Component::new("diag-ecu", "Diagnostic ECU").with_log_provider(provider.clone()),
+        );
         state.add_app(
             App::new("diag-app", "Diagnostic Application")
                 .with_component_id("diag-ecu")
@@ -112,7 +114,7 @@ async fn log_resources_advertise_snapshot_config_and_live_stream() {
     };
     let (server, _) = server_with_provider(provider).await;
 
-    let (status, body) = get_json(&server, "/sovd/v1/apps/diag-app/logs").await;
+    let (status, body) = get_json(&server, "/sovd/v1/apps/diag-app/logs?include-schema=true").await;
 
     assert_eq!(status, hyper::StatusCode::OK);
     assert_eq!(
@@ -130,6 +132,43 @@ async fn log_resources_advertise_snapshot_config_and_live_stream() {
             server.addr
         )
     );
+    assert!(body["schema"].is_object());
+}
+
+#[tokio::test]
+async fn component_logs_use_the_generic_entity_route() {
+    let provider = RecordingProvider {
+        entries: vec![dlt_entry(LogSeverity::DltInfo, "component heartbeat")],
+        seen_filter: Arc::new(Mutex::new(None)),
+    };
+    let (server, _) = server_with_provider(provider).await;
+
+    let (status, body) = get_json(
+        &server,
+        "/sovd/v1/components/diag-ecu/logs/entries?severity=DLT_INFO",
+    )
+    .await;
+
+    assert_eq!(status, hyper::StatusCode::OK);
+    assert_eq!(body["items"][0]["msg"], "component heartbeat");
+}
+
+#[tokio::test]
+async fn log_configuration_honors_include_schema() {
+    let provider = RecordingProvider {
+        entries: vec![],
+        seen_filter: Arc::new(Mutex::new(None)),
+    };
+    let (server, _) = server_with_provider(provider).await;
+
+    let (status, body) = get_json(
+        &server,
+        "/sovd/v1/apps/diag-app/logs/config?include-schema=true",
+    )
+    .await;
+
+    assert_eq!(status, hyper::StatusCode::OK);
+    assert!(body["schema"].is_object());
 }
 
 #[tokio::test]

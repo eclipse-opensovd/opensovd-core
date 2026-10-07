@@ -13,6 +13,7 @@ use axum::{
 };
 use axum_extra::extract::{Query, WithRejection};
 use futures::StreamExt;
+use http::{StatusCode, request::Parts};
 use opensovd_core::{
     LogConfiguration as CoreLogConfiguration, LogContext as CoreLogContext,
     LogEntry as CoreLogEntry, LogFilter, LogProvider, LogSeverity as CoreLogSeverity, Topology,
@@ -20,8 +21,9 @@ use opensovd_core::{
 use opensovd_models::{
     Response,
     log::{
-        EventEnvelope, LogConfiguration, LogConfigurationRequest, LogConfigurationResponse,
-        LogContext, LogEntries, LogEntriesQuery, LogEntry, LogResources, LogSeverity,
+        EventEnvelope, LogConfiguration, LogConfigurationQuery, LogConfigurationRequest,
+        LogConfigurationResponse, LogContext, LogEntries, LogEntriesQuery, LogEntry, LogResources,
+        LogResourcesQuery, LogSeverity, LogStreamQuery,
     },
 };
 use serde_json::{Map, Value};
@@ -39,11 +41,17 @@ where
     V: Clone + Send + Sync + 'static,
 {
     Router::new()
-        .route("/apps/{app_id}/logs", get(log_resources))
-        .route("/apps/{app_id}/logs/entries", get(log_entries))
-        .route("/apps/{app_id}/logs/entries/stream", get(log_entry_stream))
+        .route("/{entity_collection}/{entity_id}/logs", get(log_resources))
         .route(
-            "/apps/{app_id}/logs/config",
+            "/{entity_collection}/{entity_id}/logs/entries",
+            get(log_entries),
+        )
+        .route(
+            "/{entity_collection}/{entity_id}/logs/entries/stream",
+            get(log_entry_stream),
+        )
+        .route(
+            "/{entity_collection}/{entity_id}/logs/config",
             get(log_configuration)
                 .put(update_log_configuration)
                 .delete(reset_log_configuration),
@@ -52,33 +60,42 @@ where
 
 async fn log_resources(
     State(topology): State<Topology>,
-    Path(app_id): Path<String>,
-    parts: axum::http::request::Parts,
+    Path((entity_collection, entity_id)): Path<(String, String)>,
+    WithRejection(Query(query), _): WithRejection<Query<LogResourcesQuery>, Error>,
+    parts: Parts,
 ) -> Result<Json<Response<LogResources>>> {
-    get_provider(&topology, &app_id).await?;
+    get_provider(&topology, &entity_collection, &entity_id).await?;
     let base = versioned_uri(&parts);
     Ok(Json(Response {
         data: LogResources {
-            entries: format!("{base}/apps/{}/logs/entries", encode_path_segment(&app_id)).into(),
-            config: format!("{base}/apps/{}/logs/config", encode_path_segment(&app_id)).into(),
+            entries: format!(
+                "{base}/{entity_collection}/{}/logs/entries",
+                encode_path_segment(&entity_id)
+            )
+            .into(),
+            config: format!(
+                "{base}/{entity_collection}/{}/logs/config",
+                encode_path_segment(&entity_id)
+            )
+            .into(),
             live_entries: Some(
                 format!(
-                    "{base}/apps/{}/logs/entries/stream",
-                    encode_path_segment(&app_id)
+                    "{base}/{entity_collection}/{}/logs/entries/stream",
+                    encode_path_segment(&entity_id)
                 )
                 .into(),
             ),
         },
-        schema: None,
+        schema: query.include_schema.then(LogResources::schema),
     }))
 }
 
 async fn log_entries(
     State(topology): State<Topology>,
-    Path(app_id): Path<String>,
+    Path((entity_collection, entity_id)): Path<(String, String)>,
     WithRejection(Query(query), _): WithRejection<Query<LogEntriesQuery>, Error>,
 ) -> Result<Json<Response<LogEntries>>> {
-    let provider = get_provider(&topology, &app_id).await?;
+    let provider = get_provider(&topology, &entity_collection, &entity_id).await?;
     let include_schema = query.include_schema;
     let entries = provider
         .entries(LogFilter {
@@ -99,12 +116,12 @@ async fn log_entries(
 
 async fn log_entry_stream(
     State(topology): State<Topology>,
-    Path(app_id): Path<String>,
-    WithRejection(Query(query), _): WithRejection<Query<LogEntriesQuery>, Error>,
+    Path((entity_collection, entity_id)): Path<(String, String)>,
+    WithRejection(Query(query), _): WithRejection<Query<LogStreamQuery>, Error>,
 ) -> Result<
     Sse<impl futures_core::Stream<Item = std::result::Result<Event, std::convert::Infallible>>>,
 > {
-    let provider = get_provider(&topology, &app_id).await?;
+    let provider = get_provider(&topology, &entity_collection, &entity_id).await?;
     let stream = provider
         .stream(LogFilter {
             severity: query.severity.map(core_severity),
@@ -135,9 +152,10 @@ async fn log_entry_stream(
 
 async fn log_configuration(
     State(topology): State<Topology>,
-    Path(app_id): Path<String>,
+    Path((entity_collection, entity_id)): Path<(String, String)>,
+    WithRejection(Query(query), _): WithRejection<Query<LogConfigurationQuery>, Error>,
 ) -> Result<Json<Response<LogConfigurationResponse>>> {
-    let provider = get_provider(&topology, &app_id).await?;
+    let provider = get_provider(&topology, &entity_collection, &entity_id).await?;
     let contexts = provider
         .configuration()
         .await?
@@ -146,41 +164,49 @@ async fn log_configuration(
         .collect();
     Ok(Json(Response {
         data: LogConfigurationResponse { contexts },
-        schema: None,
+        schema: query.include_schema.then(LogConfigurationResponse::schema),
     }))
 }
 
 async fn update_log_configuration(
     State(topology): State<Topology>,
-    Path(app_id): Path<String>,
+    Path((entity_collection, entity_id)): Path<(String, String)>,
     WithRejection(Json(body), _): WithRejection<Json<LogConfigurationRequest>, Error>,
-) -> Result<axum::http::StatusCode> {
-    let provider = get_provider(&topology, &app_id).await?;
+) -> Result<StatusCode> {
+    let provider = get_provider(&topology, &entity_collection, &entity_id).await?;
     provider
         .configure(body.items.into_iter().map(core_configuration).collect())
         .await?;
-    Ok(axum::http::StatusCode::NO_CONTENT)
+    Ok(StatusCode::NO_CONTENT)
 }
 
 async fn reset_log_configuration(
     State(topology): State<Topology>,
-    Path(app_id): Path<String>,
-) -> Result<axum::http::StatusCode> {
-    let provider = get_provider(&topology, &app_id).await?;
+    Path((entity_collection, entity_id)): Path<(String, String)>,
+) -> Result<StatusCode> {
+    let provider = get_provider(&topology, &entity_collection, &entity_id).await?;
     provider.reset_configuration().await?;
-    Ok(axum::http::StatusCode::NO_CONTENT)
+    Ok(StatusCode::NO_CONTENT)
 }
 
 async fn get_provider(
     topology: &Topology,
-    app_id: &str,
+    entity_collection: &str,
+    entity_id: &str,
 ) -> Result<std::sync::Arc<dyn LogProvider>> {
     let topo = topology.read().await;
-    let app = topo
-        .get_app(app_id)
-        .map_err(|_| Error::EntityNotFound(app_id.to_string()))?;
-    app.log_provider()
-        .ok_or_else(|| Error::ProviderNotAvailable("logs".into()))
+    let provider = match entity_collection {
+        "apps" => topo
+            .get_app(entity_id)
+            .map_err(|_| Error::EntityNotFound(entity_id.to_string()))?
+            .log_provider(),
+        "components" => topo
+            .get_component(entity_id)
+            .map_err(|_| Error::EntityNotFound(entity_id.to_string()))?
+            .log_provider(),
+        _ => return Err(Error::EntityNotFound(entity_collection.to_string())),
+    };
+    provider.ok_or_else(|| Error::ProviderNotAvailable("logs".into()))
 }
 
 fn core_severity(value: LogSeverity) -> CoreLogSeverity {

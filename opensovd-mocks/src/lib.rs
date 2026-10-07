@@ -11,6 +11,8 @@ use opensovd_providers::data::{Constant, DataProviderBuilder};
 
 mod bulkdata;
 pub use bulkdata::InMemoryBulkDataProvider;
+mod log;
+pub use log::InMemoryLogProvider;
 
 /// Creates a mock topology with sample ECU, gateway, and app entities.
 ///
