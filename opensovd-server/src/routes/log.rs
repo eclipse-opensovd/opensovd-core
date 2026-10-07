@@ -8,9 +8,11 @@
 use axum::{
     Json, Router,
     extract::{Path, State},
+    response::sse::{Event, KeepAlive, Sse},
     routing::get,
 };
 use axum_extra::extract::{Query, WithRejection};
+use futures::StreamExt;
 use opensovd_core::{
     LogConfiguration as CoreLogConfiguration, LogContext as CoreLogContext,
     LogEntry as CoreLogEntry, LogFilter, LogProvider, LogSeverity as CoreLogSeverity, Topology,
@@ -18,8 +20,8 @@ use opensovd_core::{
 use opensovd_models::{
     Response,
     log::{
-        LogConfiguration, LogConfigurationRequest, LogConfigurationResponse, LogContext,
-        LogEntries, LogEntriesQuery, LogEntry, LogResources, LogSeverity,
+        EventEnvelope, LogConfiguration, LogConfigurationRequest, LogConfigurationResponse,
+        LogContext, LogEntries, LogEntriesQuery, LogEntry, LogResources, LogSeverity,
     },
 };
 use serde_json::{Map, Value};
@@ -39,6 +41,7 @@ where
     Router::new()
         .route("/apps/{app_id}/logs", get(log_resources))
         .route("/apps/{app_id}/logs/entries", get(log_entries))
+        .route("/apps/{app_id}/logs/entries/stream", get(log_entry_stream))
         .route(
             "/apps/{app_id}/logs/config",
             get(log_configuration)
@@ -58,6 +61,13 @@ async fn log_resources(
         data: LogResources {
             entries: format!("{base}/apps/{}/logs/entries", encode_path_segment(&app_id)).into(),
             config: format!("{base}/apps/{}/logs/config", encode_path_segment(&app_id)).into(),
+            live_entries: Some(
+                format!(
+                    "{base}/apps/{}/logs/entries/stream",
+                    encode_path_segment(&app_id)
+                )
+                .into(),
+            ),
         },
         schema: None,
     }))
@@ -85,6 +95,42 @@ async fn log_entries(
         data: LogEntries { items: entries },
         schema: include_schema.then(LogEntries::schema),
     }))
+}
+
+async fn log_entry_stream(
+    State(topology): State<Topology>,
+    Path(app_id): Path<String>,
+    WithRejection(Query(query), _): WithRejection<Query<LogEntriesQuery>, Error>,
+) -> Result<
+    Sse<impl futures_core::Stream<Item = std::result::Result<Event, std::convert::Infallible>>>,
+> {
+    let provider = get_provider(&topology, &app_id).await?;
+    let stream = provider
+        .stream(LogFilter {
+            severity: query.severity.map(core_severity),
+            created_after: query.created_after,
+            created_before: query.created_before,
+        })
+        .await?;
+
+    let events = stream.filter_map(|item| async move {
+        let Ok(entry) = item else {
+            return None;
+        };
+        let timestamp = entry.timestamp;
+        let envelope = EventEnvelope {
+            timestamp,
+            payload: Some(model_entry(entry)),
+            error: None,
+        };
+        Some(Ok(Event::default().data(
+            serde_json::to_string(&envelope).unwrap_or_else(|_| {
+                "{\"error\":{\"message\":\"failed to encode log event\"}}".into()
+            }),
+        )))
+    });
+
+    Ok(Sse::new(events).keep_alive(KeepAlive::default()))
 }
 
 async fn log_configuration(
