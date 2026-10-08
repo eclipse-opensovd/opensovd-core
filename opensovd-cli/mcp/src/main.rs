@@ -15,7 +15,7 @@ use rmcp::{
     model::{
         ErrorData as McpError, GetPromptResult, Implementation, ListResourcesResult,
         PaginatedRequestParams, PromptMessage, ReadResourceRequestParams, ReadResourceResponse,
-        ReadResourceResult, Resource, ResourceContents, Role, ServerCapabilities, ServerInfo,
+        ReadResourceResult, Resource, ResourceContents, Role, ServerCapabilities, ServerConfig,
     },
     prompt, prompt_handler, prompt_router,
     service::RequestContext,
@@ -110,7 +110,7 @@ impl McpServer {
 #[prompt_handler(router = self.prompt_router)]
 #[expect(clippy::unused_async_trait_impl)]
 impl ServerHandler for McpServer {
-    fn get_info(&self) -> ServerInfo {
+    fn get_info(&self) -> ServerConfig {
         let capabilities = ServerCapabilities::builder()
             .enable_tools()
             .enable_resources()
@@ -118,7 +118,7 @@ impl ServerHandler for McpServer {
             .build();
         let server_info = Implementation::new("opensovd-mcp", env!("VERSION"))
             .with_description(env!("CARGO_PKG_DESCRIPTION"));
-        ServerInfo::new(capabilities)
+        ServerConfig::new(capabilities)
             .with_server_info(server_info)
             .with_instructions(
                 "OpenSOVD MCP server for vehicle diagnostics. \
