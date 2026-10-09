@@ -11,7 +11,7 @@ use axum::{
     response::{IntoResponse, Json, Response},
 };
 use axum_extra::{extract::QueryRejection, typed_header::TypedHeaderRejection};
-use opensovd_core::{BulkDataError, DataError, TopologyError};
+use opensovd_core::{BulkDataError, DataError, LogError, TopologyError};
 use opensovd_models::{ErrorCode, ErrorDetails, GenericError, JsonPointer};
 
 /// A `Result` alias where the `Err` variant is [`Error`].
@@ -30,6 +30,8 @@ pub enum Error {
     Data(#[from] DataError),
     #[error(transparent)]
     BulkData(#[from] BulkDataError),
+    #[error(transparent)]
+    Log(#[from] LogError),
     #[error("{0}")]
     BadQuery(#[from] QueryRejection),
     #[error("{0}")]
@@ -160,6 +162,7 @@ impl IntoResponse for Error {
                     GenericError::new(ErrorCode::ErrorResponse, message).into(),
                 )
             }
+            Self::Log(e) => log_error(e),
             Self::BadQuery(_) => (
                 StatusCode::BAD_REQUEST,
                 GenericError::new(ErrorCode::IncompleteRequest, "Bad request").into(),
@@ -183,6 +186,25 @@ impl IntoResponse for Error {
         };
         (status, Json(details)).into_response()
     }
+}
+
+fn log_error(error: &LogError) -> (StatusCode, ErrorDetails) {
+    let status = match error {
+        LogError::InvalidRequest(_) => StatusCode::BAD_REQUEST,
+        LogError::NotFound(_) => StatusCode::NOT_FOUND,
+        LogError::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
+    };
+    let message = match error {
+        LogError::Internal(msg) => {
+            tracing::error!(target: "srv", error = %msg, "Internal error");
+            "An internal error occurred".to_string()
+        }
+        _ => error.to_string(),
+    };
+    (
+        status,
+        GenericError::new(ErrorCode::ErrorResponse, message).into(),
+    )
 }
 
 #[cfg(test)]

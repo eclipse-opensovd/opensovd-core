@@ -1582,6 +1582,7 @@ name = "opensovd-client"
 version = "0.1.1"
 dependencies = [
  "bytes",
+ "chrono",
  "http",
  "http-body",
  "http-body-util",
@@ -1768,7 +1769,9 @@ dependencies = [
  "axum",
  "axum-extra",
  "bytes",
+ "chrono",
  "futures",
+ "futures-core",
  "http",
  "http-body",
  "http-body-util",

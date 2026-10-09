@@ -32,6 +32,7 @@ mod bulkdata;
 mod data;
 mod entities;
 mod error;
+mod log;
 mod version;
 
 use axum::{
@@ -120,7 +121,8 @@ where
     let v1_routes = Router::new()
         .merge(entities::routes::<V>())
         .merge(bulkdata::routes::<V>())
-        .merge(data::routes::<V>());
+        .merge(data::routes::<V>())
+        .merge(log::routes::<V>());
 
     let router = Router::new()
         .nest(&format!("/{API_VERSION}"), v1_routes)

@@ -7,6 +7,7 @@ use opensovd_models::discovery::{Entities, EntityCapabilities};
 use crate::client::{Client, encode};
 use crate::data::{DataRequest, ListDataRequest};
 use crate::error::Result;
+use crate::log::LogRequest;
 
 /// A reference to a specific component.
 pub struct Component<'a> {
@@ -15,6 +16,25 @@ pub struct Component<'a> {
 }
 
 impl Component<'_> {
+    #[must_use]
+    pub fn logs(&self) -> LogRequest<'_> {
+        LogRequest {
+            client: self.client,
+            path: format!("/components/{}/logs/entries", self.id),
+            severity: None,
+            created_after: None,
+            created_before: None,
+            schema: false,
+        }
+    }
+
+    pub async fn log_configuration(
+        &self,
+    ) -> Result<opensovd_models::Response<opensovd_models::log::LogConfigurationResponse>> {
+        crate::log::configuration(self.client, &format!("/components/{}/logs/config", self.id))
+            .await
+    }
+
     /// Returns a request builder for listing data items on this entity.
     #[must_use]
     pub fn list_data(&self) -> ListDataRequest<'_> {
