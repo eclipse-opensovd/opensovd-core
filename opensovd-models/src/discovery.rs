@@ -147,7 +147,7 @@ pub struct EntityCapabilities {
     pub hosts: Option<UriReference>,
     /// Reference to the Component where the App is located (only for Apps)
     #[serde(skip_serializing_if = "Option::is_none", rename = "is-located-on")]
-    pub is_located_on: Option<UriReference>,
+    pub located_on: Option<UriReference>,
     /// Reference to the scripts collection
     #[serde(skip_serializing_if = "Option::is_none")]
     pub scripts: Option<UriReference>,
