@@ -7,7 +7,7 @@ use std::collections::HashMap;
 
 use hyper_util::client::legacy::Client;
 use hyper_util::rt::TokioExecutor;
-use opensovd_core::{Component, DiscoveryProvider, Topology};
+use opensovd_core::{Component, Topology};
 use opensovd_server::Server;
 use tokio::net::TcpListener;
 use tokio::sync::oneshot;
@@ -59,7 +59,6 @@ impl Drop for TestServer {
 pub struct TestServerBuilder {
     base: Option<String>,
     topology: Option<Topology>,
-    discovery_providers: Vec<Box<dyn DiscoveryProvider>>,
 }
 
 impl TestServerBuilder {
@@ -70,11 +69,6 @@ impl TestServerBuilder {
 
     pub fn topology(mut self, topology: Topology) -> Self {
         self.topology = Some(topology);
-        self
-    }
-
-    pub fn discovery(mut self, provider: impl DiscoveryProvider + 'static) -> Self {
-        self.discovery_providers.push(Box::new(provider));
         self
     }
 
@@ -95,10 +89,6 @@ impl TestServerBuilder {
 
         if let Some(topology) = self.topology {
             builder = builder.topology(topology);
-        }
-
-        for provider in self.discovery_providers {
-            builder = builder.discovery(provider);
         }
 
         let server = builder.build().unwrap();

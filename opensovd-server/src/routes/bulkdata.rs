@@ -16,7 +16,7 @@ use std::{sync::Arc, vec};
 use axum::{
     Json, Router,
     body::Body,
-    extract::{DefaultBodyLimit, FromRequest, Multipart, Path, Request, State},
+    extract::{DefaultBodyLimit, FromRequest, Multipart, OriginalUri, Path, Request, State},
     response::IntoResponse,
     routing::get,
 };
@@ -26,7 +26,7 @@ use axum_extra::{
     headers::{ContentLength, ContentType, Header},
 };
 use futures::StreamExt;
-use http::{HeaderMap, HeaderName, HeaderValue, StatusCode, request::Parts};
+use http::{HeaderMap, HeaderName, HeaderValue, StatusCode, Uri, request::Parts};
 use opensovd_core::{BulkDataError, BulkDataProvider, CategoryFilter, Topology, TopologyReadGuard};
 use opensovd_models::{
     GenericError, Response,
@@ -73,11 +73,12 @@ where
 
 async fn bulk_data_categories(
     State(topology): State<Topology>,
+    OriginalUri(uri): OriginalUri,
     Path((entity_collection, entity_id)): Path<(String, String)>,
     WithRejection(Query(query), _): WithRejection<Query<BulkDataCategoriesQuery>, Error>,
 ) -> Result<Json<Response<AvailableBulkDataCategories>>> {
     let topo = topology.read().await;
-    let provider = get_provider(topo, &entity_collection, &entity_id)?;
+    let provider = get_provider(topo, &entity_collection, &entity_id, &uri)?;
     Ok(Json(Response {
         data: AvailableBulkDataCategories {
             items: provider
@@ -103,11 +104,12 @@ fn category_filter(query: &BulkDataDescriptorsQuery) -> CategoryFilter {
 
 async fn bulk_data_descriptors(
     State(topology): State<Topology>,
+    OriginalUri(uri): OriginalUri,
     Path((entity_collection, entity_id, category)): Path<(String, String, String)>,
     WithRejection(Query(query), _): WithRejection<Query<BulkDataDescriptorsQuery>, Error>,
 ) -> Result<Json<Response<BulkDataMetadata>>> {
     let topo = topology.read().await;
-    let provider = get_provider(topo, &entity_collection, &entity_id)?;
+    let provider = get_provider(topo, &entity_collection, &entity_id, &uri)?;
 
     Ok(Json(Response {
         data: BulkDataMetadata {
@@ -208,8 +210,12 @@ async fn upload_bulk_data(
     WithRejection(TypedHeader(content_length), _): WithRejection<TypedHeader<ContentLength>, Error>,
     req: Request,
 ) -> Result<(StatusCode, HeaderMap, Json<Response<BulkDataUpload>>)> {
+    let uri = parts
+        .extensions
+        .get::<OriginalUri>()
+        .map_or(&parts.uri, |OriginalUri(uri)| uri);
     let topo = topology.read().await;
-    let provider = get_provider(topo, &entity_collection, &entity_id)?;
+    let provider = get_provider(topo, &entity_collection, &entity_id, uri)?;
 
     let filename = content_disposition
         .filename
@@ -316,10 +322,11 @@ async fn upload_bulk_data(
 
 async fn delete_bulk_data_category(
     State(topology): State<Topology>,
+    OriginalUri(uri): OriginalUri,
     Path((entity_collection, entity_id, category)): Path<(String, String, String)>,
 ) -> Result<Json<Response<DeleteBulkDataResult>>> {
     let topo = topology.read().await;
-    let provider = get_provider(topo, &entity_collection, &entity_id)?;
+    let provider = get_provider(topo, &entity_collection, &entity_id, &uri)?;
 
     let deleted = provider.delete_category(&category).await?;
     let mut result = DeleteBulkDataResult {
@@ -345,6 +352,7 @@ async fn delete_bulk_data_category(
 
 async fn download_bulk_data(
     State(topology): State<Topology>,
+    OriginalUri(uri): OriginalUri,
     Path((entity_collection, entity_id, category, bulk_data_id)): Path<(
         String,
         String,
@@ -353,7 +361,7 @@ async fn download_bulk_data(
     )>,
 ) -> Result<impl IntoResponse> {
     let topo = topology.read().await;
-    let provider = get_provider(topo, &entity_collection, &entity_id)?;
+    let provider = get_provider(topo, &entity_collection, &entity_id, &uri)?;
 
     let bulkdata = provider.download(&category, &bulk_data_id).await?;
 
@@ -376,6 +384,7 @@ async fn download_bulk_data(
 
 async fn delete_bulk_data(
     State(topology): State<Topology>,
+    OriginalUri(uri): OriginalUri,
     Path((entity_collection, entity_id, category, bulk_data_id)): Path<(
         String,
         String,
@@ -384,7 +393,7 @@ async fn delete_bulk_data(
     )>,
 ) -> Result<StatusCode> {
     let topo = topology.read().await;
-    let provider = get_provider(topo, &entity_collection, &entity_id)?;
+    let provider = get_provider(topo, &entity_collection, &entity_id, &uri)?;
 
     provider.delete(&category, &bulk_data_id).await?;
 
@@ -395,6 +404,7 @@ fn get_provider(
     topo: TopologyReadGuard,
     entity_collection: &str,
     entity_id: &str,
+    uri: &Uri,
 ) -> Result<Arc<dyn BulkDataProvider>> {
     let provider = match entity_collection {
         "components" => {
@@ -403,16 +413,16 @@ fn get_provider(
                 .map_err(|_| Error::EntityNotFound(entity_id.to_string()))?;
             component
                 .bulkdata_provider()
-                .ok_or_else(|| Error::ProviderNotAvailable("bulkdata".into()))
+                .ok_or_else(|| Error::ResourceNotFound(uri.path().to_owned()))
         }
         "apps" => {
             let app = topo
                 .get_app(entity_id)
                 .map_err(|_| Error::EntityNotFound(entity_id.to_string()))?;
             app.bulkdata_provider()
-                .ok_or_else(|| Error::ProviderNotAvailable("bulkdata".into()))
+                .ok_or_else(|| Error::ResourceNotFound(uri.path().to_owned()))
         }
-        _ => Err(Error::EntityNotFound(entity_collection.to_string())),
+        _ => Err(Error::ResourceNotFound(uri.path().to_owned())),
     };
     drop(topo);
     provider

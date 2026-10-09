@@ -3,9 +3,8 @@
 
 //! Discovery types.
 
-use std::collections::HashMap;
-
 use serde::{Deserialize, Serialize};
+use serde_json::{Map, Value};
 
 use crate::{Items, UriReference};
 
@@ -65,9 +64,9 @@ pub struct EntityCapabilities {
     pub translation_id: Option<String>,
 
     // C3: variant identification
-    /// Identification of the variant
+    /// Identification of the variant: a value per key
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub variant: Option<HashMap<String, String>>,
+    pub variant: Option<Map<String, Value>>,
 
     // C1: resource collections (if entity supports)
     /// Reference to the configurations collection
@@ -147,7 +146,7 @@ pub struct EntityCapabilities {
     pub hosts: Option<UriReference>,
     /// Reference to the Component where the App is located (only for Apps)
     #[serde(skip_serializing_if = "Option::is_none", rename = "is-located-on")]
-    pub is_located_on: Option<UriReference>,
+    pub located_on: Option<UriReference>,
     /// Reference to the scripts collection
     #[serde(skip_serializing_if = "Option::is_none")]
     pub scripts: Option<UriReference>,

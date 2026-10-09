@@ -7,8 +7,7 @@ use std::pin::Pin;
 
 use axum::Router;
 use futures::future::{FutureExt, Shared};
-use futures::stream::StreamExt;
-use opensovd_core::{DiscoveryProvider, EntityKind, Topology};
+use opensovd_core::Topology;
 use serde::Serialize;
 use thiserror::Error;
 use tokio::net::TcpListener;
@@ -158,7 +157,6 @@ pub struct ServerBuilder<Vendor = VendorInfo, Authn = NoAuth, Authz = AllowAll, 
     authenticator: Authn,
     authorizer: Authz,
     topology: Topology,
-    discovery_providers: Vec<Box<dyn DiscoveryProvider>>,
     layer: Layer,
     services: Vec<(String, Service)>,
     #[cfg(feature = "tls")]
@@ -173,7 +171,6 @@ pub struct Server<Vendor = VendorInfo, Authn = NoAuth, Authz = AllowAll, Layer =
     authenticator: Authn,
     authorizer: Authz,
     topology: Topology,
-    discovery_providers: Vec<Box<dyn DiscoveryProvider>>,
     layer: Layer,
     services: Vec<(String, Service)>,
     #[cfg(feature = "tls")]
@@ -216,7 +213,6 @@ impl ServerBuilder<VendorInfo, NoAuth, AllowAll, Identity> {
             authenticator: NoAuth,
             authorizer: AllowAll,
             topology: Topology::default(),
-            discovery_providers: Vec::new(),
             layer: Identity::new(),
             services: Vec::new(),
             #[cfg(feature = "tls")]
@@ -269,7 +265,6 @@ impl<Vendor, Authn, Authz, Layer> ServerBuilder<Vendor, Authn, Authz, Layer> {
             authenticator: self.authenticator,
             authorizer: self.authorizer,
             topology: self.topology,
-            discovery_providers: self.discovery_providers,
             layer: self.layer,
             services: self.services,
             #[cfg(feature = "tls")]
@@ -290,7 +285,6 @@ impl<Vendor, Authn, Authz, Layer> ServerBuilder<Vendor, Authn, Authz, Layer> {
             authenticator,
             authorizer: self.authorizer,
             topology: self.topology,
-            discovery_providers: self.discovery_providers,
             layer: self.layer,
             services: self.services,
             #[cfg(feature = "tls")]
@@ -315,7 +309,6 @@ impl<Vendor, Authn, Authz, Layer> ServerBuilder<Vendor, Authn, Authz, Layer> {
             authenticator: self.authenticator,
             authorizer,
             topology: self.topology,
-            discovery_providers: self.discovery_providers,
             layer: self.layer,
             services: self.services,
             #[cfg(feature = "tls")]
@@ -338,7 +331,6 @@ impl<Vendor, Authn, Authz, Layer> ServerBuilder<Vendor, Authn, Authz, Layer> {
             authenticator: self.authenticator,
             authorizer: self.authorizer,
             topology: self.topology,
-            discovery_providers: self.discovery_providers,
             layer: Stack::new(layer, self.layer),
             services: self.services,
             #[cfg(feature = "tls")]
@@ -374,15 +366,6 @@ impl<Vendor, Authn, Authz, Layer> ServerBuilder<Vendor, Authn, Authz, Layer> {
         self
     }
 
-    /// Register a discovery provider for streaming entity discovery.
-    ///
-    /// Multiple providers can be registered; their streams are merged at
-    /// runtime and events are applied to the shared topology.
-    pub fn discovery(mut self, provider: Box<dyn DiscoveryProvider>) -> Self {
-        self.discovery_providers.push(provider);
-        self
-    }
-
     // wrap the TCP listener with TLS.
     #[cfg(feature = "tls")]
     pub fn tls(mut self, config: rustls::ServerConfig) -> Self {
@@ -404,7 +387,6 @@ impl<Vendor, Authn, Authz, Layer> ServerBuilder<Vendor, Authn, Authz, Layer> {
             authenticator: self.authenticator,
             authorizer: self.authorizer,
             topology: self.topology,
-            discovery_providers: self.discovery_providers,
             layer: self.layer,
             services: self.services,
             #[cfg(feature = "tls")]
@@ -416,63 +398,6 @@ impl<Vendor, Authn, Authz, Layer> ServerBuilder<Vendor, Authn, Authz, Layer> {
 impl Server {
     pub fn builder() -> ServerBuilder {
         ServerBuilder::new()
-    }
-}
-
-async fn run_discovery(
-    topology: Topology,
-    providers: Vec<Box<dyn DiscoveryProvider>>,
-    shutdown: ShutdownFuture,
-) {
-    let mut streams = Vec::new();
-    for provider in providers {
-        match provider.discover().await {
-            Ok(stream) => streams.push(stream),
-            Err(e) => {
-                tracing::error!(target: "discovery", error = %e, "Failed to start discovery provider");
-            }
-        }
-    }
-    if streams.is_empty() {
-        return;
-    }
-
-    let mut merged = futures::stream::select_all(streams);
-    let process_events = async {
-        while let Some(event) = merged.next().await {
-            match event {
-                Ok((remove, add)) => {
-                    let mut t = topology.write().await;
-                    for r in &remove {
-                        match r.kind() {
-                            EntityKind::Component => t.remove_component(r.id()),
-                            EntityKind::App => t.remove_app(r.id()),
-                            EntityKind::Area => t.remove_area(r.id()),
-                        }
-                    }
-                    for c in add.components {
-                        t.add_component(c);
-                    }
-                    for a in add.apps {
-                        t.add_app(a);
-                    }
-                    for a in add.areas {
-                        t.add_area(a);
-                    }
-                }
-                Err(e) => {
-                    tracing::error!(target: "discovery", error = %e, "Discovery stream error");
-                }
-            }
-        }
-    };
-    tokio::select! {
-        () = process_events => {
-            tracing::debug!(target: "discovery", "All discovery streams ended");
-        }
-        () = shutdown => {
-            tracing::debug!(target: "discovery", "Shutting down");
-        }
     }
 }
 
@@ -514,12 +439,6 @@ where
             },
             path: base.clone().unwrap_or_default(),
         };
-
-        if !self.discovery_providers.is_empty() {
-            let topology = self.topology.clone();
-            let shutdown = self.shutdown.clone();
-            tokio::spawn(run_discovery(topology, self.discovery_providers, shutdown));
-        }
 
         let router = build_router(
             base.as_deref(),

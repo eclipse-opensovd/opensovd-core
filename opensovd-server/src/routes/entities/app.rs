@@ -79,12 +79,12 @@ pub(super) async fn app_capabilities(
         .get_app(&app_id)
         .map_err(|_| Error::EntityNotFound(app_id.clone()))?;
 
-    let variant = (!entity.metadata().is_empty()).then(|| entity.metadata().clone());
+    let variant = super::variant(entity.metadata());
     let translation_id = entity.translation_id().map(String::from);
 
     let base = super::super::versioned_uri(&parts);
     // Direct references, advertised only when the target exists.
-    let is_located_on = topo
+    let located_on = topo
         .component_of_app(&app_id)
         .ok()
         .flatten()
@@ -110,7 +110,7 @@ pub(super) async fn app_capabilities(
             name: entity.name().to_string(),
             translation_id,
             variant,
-            is_located_on,
+            located_on,
             belongs_to,
             data,
             bulk_data,
