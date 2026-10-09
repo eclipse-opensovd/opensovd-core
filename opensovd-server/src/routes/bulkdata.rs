@@ -422,7 +422,7 @@ fn get_provider(
             app.bulkdata_provider()
                 .ok_or_else(|| Error::ResourceNotFound(uri.path().to_owned()))
         }
-        _ => Err(Error::EntityNotFound(entity_collection.to_string())),
+        _ => Err(Error::ResourceNotFound(uri.path().to_owned())),
     };
     drop(topo);
     provider

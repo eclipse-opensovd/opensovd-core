@@ -87,6 +87,14 @@ def test_categories_missing_provider_returns_404(client):
     assert body.get("vendor_code") == "resource-not-found"
 
 
+@pytest.mark.parametrize("path", ["/v1/areas/powertrain/bulk-data", "/v1/vehicles/ecu/bulk-data"])
+def test_categories_outside_components_and_apps_return_404(client, path):
+    """Areas and unknown collections have no bulk data."""
+    resp = client.get(path)
+    assert resp.status_code == 404
+    assert resp.json().get("vendor_code") == "resource-not-found"
+
+
 # ---------------------------------------------------------------------------
 # Tests: list (descriptors) endpoint
 # ---------------------------------------------------------------------------
