@@ -85,51 +85,6 @@ impl fmt::Display for EntityRef {
     }
 }
 
-/// A collection that can hold different entity types.
-#[derive(Debug, Default)]
-pub struct EntityCollection {
-    pub components: Vec<Component>,
-    pub apps: Vec<App>,
-    pub areas: Vec<Area>,
-}
-
-impl EntityCollection {
-    /// Creates a collection with all entity types.
-    #[must_use]
-    pub const fn new(components: Vec<Component>, apps: Vec<App>, areas: Vec<Area>) -> Self {
-        Self {
-            components,
-            apps,
-            areas,
-        }
-    }
-
-    /// Adds a component to the collection.
-    pub fn add_component(&mut self, component: Component) {
-        self.components.push(component);
-    }
-
-    /// Adds an app to the collection.
-    pub fn add_app(&mut self, app: App) {
-        self.apps.push(app);
-    }
-
-    /// Adds an area to the collection.
-    pub fn add_area(&mut self, area: Area) {
-        self.areas.push(area);
-    }
-
-    /// Collects entity references from all entities in the collection.
-    #[must_use]
-    pub fn entity_refs(&self) -> Vec<EntityRef> {
-        let mut refs = Vec::new();
-        refs.extend(self.components.iter().map(|e| e.entity_ref().clone()));
-        refs.extend(self.apps.iter().map(|e| e.entity_ref().clone()));
-        refs.extend(self.areas.iter().map(|e| e.entity_ref().clone()));
-        refs
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -5,7 +5,6 @@
 
 mod bulkdata;
 mod data;
-mod discovery;
 mod entity;
 mod topology;
 
@@ -17,6 +16,5 @@ pub use data::{
     CategoryInfo, Data, DataError, DataFilter, DataProvider, DataScope, GroupInfo, Metadata,
     TagInfo,
 };
-pub use discovery::{DiscoveryError, DiscoveryProvider, DiscoveryStream};
-pub use entity::{App, Area, Component, EntityCollection, EntityKind, EntityRef};
+pub use entity::{App, Area, Component, EntityKind, EntityRef};
 pub use topology::{Topology, TopologyError, TopologyEvent, TopologyReadGuard, TopologyWriteGuard};

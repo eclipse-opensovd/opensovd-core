@@ -97,13 +97,6 @@ classDiagram
         -data_provider: Option~Arc~DataProvider~~
     }
 
-    class EntityCollection {
-        +components: Vec~Component~
-        +apps: Vec~App~
-        +areas: Vec~Area~
-        +entity_refs() Vec~EntityRef~
-    }
-
     class Authenticator {
         <<trait>>
         +type Identity
@@ -148,7 +141,6 @@ classDiagram
     EntityRef --> EntityKind : has
     NoAuth ..|> Authenticator : implements
     AllowAll ..|> Authorizer : implements
-    Topology --> EntityCollection : accepts
 ```
 
 ## Main Components
@@ -179,7 +171,7 @@ A write guard over the topology state. Holds a `RwLockWriteGuard` for its lifeti
 
 ### EntityRef / EntityKind
 
-`EntityKind` is an enum with variants `Component`, `App`, and `Area`. `EntityRef` is a lightweight reference containing a `kind` and `id`. Factory methods `EntityRef::component()`, `EntityRef::app()`, and `EntityRef::area()` create refs. All entity structs hold an `EntityRef` and expose it via `entity_ref()`. `EntityCollection` groups `Vec<Component>`, `Vec<App>`, and `Vec<Area>` for batch topology operations.
+`EntityKind` is an enum with variants `Component`, `App`, and `Area`. `EntityRef` is a lightweight reference containing a `kind` and `id`. Factory methods `EntityRef::component()`, `EntityRef::app()`, and `EntityRef::area()` create refs. All entity structs hold an `EntityRef` and expose it via `entity_ref()`.
 
 **Crate:** `opensovd-core`
 

@@ -7,11 +7,8 @@ mod common;
 
 use http_body_util::BodyExt;
 use hyper::Request;
-use opensovd_core::{
-    Component, DiscoveryError, DiscoveryProvider, DiscoveryStream, EntityCollection, Topology,
-};
+use opensovd_core::Topology;
 use opensovd_server::Server;
-use tokio::time::Duration;
 
 // not a #[test] fn, so the test-only unwrap allowance does not apply here
 #[expect(clippy::unwrap_used)]
@@ -228,57 +225,6 @@ async fn test_unknown_path_returns_generic_error() {
         assert_eq!(json["error_code"], "vendor-specific", "{path}");
         assert_eq!(json["vendor_code"], "resource-not-found", "{path}");
     }
-}
-
-struct MockDiscoveryProvider {
-    component: Component,
-}
-
-#[async_trait::async_trait]
-impl DiscoveryProvider for MockDiscoveryProvider {
-    async fn discover(&self) -> Result<DiscoveryStream, DiscoveryError> {
-        let entities = EntityCollection {
-            components: vec![Component::new(self.component.id(), self.component.name())],
-            ..Default::default()
-        };
-        Ok(Box::pin(futures::stream::once(async {
-            Ok((vec![], entities))
-        })))
-    }
-}
-
-#[tokio::test]
-async fn test_discovery_adds_component() {
-    let provider = MockDiscoveryProvider {
-        component: Component::new("discovered-ecu", "Discovered ECU"),
-    };
-
-    let server = common::TestServer::builder()
-        .discovery(provider)
-        .build()
-        .await;
-    let client = common::client();
-
-    // Give the discovery task time to process the event.
-    tokio::time::sleep(Duration::from_millis(100)).await;
-
-    let request = Request::builder()
-        .uri(server.url("/sovd/v1/components/discovered-ecu"))
-        .body(http_body_util::Empty::<bytes::Bytes>::new())
-        .unwrap();
-
-    let response = client.request(request).await.unwrap();
-    assert!(
-        response.status().is_success(),
-        "Expected discovered component to be present, got {}",
-        response.status()
-    );
-
-    let body = response.into_body().collect().await.unwrap().to_bytes();
-    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-
-    assert_eq!(json["id"], "discovered-ecu");
-    assert_eq!(json["name"], "Discovered ECU");
 }
 
 #[tokio::test]
