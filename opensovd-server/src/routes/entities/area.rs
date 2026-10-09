@@ -36,7 +36,7 @@ where
 pub(super) async fn area_list(
     State(topology): State<Topology>,
     parts: Parts,
-    Query(query): Query<EntitiesQuery>,
+    WithRejection(Query(query), _): WithRejection<Query<EntitiesQuery>, Error>,
 ) -> Result<Json<Response<Entities>>> {
     let base = super::super::versioned_uri(&parts);
     let items = topology
@@ -110,7 +110,7 @@ pub(super) async fn area_contains(
     State(topology): State<Topology>,
     Path(area_id): Path<String>,
     parts: Parts,
-    Query(query): Query<EntitiesQuery>,
+    WithRejection(Query(query), _): WithRejection<Query<EntitiesQuery>, Error>,
 ) -> Result<Json<Response<Entities>>> {
     // Verify area exists and get contained entities atomically
     let topo = topology.read().await;
