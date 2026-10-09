@@ -84,7 +84,7 @@ pub(super) async fn app_capabilities(
 
     let base = super::super::versioned_uri(&parts);
     // Direct references, advertised only when the target exists.
-    let is_located_on = topo
+    let located_on = topo
         .component_of_app(&app_id)
         .ok()
         .flatten()
@@ -110,7 +110,7 @@ pub(super) async fn app_capabilities(
             name: entity.name().to_string(),
             translation_id,
             variant,
-            is_located_on,
+            located_on,
             belongs_to,
             data,
             bulk_data,

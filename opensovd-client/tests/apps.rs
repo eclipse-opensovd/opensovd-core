@@ -21,7 +21,7 @@ async fn list_apps() {
 }
 
 #[tokio::test]
-async fn app_is_located_on() {
+async fn app_located_on() {
     let mut builder = Connector::builder();
     builder
         .expect()
@@ -41,7 +41,7 @@ async fn app_is_located_on() {
         .returning(json!({"id": "ecu1", "name": "ECU 1"}).to_string())
         .unwrap();
     let client = mock_client(builder.build());
-    let component = client.app("diag").is_located_on().await.unwrap().unwrap();
+    let component = client.app("diag").located_on().await.unwrap().unwrap();
     assert_eq!(component.id, "ecu1");
 }
 
@@ -80,7 +80,7 @@ async fn app_without_relation_links() {
         .unwrap();
     let client = mock_client(builder.build());
     let app = client.app("diag");
-    assert!(app.is_located_on().await.unwrap().is_none());
+    assert!(app.located_on().await.unwrap().is_none());
     assert!(app.belongs_to().await.unwrap().is_none());
 }
 

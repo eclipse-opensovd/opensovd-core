@@ -53,8 +53,8 @@ impl App<'_> {
 
     /// Get the component this app is located on by following its advertised
     /// `is-located-on` link, or `None` when it advertises none.
-    pub async fn is_located_on(&self) -> Result<Option<EntityCapabilities>> {
-        let Some(href) = self.capabilities().await?.is_located_on else {
+    pub async fn located_on(&self) -> Result<Option<EntityCapabilities>> {
+        let Some(href) = self.capabilities().await?.located_on else {
             return Ok(None);
         };
         self.client.follow(&href).await.map(Some)
