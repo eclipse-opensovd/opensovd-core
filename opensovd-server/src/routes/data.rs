@@ -17,7 +17,7 @@
 
 use axum::{
     Router,
-    extract::{Path, State},
+    extract::{OriginalUri, Path, State},
     http::StatusCode,
     response::Json,
     routing::get,
@@ -68,6 +68,7 @@ where
 /// Returns the data categories provided by a component.
 async fn component_data_categories(
     State(topology): State<Topology>,
+    OriginalUri(uri): OriginalUri,
     Path(component_id): Path<String>,
 ) -> Result<Json<Response<DataCategories>>> {
     let topo = topology.read().await;
@@ -76,7 +77,7 @@ async fn component_data_categories(
         .map_err(|_| Error::EntityNotFound(component_id.clone()))?;
     let provider = entity
         .data_provider()
-        .ok_or_else(|| Error::ProviderNotAvailable("data".into()))?;
+        .ok_or_else(|| Error::ResourceNotFound(uri.path().to_owned()))?;
 
     let items = provider
         .categories()
@@ -99,6 +100,7 @@ async fn component_data_categories(
 /// Returns the groups defined for a component, optionally filtered by category.
 async fn component_data_groups(
     State(topology): State<Topology>,
+    OriginalUri(uri): OriginalUri,
     Path(component_id): Path<String>,
     WithRejection(Query(query), _): WithRejection<Query<DataGroupsQuery>, Error>,
 ) -> Result<Json<Response<DataGroups>>> {
@@ -108,7 +110,7 @@ async fn component_data_groups(
         .map_err(|_| Error::EntityNotFound(component_id.clone()))?;
     let provider = entity
         .data_provider()
-        .ok_or_else(|| Error::ProviderNotAvailable("data".into()))?;
+        .ok_or_else(|| Error::ResourceNotFound(uri.path().to_owned()))?;
 
     let category_filter = query
         .category
@@ -207,6 +209,7 @@ fn read_response_schema(id: &str, mut data: Value) -> Value {
 /// filtered by category, group, or tags.
 async fn component_data_list(
     State(topology): State<Topology>,
+    OriginalUri(uri): OriginalUri,
     Path(component_id): Path<String>,
     WithRejection(Query(query), _): WithRejection<Query<DataQuery>, Error>,
 ) -> Result<Json<Response<DataList>>> {
@@ -216,7 +219,7 @@ async fn component_data_list(
         .map_err(|_| Error::EntityNotFound(component_id.clone()))?;
     let provider = entity
         .data_provider()
-        .ok_or_else(|| Error::ProviderNotAvailable("data".into()))?;
+        .ok_or_else(|| Error::ResourceNotFound(uri.path().to_owned()))?;
 
     let include_schema = query.include_schema;
     let filter = data_filter(query);
@@ -246,6 +249,7 @@ async fn component_data_list(
 /// Retrieves the value of a single data resource from a component.
 async fn component_data_read(
     State(topology): State<Topology>,
+    OriginalUri(uri): OriginalUri,
     Path((component_id, data_id)): Path<(String, String)>,
     WithRejection(Query(query), _): WithRejection<Query<ReadDataQuery>, Error>,
 ) -> Result<Json<ReadResponse>> {
@@ -255,7 +259,7 @@ async fn component_data_read(
         .map_err(|_| Error::EntityNotFound(component_id.clone()))?;
     let provider = entity
         .data_provider()
-        .ok_or_else(|| Error::ProviderNotAvailable("data".into()))?;
+        .ok_or_else(|| Error::ResourceNotFound(uri.path().to_owned()))?;
 
     let value = provider.read(&data_id, query.include_schema).await?;
     let schema = query.include_schema.then(|| {
@@ -278,6 +282,7 @@ async fn component_data_read(
 /// Writes a value to a data resource of a component.
 async fn component_data_write(
     State(topology): State<Topology>,
+    OriginalUri(uri): OriginalUri,
     Path((component_id, data_id)): Path<(String, String)>,
     WithRejection(Json(body), _): WithRejection<Json<WriteRequest>, Error>,
 ) -> Result<StatusCode> {
@@ -287,7 +292,7 @@ async fn component_data_write(
         .map_err(|_| Error::EntityNotFound(component_id.clone()))?;
     let provider = entity
         .data_provider()
-        .ok_or_else(|| Error::ProviderNotAvailable("data".into()))?;
+        .ok_or_else(|| Error::ResourceNotFound(uri.path().to_owned()))?;
 
     provider.write(&data_id, body.data).await?;
     Ok(StatusCode::NO_CONTENT)
@@ -298,6 +303,7 @@ async fn component_data_write(
 /// Returns the data categories provided by an app.
 async fn app_data_categories(
     State(topology): State<Topology>,
+    OriginalUri(uri): OriginalUri,
     Path(app_id): Path<String>,
 ) -> Result<Json<Response<DataCategories>>> {
     let topo = topology.read().await;
@@ -306,7 +312,7 @@ async fn app_data_categories(
         .map_err(|_| Error::EntityNotFound(app_id.clone()))?;
     let provider = entity
         .data_provider()
-        .ok_or_else(|| Error::ProviderNotAvailable("data".into()))?;
+        .ok_or_else(|| Error::ResourceNotFound(uri.path().to_owned()))?;
 
     let items = provider
         .categories()
@@ -329,6 +335,7 @@ async fn app_data_categories(
 /// Returns the groups defined for an app, optionally filtered by category.
 async fn app_data_groups(
     State(topology): State<Topology>,
+    OriginalUri(uri): OriginalUri,
     Path(app_id): Path<String>,
     WithRejection(Query(query), _): WithRejection<Query<DataGroupsQuery>, Error>,
 ) -> Result<Json<Response<DataGroups>>> {
@@ -338,7 +345,7 @@ async fn app_data_groups(
         .map_err(|_| Error::EntityNotFound(app_id.clone()))?;
     let provider = entity
         .data_provider()
-        .ok_or_else(|| Error::ProviderNotAvailable("data".into()))?;
+        .ok_or_else(|| Error::ResourceNotFound(uri.path().to_owned()))?;
 
     let category_filter = query
         .category
@@ -369,6 +376,7 @@ async fn app_data_groups(
 /// filtered by category, group, or tags.
 async fn app_data_list(
     State(topology): State<Topology>,
+    OriginalUri(uri): OriginalUri,
     Path(app_id): Path<String>,
     WithRejection(Query(query), _): WithRejection<Query<DataQuery>, Error>,
 ) -> Result<Json<Response<DataList>>> {
@@ -378,7 +386,7 @@ async fn app_data_list(
         .map_err(|_| Error::EntityNotFound(app_id.clone()))?;
     let provider = entity
         .data_provider()
-        .ok_or_else(|| Error::ProviderNotAvailable("data".into()))?;
+        .ok_or_else(|| Error::ResourceNotFound(uri.path().to_owned()))?;
 
     let include_schema = query.include_schema;
     let filter = data_filter(query);
@@ -408,6 +416,7 @@ async fn app_data_list(
 /// Retrieves the value of a single data resource from an app.
 async fn app_data_read(
     State(topology): State<Topology>,
+    OriginalUri(uri): OriginalUri,
     Path((app_id, data_id)): Path<(String, String)>,
     WithRejection(Query(query), _): WithRejection<Query<ReadDataQuery>, Error>,
 ) -> Result<Json<ReadResponse>> {
@@ -417,7 +426,7 @@ async fn app_data_read(
         .map_err(|_| Error::EntityNotFound(app_id.clone()))?;
     let provider = entity
         .data_provider()
-        .ok_or_else(|| Error::ProviderNotAvailable("data".into()))?;
+        .ok_or_else(|| Error::ResourceNotFound(uri.path().to_owned()))?;
 
     let value = provider.read(&data_id, query.include_schema).await?;
     let schema = query.include_schema.then(|| {
@@ -440,6 +449,7 @@ async fn app_data_read(
 /// Writes a value to a data resource of an app.
 async fn app_data_write(
     State(topology): State<Topology>,
+    OriginalUri(uri): OriginalUri,
     Path((app_id, data_id)): Path<(String, String)>,
     WithRejection(Json(body), _): WithRejection<Json<WriteRequest>, Error>,
 ) -> Result<StatusCode> {
@@ -449,7 +459,7 @@ async fn app_data_write(
         .map_err(|_| Error::EntityNotFound(app_id.clone()))?;
     let provider = entity
         .data_provider()
-        .ok_or_else(|| Error::ProviderNotAvailable("data".into()))?;
+        .ok_or_else(|| Error::ResourceNotFound(uri.path().to_owned()))?;
 
     provider.write(&data_id, body.data).await?;
     Ok(StatusCode::NO_CONTENT)
