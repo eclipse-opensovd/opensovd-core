@@ -18,12 +18,15 @@ mod app;
 mod area;
 mod component;
 
+use std::collections::HashMap;
+
 use axum::{Router, extract::State, http::request::Parts, response::Json, routing::get};
 use axum_extra::extract::{Query, WithRejection};
 use opensovd_core::Topology;
 use opensovd_models::Response;
 use opensovd_models::discovery::{EntityCapabilities, EntityCapabilitiesQuery};
 use percent_encoding::{AsciiSet, CONTROLS, utf8_percent_encode};
+use serde_json::{Map, Value};
 
 use super::AppState;
 use super::error::{Error, Result};
@@ -69,6 +72,16 @@ async fn root_capabilities(
         },
         schema: query.include_schema.then(EntityCapabilities::schema),
     }))
+}
+
+/// The variant of an entity with metadata, each value as a list of one string.
+fn variant(metadata: &HashMap<String, String>) -> Option<Map<String, Value>> {
+    (!metadata.is_empty()).then(|| {
+        metadata
+            .iter()
+            .map(|(key, value)| (key.clone(), Value::from(vec![value.clone()])))
+            .collect()
+    })
 }
 
 /// Characters percent-encoded in a URI path segment: all that RFC 3986 does

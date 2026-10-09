@@ -79,7 +79,7 @@ pub(super) async fn app_capabilities(
         .get_app(&app_id)
         .map_err(|_| Error::EntityNotFound(app_id.clone()))?;
 
-    let variant = (!entity.metadata().is_empty()).then(|| entity.metadata().clone());
+    let variant = super::variant(entity.metadata());
     let translation_id = entity.translation_id().map(String::from);
 
     let base = super::super::versioned_uri(&parts);
