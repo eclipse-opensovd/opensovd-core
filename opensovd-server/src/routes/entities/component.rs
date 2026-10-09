@@ -36,7 +36,7 @@ where
 pub(super) async fn component_list(
     State(topology): State<Topology>,
     parts: Parts,
-    Query(query): Query<EntitiesQuery>,
+    WithRejection(Query(query), _): WithRejection<Query<EntitiesQuery>, Error>,
 ) -> Result<Json<Response<Entities>>> {
     let base = super::super::versioned_uri(&parts);
     let items = topology
@@ -142,7 +142,7 @@ pub(super) async fn component_hosts(
     State(topology): State<Topology>,
     Path(component_id): Path<String>,
     parts: Parts,
-    Query(query): Query<EntitiesQuery>,
+    WithRejection(Query(query), _): WithRejection<Query<EntitiesQuery>, Error>,
 ) -> Result<Json<Response<Entities>>> {
     // Verify component exists and get hosted apps atomically
     let topo = topology.read().await;

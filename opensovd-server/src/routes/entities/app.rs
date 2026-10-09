@@ -35,7 +35,7 @@ where
 pub(super) async fn app_list(
     State(topology): State<Topology>,
     parts: Parts,
-    Query(query): Query<EntitiesQuery>,
+    WithRejection(Query(query), _): WithRejection<Query<EntitiesQuery>, Error>,
 ) -> Result<Json<Response<Entities>>> {
     let base = super::super::versioned_uri(&parts);
     let items = topology

@@ -100,7 +100,41 @@ pub(super) fn encode_path_segment(s: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::encode_path_segment;
+    use axum::{body::Body, http::Request};
+    use http_body_util::BodyExt;
+    use opensovd_mocks::create_mock_topology;
+    use tower::ServiceExt;
+
+    use super::super::AppState;
+    use super::{encode_path_segment, routes};
+
+    #[tokio::test]
+    async fn listings_reject_a_malformed_query_as_json() {
+        let state = AppState::<()> {
+            vendor_info: None,
+            topology: create_mock_topology().await,
+        };
+        let app = routes::<()>().with_state(state);
+
+        for path in [
+            "/areas",
+            "/areas/powertrain/contains",
+            "/apps",
+            "/components",
+            "/components/ecu/hosts",
+        ] {
+            let request = Request::builder()
+                .uri(format!("{path}?include-schema=maybe"))
+                .body(Body::empty())
+                .unwrap();
+            let response = app.clone().oneshot(request).await.unwrap();
+            assert_eq!(response.status(), 400, "{path}");
+
+            let body = response.into_body().collect().await.unwrap().to_bytes();
+            let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+            assert_eq!(json["error_code"], "incomplete-request", "{path}");
+        }
+    }
 
     #[test]
     fn encode_path_segment_keeps_only_path_characters() {
