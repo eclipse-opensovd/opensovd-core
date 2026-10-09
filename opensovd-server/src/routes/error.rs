@@ -22,8 +22,6 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub enum Error {
     #[error("entity not found: {0}")]
     EntityNotFound(String),
-    #[error("provider not available: {0}")]
-    ProviderNotAvailable(String),
     #[error("resource not found: {0}")]
     ResourceNotFound(String),
     #[error(transparent)]
@@ -95,14 +93,6 @@ impl IntoResponse for Error {
                 GenericError::with_vendor_code(
                     "resource-not-found",
                     format!("Resource not found: {resource}"),
-                )
-                .into(),
-            ),
-            Self::ProviderNotAvailable(provider) => (
-                StatusCode::NOT_FOUND,
-                GenericError::with_vendor_code(
-                    "provider-not-available",
-                    format!("Component has no {provider}"),
                 )
                 .into(),
             ),
@@ -216,18 +206,6 @@ mod tests {
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["vendor_code"], "resource-not-found");
         assert!(json["message"].as_str().unwrap().contains("/v1/unknown"));
-    }
-
-    #[tokio::test]
-    async fn test_error_provider_not_available() {
-        let error = Error::ProviderNotAvailable("data".into());
-        let response = error.into_response();
-
-        assert_eq!(response.status(), 404);
-
-        let body = response.into_body().collect().await.unwrap().to_bytes();
-        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(json["vendor_code"], "provider-not-available");
     }
 
     #[tokio::test]

@@ -23,7 +23,7 @@ tls = ["dep:rustls", "dep:tokio-rustls"]
 opensovd-core = { workspace = true }
 opensovd-models = { workspace = true }
 schemars = { workspace = true, optional = true }
-axum = { workspace = true, features = ["json", "matched-path", "query", "tokio", "http1", "multipart", "tracing"] }
+axum = { workspace = true, features = ["json", "matched-path", "original-uri", "query", "tokio", "http1", "multipart", "tracing"] }
 bytes = { workspace = true }
 http-body = { workspace = true }
 axum-extra = { workspace = true, features = ["query", "with-rejection", "typed-header"] }

@@ -84,7 +84,7 @@ def test_categories_missing_provider_returns_404(client):
     resp = client.get("/v1/components/ecu/bulk-data")
     assert resp.status_code == 404
     body = resp.json()
-    assert body.get("vendor_code") == "provider-not-available"
+    assert body.get("vendor_code") == "resource-not-found"
 
 
 # ---------------------------------------------------------------------------
