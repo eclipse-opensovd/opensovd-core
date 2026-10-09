@@ -7,7 +7,7 @@
 #![expect(clippy::expect_used)]
 
 use criterion::{Criterion, criterion_group, criterion_main};
-use opensovd_core::{Component, DataProvider, EntityCollection, Topology};
+use opensovd_core::{Component, DataProvider, Topology};
 use opensovd_models::data::DataCategory;
 use opensovd_providers::data::{Constant, DataProviderBuilder};
 
@@ -22,18 +22,14 @@ fn make_runtime() -> tokio::runtime::Runtime {
 }
 
 fn build_topology(rt: &tokio::runtime::Runtime) -> Topology {
-    let entities = EntityCollection {
-        components: (0..COMPONENT_COUNT)
-            .map(|index| Component::new(format!("c-{index}"), format!("Component {index}")))
-            .collect(),
-        ..EntityCollection::default()
-    };
-
     let topology = Topology::new();
     rt.block_on(async {
         let mut t = topology.write().await;
-        for c in entities.components {
-            t.add_component(c);
+        for index in 0..COMPONENT_COUNT {
+            t.add_component(Component::new(
+                format!("c-{index}"),
+                format!("Component {index}"),
+            ));
         }
     });
     topology
