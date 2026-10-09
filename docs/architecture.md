@@ -123,12 +123,12 @@ classDiagram
 
     class DataProvider {
         <<trait>>
-        +list(filter) Result~Vec~ValueMetadata~~
-        +read(data_id, include_schema) Result~DataValue~
-        +write(data_id, value) Result
-        +categories() Result~Vec~CategoryInfo~~
-        +groups(category_filter) Result~Vec~GroupInfo~~
-        +tags() Result~Vec~TagInfo~~
+        +data_list(filter) Result~Vec~ValueMetadata~~
+        +data_read(data_id, include_schema) Result~DataValue~
+        +data_write(data_id, value) Result
+        +data_categories() Result~Vec~CategoryInfo~~
+        +data_groups(category_filter) Result~Vec~GroupInfo~~
+        +data_tags() Result~Vec~TagInfo~~
     }
 
     Server --> Topology : uses
@@ -205,15 +205,15 @@ A SOVD area entity representing a logical view of vehicle architecture (e.g., do
 
 A pluggable data backend. Each entity holds its own provider instance, so methods operate on the provider directly without an entity reference:
 
-- `list(filter: DataFilter) → Vec<ValueMetadata>` — list data items, filtered by categories/groups/tags
-- `read(data_id, include_schema) → DataValue` — read a single data value
-- `write(data_id, value) → ()` — write a data value
+- `data_list(filter: DataFilter) → Vec<ValueMetadata>` — list data items, filtered by categories/groups/tags
+- `data_read(data_id, include_schema) → DataValue` — read a single data value
+- `data_write(data_id, value) → ()` — write a data value
 
-Default implementations derive from `list()`:
+Default implementations derive from `data_list()`:
 
-- `categories() → Vec<CategoryInfo>` — unique categories
-- `groups(category_filter) → Vec<GroupInfo>` — groups optionally filtered by category
-- `tags() → Vec<TagInfo>` — unique tags
+- `data_categories() → Vec<CategoryInfo>` — unique categories
+- `data_groups(category_filter) → Vec<GroupInfo>` — groups optionally filtered by category
+- `data_tags() → Vec<TagInfo>` — unique tags
 
 **Crate:** `opensovd-core`
 
@@ -261,7 +261,7 @@ sequenceDiagram
         R->>Top: topology.read()
         Top-->>R: TopologyReadGuard
         R->>R: Get entity via guard
-        R->>DP: list / read / write / categories / groups / tags
+        R->>DP: data_list / data_read / data_write / data_categories / data_groups / data_tags
         DP-->>R: Data result
     else Version Route (/version-info)
         R->>R: Return version info
@@ -287,7 +287,7 @@ If both layers pass, the request is forwarded to the matched route handler.
 
 ### Data Routes
 
-`GET /{entity}/{id}/data/{data_id}` acquires a read lock, fetches the entity from the `TopologyReadGuard`, extracts its `DataProvider`, and calls `read()`. `PUT` follows the same lookup but calls `write()` instead. Returns **404** if the entity or data item is not found, **405** with `Allow: GET` if a write is attempted on a read-only item, **400** with a `DataError` body if the request body is malformed or the value does not fit the item, and **204 No Content** on a successful write.
+`GET /{entity}/{id}/data/{data_id}` acquires a read lock, fetches the entity from the `TopologyReadGuard`, extracts its `DataProvider`, and calls `data_read()`. `PUT` follows the same lookup but calls `data_write()` instead. Returns **404** if the entity or data item is not found, **405** with `Allow: GET` if a write is attempted on a read-only item, **400** with a `DataError` body if the request body is malformed or the value does not fit the item, and **204 No Content** on a successful write.
 
 ### Version Route
 

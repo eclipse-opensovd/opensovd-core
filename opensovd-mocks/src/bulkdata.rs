@@ -58,7 +58,7 @@ impl InMemoryBulkDataProvider {
 #[async_trait]
 #[expect(clippy::unwrap_used)]
 impl BulkDataProvider for InMemoryBulkDataProvider {
-    async fn categories(&self) -> Result<Vec<CategoryInfo>, BulkDataError> {
+    async fn bulk_categories(&self) -> Result<Vec<CategoryInfo>, BulkDataError> {
         let store = self.store.read().unwrap();
         let mut cats: Vec<CategoryInfo> = store
             .keys()
@@ -71,7 +71,7 @@ impl BulkDataProvider for InMemoryBulkDataProvider {
         Ok(cats)
     }
 
-    async fn list(
+    async fn bulk_list(
         &self,
         category_id: &str,
         filter: CategoryFilter,
@@ -106,7 +106,11 @@ impl BulkDataProvider for InMemoryBulkDataProvider {
         Ok(items)
     }
 
-    async fn download(&self, category_id: &str, data_id: &str) -> Result<BulkData, BulkDataError> {
+    async fn bulk_download(
+        &self,
+        category_id: &str,
+        data_id: &str,
+    ) -> Result<BulkData, BulkDataError> {
         let data = self
             .store
             .read()
@@ -124,7 +128,7 @@ impl BulkDataProvider for InMemoryBulkDataProvider {
         })
     }
 
-    async fn upload(
+    async fn bulk_upload(
         &self,
         category_id: &str,
         data_id: &str,
@@ -145,7 +149,7 @@ impl BulkDataProvider for InMemoryBulkDataProvider {
         Ok(())
     }
 
-    async fn delete(&self, category_id: &str, data_id: &str) -> Result<(), BulkDataError> {
+    async fn bulk_delete(&self, category_id: &str, data_id: &str) -> Result<(), BulkDataError> {
         if self.is_permanent(category_id, data_id) {
             return Err(BulkDataError::DeletionFailed(format!(
                 "entry is protected: {category_id}/{data_id}"
@@ -161,7 +165,7 @@ impl BulkDataProvider for InMemoryBulkDataProvider {
             .map(|_| ())
     }
 
-    async fn delete_category(
+    async fn bulk_delete_category(
         &self,
         category_id: &str,
     ) -> Result<Vec<DeletedBulkDataItem>, BulkDataError> {

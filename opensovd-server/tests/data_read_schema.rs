@@ -25,18 +25,18 @@ struct FixedProvider {
 
 #[async_trait]
 impl DataProvider for FixedProvider {
-    async fn list(&self, _filter: DataFilter) -> Result<Vec<Metadata>, DataError> {
+    async fn data_list(&self, _filter: DataFilter) -> Result<Vec<Metadata>, DataError> {
         Ok(Vec::new())
     }
 
-    async fn read(&self, _data_id: &str, _include_schema: bool) -> Result<Data, DataError> {
+    async fn data_read(&self, _data_id: &str, _include_schema: bool) -> Result<Data, DataError> {
         Ok(Data {
             data: json!({ "value": 1 }),
             schema: self.schema.clone(),
         })
     }
 
-    async fn write(&self, _data_id: &str, _value: Value) -> Result<(), DataError> {
+    async fn data_write(&self, _data_id: &str, _value: Value) -> Result<(), DataError> {
         Err(DataError::ReadOnly)
     }
 }

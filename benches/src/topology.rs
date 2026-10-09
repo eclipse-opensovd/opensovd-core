@@ -98,7 +98,7 @@ fn bench_provider_read(c: &mut Criterion) {
             let topo = topology.read().await;
             let entity = topo.get_component("ecu").expect("ecu");
             let provider = entity.data_provider().expect("provider");
-            std::hint::black_box(provider.read("voltage", false).await.expect("read"));
+            std::hint::black_box(provider.data_read("voltage", false).await.expect("read"));
         });
     });
 }
@@ -109,7 +109,7 @@ fn bench_data_read(c: &mut Criterion) {
 
     c.bench_function("topology/data_read", |b| {
         b.to_async(&rt).iter(|| async {
-            std::hint::black_box(provider.read("voltage", false).await.expect("read"));
+            std::hint::black_box(provider.data_read("voltage", false).await.expect("read"));
         });
     });
 }
