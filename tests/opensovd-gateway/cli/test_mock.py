@@ -128,7 +128,7 @@ def test_component_capabilities_has_variant(client):
     data = response.json()
     assert data["id"] == "ecu"
     assert data["name"] == "Engine Control Unit"
-    assert data["variant"] == {"variant": "v2", "manufacturer": "ACME"}
+    assert data["variant"] == {"manufacturer": ["ACME"], "variant": ["v2"]}
 
 
 def test_component_unknown(client):
