@@ -18,9 +18,7 @@ use tower::ServiceExt;
 use tower::layer::util::{Identity, Stack};
 use tower::util::BoxCloneSyncService;
 
-use crate::auth::{
-    AllowAll, AuthenticationLayer, Authenticator, AuthorizationLayer, Authorizer, NoAuth,
-};
+use crate::auth::Auth;
 use crate::connect_info::ConnectInfo;
 use crate::routes::VendorInfo;
 
@@ -39,8 +37,9 @@ struct BaseConfig {
 }
 
 fn normalize_base(base: &str) -> Option<String> {
+    let base = base.trim_end_matches('/');
     match base.as_bytes() {
-        b"" | b"/" => None,
+        b"" => None,
         [b'/', ..] => Some(base.to_string()),
         _ => Some(format!("/{base}")),
     }
@@ -99,13 +98,11 @@ impl From<UnixListener> for Listener {
     }
 }
 
-#[expect(clippy::too_many_arguments)]
-fn build_router<Vendor, Authn, Authz, Layer>(
+fn build_router<Vendor, Layer>(
     base: Option<&str>,
     advertised: crate::routes::BaseUri,
     vendor_info: Option<Vendor>,
-    authenticator: Authn,
-    authorizer: Authz,
+    auth: Option<Auth>,
     topology: Topology,
     layer: Layer,
     services: Vec<(String, Service)>,
@@ -113,8 +110,6 @@ fn build_router<Vendor, Authn, Authz, Layer>(
 where
     Vendor: Serialize + Clone + Send + Sync + 'static,
     crate::routes::VersionInfo<Vendor>: crate::schema::JsonSchema,
-    Authn: Authenticator,
-    Authz: Authorizer<Authn::Identity>,
     Layer: tower::Layer<axum::routing::Route> + Clone + Send + Sync + 'static,
     Layer::Service: TowerService<http::Request<axum::body::Body>> + Clone + Send + Sync + 'static,
     <Layer::Service as TowerService<http::Request<axum::body::Body>>>::Response:
@@ -134,28 +129,23 @@ where
         router = router.nest_service(&path, svc);
     }
 
-    // Apply layers (order matters - last applied is outermost)
-    // Request flow: UserLayer -> AuthN -> AuthZ -> Handler
-    let router = router
-        .layer(AuthorizationLayer::<Authz, Authn::Identity>::new(
-            authorizer,
-        ))
-        .layer(AuthenticationLayer::new(authenticator));
-
-    // User layers are outermost
+    // Request flow: UserLayer -> Auth -> Handler
+    let router = match auth {
+        Some(auth) => auth.apply(router, base),
+        None => router,
+    };
     router.layer(layer)
 }
 
 type ShutdownFuture = Shared<Pin<Box<dyn Future<Output = ()> + Send>>>;
 
 #[must_use]
-pub struct ServerBuilder<Vendor = VendorInfo, Authn = NoAuth, Authz = AllowAll, Layer = Identity> {
+pub struct ServerBuilder<Vendor = VendorInfo, Layer = Identity> {
     listener: Option<Listener>,
     base: BaseConfig,
     shutdown: ShutdownFuture,
     vendor_info: Option<Vendor>,
-    authenticator: Authn,
-    authorizer: Authz,
+    auth: Option<Auth>,
     topology: Topology,
     layer: Layer,
     services: Vec<(String, Service)>,
@@ -163,13 +153,12 @@ pub struct ServerBuilder<Vendor = VendorInfo, Authn = NoAuth, Authz = AllowAll, 
     tls_config: Option<rustls::ServerConfig>,
 }
 
-pub struct Server<Vendor = VendorInfo, Authn = NoAuth, Authz = AllowAll, Layer = Identity> {
+pub struct Server<Vendor = VendorInfo, Layer = Identity> {
     listener: Listener,
     base: BaseConfig,
     shutdown: ShutdownFuture,
     vendor_info: Option<Vendor>,
-    authenticator: Authn,
-    authorizer: Authz,
+    auth: Option<Auth>,
     topology: Topology,
     layer: Layer,
     services: Vec<(String, Service)>,
@@ -198,7 +187,7 @@ async fn default_shutdown_signal() {
     }
 }
 
-impl ServerBuilder<VendorInfo, NoAuth, AllowAll, Identity> {
+impl ServerBuilder<VendorInfo, Identity> {
     fn new() -> Self {
         let shutdown: Pin<Box<dyn Future<Output = ()> + Send>> =
             Box::pin(default_shutdown_signal());
@@ -210,8 +199,7 @@ impl ServerBuilder<VendorInfo, NoAuth, AllowAll, Identity> {
                 version: env!("CARGO_PKG_VERSION").into(),
                 name: "OpenSOVD".into(),
             }),
-            authenticator: NoAuth,
-            authorizer: AllowAll,
+            auth: None,
             topology: Topology::default(),
             layer: Identity::new(),
             services: Vec::new(),
@@ -221,7 +209,7 @@ impl ServerBuilder<VendorInfo, NoAuth, AllowAll, Identity> {
     }
 }
 
-impl<Vendor, Authn, Authz, Layer> ServerBuilder<Vendor, Authn, Authz, Layer> {
+impl<Vendor, Layer> ServerBuilder<Vendor, Layer> {
     pub fn listener(mut self, listener: impl Into<Listener>) -> Self {
         self.listener = Some(listener.into());
         self
@@ -253,17 +241,13 @@ impl<Vendor, Authn, Authz, Layer> ServerBuilder<Vendor, Authn, Authz, Layer> {
         self
     }
 
-    pub fn vendor_info<NewVendor>(
-        self,
-        vendor_info: NewVendor,
-    ) -> ServerBuilder<NewVendor, Authn, Authz, Layer> {
+    pub fn vendor_info<NewVendor>(self, vendor_info: NewVendor) -> ServerBuilder<NewVendor, Layer> {
         ServerBuilder {
             listener: self.listener,
             base: self.base,
             shutdown: self.shutdown,
             vendor_info: Some(vendor_info),
-            authenticator: self.authenticator,
-            authorizer: self.authorizer,
+            auth: self.auth,
             topology: self.topology,
             layer: self.layer,
             services: self.services,
@@ -272,64 +256,22 @@ impl<Vendor, Authn, Authz, Layer> ServerBuilder<Vendor, Authn, Authz, Layer> {
         }
     }
 
-    /// Set the authenticator for request authentication.
-    pub fn authenticator<NewAuthn: Authenticator>(
-        self,
-        authenticator: NewAuthn,
-    ) -> ServerBuilder<Vendor, NewAuthn, Authz, Layer> {
-        ServerBuilder {
-            listener: self.listener,
-            base: self.base,
-            shutdown: self.shutdown,
-            vendor_info: self.vendor_info,
-            authenticator,
-            authorizer: self.authorizer,
-            topology: self.topology,
-            layer: self.layer,
-            services: self.services,
-            #[cfg(feature = "tls")]
-            tls_config: self.tls_config,
-        }
-    }
-
-    /// Set the authorizer for request authorization.
-    pub fn authorizer<NewAuthz>(
-        self,
-        authorizer: NewAuthz,
-    ) -> ServerBuilder<Vendor, Authn, NewAuthz, Layer>
-    where
-        NewAuthz: Authorizer<Authn::Identity>,
-        Authn: Authenticator,
-    {
-        ServerBuilder {
-            listener: self.listener,
-            base: self.base,
-            shutdown: self.shutdown,
-            vendor_info: self.vendor_info,
-            authenticator: self.authenticator,
-            authorizer,
-            topology: self.topology,
-            layer: self.layer,
-            services: self.services,
-            #[cfg(feature = "tls")]
-            tls_config: self.tls_config,
-        }
+    /// Check every request with `auth`. Without it, all requests are allowed.
+    pub fn auth(mut self, auth: Auth) -> Self {
+        self.auth = Some(auth);
+        self
     }
 
     /// Add a Tower layer to the server middleware stack.
     ///
     /// Layers are applied outside auth. The first layer added is the outermost.
-    pub fn layer<NewLayer>(
-        self,
-        layer: NewLayer,
-    ) -> ServerBuilder<Vendor, Authn, Authz, Stack<NewLayer, Layer>> {
+    pub fn layer<NewLayer>(self, layer: NewLayer) -> ServerBuilder<Vendor, Stack<NewLayer, Layer>> {
         ServerBuilder {
             listener: self.listener,
             base: self.base,
             shutdown: self.shutdown,
             vendor_info: self.vendor_info,
-            authenticator: self.authenticator,
-            authorizer: self.authorizer,
+            auth: self.auth,
             topology: self.topology,
             layer: Stack::new(layer, self.layer),
             services: self.services,
@@ -378,14 +320,13 @@ impl<Vendor, Authn, Authz, Layer> ServerBuilder<Vendor, Authn, Authz, Layer> {
     /// # Errors
     ///
     /// Returns an error if the listener has not been set.
-    pub fn build(self) -> Result<Server<Vendor, Authn, Authz, Layer>, BuilderError> {
+    pub fn build(self) -> Result<Server<Vendor, Layer>, BuilderError> {
         Ok(Server {
             listener: self.listener.ok_or(BuilderError::NoListener)?,
             base: self.base,
             shutdown: self.shutdown,
             vendor_info: self.vendor_info,
-            authenticator: self.authenticator,
-            authorizer: self.authorizer,
+            auth: self.auth,
             topology: self.topology,
             layer: self.layer,
             services: self.services,
@@ -401,12 +342,10 @@ impl Server {
     }
 }
 
-impl<Vendor, Authn, Authz, Layer> Server<Vendor, Authn, Authz, Layer>
+impl<Vendor, Layer> Server<Vendor, Layer>
 where
     Vendor: Serialize + Clone + Send + Sync + 'static,
     crate::routes::VersionInfo<Vendor>: crate::schema::JsonSchema,
-    Authn: Authenticator,
-    Authz: Authorizer<Authn::Identity>,
     Layer: tower::Layer<axum::routing::Route> + Clone + Send + Sync + 'static,
     Layer::Service: TowerService<http::Request<axum::body::Body>> + Clone + Send + Sync + 'static,
     <Layer::Service as TowerService<http::Request<axum::body::Body>>>::Response:
@@ -444,8 +383,7 @@ where
             base.as_deref(),
             advertised,
             self.vendor_info,
-            self.authenticator,
-            self.authorizer,
+            self.auth,
             self.topology,
             self.layer,
             self.services,
@@ -516,6 +454,8 @@ mod tests {
         assert_eq!(normalize_base("/"), None);
         assert_eq!(normalize_base("/sovd"), Some("/sovd".to_string()));
         assert_eq!(normalize_base("sovd"), Some("/sovd".to_string()));
+        assert_eq!(normalize_base("/sovd/"), Some("/sovd".to_string()));
+        assert_eq!(normalize_base("sovd/"), Some("/sovd".to_string()));
     }
 
     #[test]

@@ -78,15 +78,17 @@ def binary_args(request, auth_config):
 
 
 def test_missing_token_returns_401(client):
-    """Request without Authorization header should get 401."""
+    """Request without Authorization header should get 401 with a Bearer challenge."""
     response = client.get("/v1/components")
     assert response.status_code == 401
+    assert response.headers["WWW-Authenticate"] == "Bearer"
 
 
 def test_invalid_token_returns_401(client):
-    """Request with malformed token should get 401."""
+    """Request with malformed token should get 401 naming the invalid token."""
     response = client.get("/v1/components", headers={"Authorization": "Bearer not-a-valid-jwt"})
     assert response.status_code == 401
+    assert response.headers["WWW-Authenticate"] == 'Bearer error="invalid_token"'
 
 
 def test_expired_token_returns_401(client, auth_config):
@@ -100,6 +102,12 @@ def test_expired_token_returns_401(client, auth_config):
 # -- Authorization Tests ------------------------------------------------------
 
 
+def test_version_info_is_public(client):
+    """The example policy lets anonymous callers read the version."""
+    response = client.get("/version-info")
+    assert response.status_code == 200
+
+
 def test_reader_get_allowed(client, auth_config):
     """Reader role can GET components."""
     _, _, signing_key, algo = auth_config
@@ -108,6 +116,14 @@ def test_reader_get_allowed(client, auth_config):
     assert response.status_code == 200
     data = response.json()
     assert "items" in data
+
+
+def test_reader_head_allowed(client, auth_config):
+    """Reader role can HEAD what it can GET."""
+    _, _, signing_key, algo = auth_config
+    token = make_token(signing_key, algo, roles=["reader"])
+    response = client.http.head("/v1/components", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 200
 
 
 def test_reader_put_denied(client, auth_config):
@@ -144,6 +160,38 @@ def test_admin_put_allowed(client, auth_config):
     # Admin is authorized -- endpoint may reject the body (422) or not exist (404)
     assert response.status_code != 403, "admin should not be denied by policy"
     assert response.status_code != 401, "admin should not be unauthenticated"
+
+
+def test_reader_get_root_allowed(client, auth_config):
+    """Reader role can GET the API root."""
+    _, _, signing_key, algo = auth_config
+    token = make_token(signing_key, algo, roles=["reader"])
+    response = client.get("/v1", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 200
+
+
+def test_technician_put_on_assigned_component_allowed(client, auth_config):
+    """Technician can PUT data on an assigned component (gets past authz, may 404 on mock)."""
+    _, _, signing_key, algo = auth_config
+    token = make_token(signing_key, algo, sub="technician@example.com", roles=["technician"])
+    response = client.put(
+        "/v1/components/ecu/data/speed",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"value": 42},
+    )
+    assert response.status_code not in (401, 403)
+
+
+def test_technician_put_on_other_component_denied(client, auth_config):
+    """Technician cannot PUT data on a component not assigned to them."""
+    _, _, signing_key, algo = auth_config
+    token = make_token(signing_key, algo, sub="technician@example.com", roles=["technician"])
+    response = client.put(
+        "/v1/components/gateway/data/speed",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"value": 42},
+    )
+    assert response.status_code == 403
 
 
 def test_no_roles_denied(client, auth_config):

@@ -8,7 +8,8 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode};
-use opensovd_server::{AuthError, Authenticator};
+use opensovd_server::{AuthError, Authenticator, Principal};
+use serde_json::{Map, Value};
 
 /// Supported JWT signing algorithms.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -42,31 +43,10 @@ impl FromStr for JwtAlgorithm {
     }
 }
 
-/// JWT claims extracted from a valid Bearer token.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct Claims {
-    /// Subject (required).
-    pub sub: String,
-    /// Expiration time (required, validated by jsonwebtoken).
-    pub exp: u64,
-    /// Issued-at time.
-    #[serde(default)]
-    pub iat: Option<u64>,
-    /// Issuer.
-    #[serde(default)]
-    pub iss: Option<String>,
-    /// Roles for authorization decisions.
-    #[serde(default)]
-    pub roles: Vec<String>,
-    /// OAuth2 scope string.
-    #[serde(default)]
-    pub scope: Option<String>,
-}
-
 /// JWT authenticator supporting HS512 and RS512.
 ///
-/// Extracts a Bearer token from the `Authorization` header, validates it,
-/// and returns [`Claims`] as the identity.
+/// Verifies the Bearer token of the `Authorization` header and returns its
+/// claims as a [`Principal`].
 #[derive(Clone)]
 pub struct JwtAuthenticator {
     decoding_key: Arc<DecodingKey>,
@@ -88,8 +68,9 @@ impl JwtAuthenticator {
         let mut validation = Validation::new(algo);
         // Do not require or validate `aud` - the gateway is not audience-specific.
         validation.validate_aud = false;
-        validation.required_spec_claims.remove("aud");
+        validation.validate_nbf = true;
         validation.set_issuer(&[issuer]);
+        validation.set_required_spec_claims(&["exp", "iss", "sub"]);
 
         Self {
             decoding_key: Arc::new(decoding_key),
@@ -98,29 +79,65 @@ impl JwtAuthenticator {
     }
 }
 
+/// Builds a principal from `sub`, the `roles` array and `scope` (space-separated
+/// or an array).
+fn principal(claims: Map<String, Value>) -> Principal {
+    let list = |value: Option<&Value>| -> Vec<String> {
+        match value {
+            Some(Value::Array(items)) => items
+                .iter()
+                .filter_map(|v| v.as_str().map(str::to_owned))
+                .collect(),
+            _ => Vec::new(),
+        }
+    };
+    Principal {
+        subject: claims
+            .get("sub")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_owned(),
+        roles: list(claims.get("roles")),
+        scopes: match claims.get("scope") {
+            Some(Value::String(scope)) => scope.split_whitespace().map(str::to_owned).collect(),
+            other => list(other),
+        },
+        claims,
+    }
+}
+
+/// The token of a `Bearer` authorization; other schemes count as no credentials.
+fn bearer(parts: &http::request::Parts) -> Result<Option<&str>, AuthError> {
+    let Some(value) = parts.headers.get(http::header::AUTHORIZATION) else {
+        return Ok(None);
+    };
+    let value = value.to_str().map_err(|_| AuthError::InvalidToken)?;
+    let (scheme, token) = value.split_once(' ').unwrap_or((value, ""));
+    if !scheme.eq_ignore_ascii_case("bearer") {
+        return Ok(None);
+    }
+    match token.trim_start() {
+        "" => Err(AuthError::InvalidToken),
+        token => Ok(Some(token)),
+    }
+}
+
 impl Authenticator for JwtAuthenticator {
-    type Identity = Claims;
-
-    fn authenticate(&self, parts: &http::request::Parts) -> Result<Self::Identity, AuthError> {
-        let header = parts
-            .headers
-            .get(http::header::AUTHORIZATION)
-            .and_then(|v| v.to_str().ok())
-            .and_then(|s| s.strip_prefix("Bearer "))
-            .ok_or(AuthError::Unauthenticated)?;
-
-        let token_data =
-            decode::<Claims>(header, &self.decoding_key, &self.validation).map_err(|e| {
+    fn authenticate(&self, parts: &http::request::Parts) -> Result<Option<Principal>, AuthError> {
+        let Some(token) = bearer(parts)? else {
+            return Ok(None);
+        };
+        let token_data = decode::<Map<String, Value>>(token, &self.decoding_key, &self.validation)
+            .map_err(|e| {
                 tracing::debug!(target: "srv", error = %e, "JWT validation failed");
-                AuthError::Unauthenticated
+                AuthError::InvalidToken
             })?;
-
-        Ok(token_data.claims)
+        Ok(Some(principal(token_data.claims)))
     }
 }
 
 #[cfg(test)]
-#[expect(clippy::arithmetic_side_effects, clippy::ignored_unit_patterns)]
+#[expect(clippy::arithmetic_side_effects)]
 mod tests {
     use std::sync::LazyLock;
 
@@ -138,7 +155,7 @@ mod tests {
         secret
     });
 
-    fn make_hs512_token(claims: &Claims) -> String {
+    fn make_hs512_token(claims: &Value) -> String {
         encode(
             &Header::new(Algorithm::HS512),
             claims,
@@ -147,99 +164,120 @@ mod tests {
         .unwrap()
     }
 
-    fn valid_claims() -> Claims {
-        Claims {
-            sub: "user@example.com".to_owned(),
-            exp: jsonwebtoken::get_current_timestamp() + 3600,
-            iat: Some(jsonwebtoken::get_current_timestamp()),
-            iss: Some("OpenSOVD".to_owned()),
-            roles: vec!["reader".to_owned(), "admin".to_owned()],
-            scope: Some("read write".to_owned()),
+    fn valid_claims() -> Value {
+        let now = jsonwebtoken::get_current_timestamp();
+        serde_json::json!({
+            "sub": "user@example.com",
+            "exp": now + 3600,
+            "iat": now,
+            "iss": TEST_ISSUER,
+            "roles": ["reader", "admin"],
+            "scope": "read write",
+        })
+    }
+
+    fn parts(authorization: Option<&str>) -> http::request::Parts {
+        let mut request = Request::builder();
+        if let Some(value) = authorization {
+            request = request.header("Authorization", value);
         }
+        request.body(()).unwrap().into_parts().0
+    }
+
+    fn hs512() -> JwtAuthenticator {
+        JwtAuthenticator::new(JwtAlgorithm::HS512, &HMAC_SECRET, TEST_ISSUER)
+    }
+
+    fn assert_invalid(result: &Result<Option<Principal>, AuthError>) {
+        assert!(
+            matches!(result, Err(AuthError::InvalidToken)),
+            "expected InvalidToken, got {result:?}"
+        );
     }
 
     #[test]
     fn hs512_valid_token() {
-        let auth = JwtAuthenticator::new(JwtAlgorithm::HS512, &HMAC_SECRET, TEST_ISSUER);
         let token = make_hs512_token(&valid_claims());
+        let principal = hs512()
+            .authenticate(&parts(Some(&format!("Bearer {token}"))))
+            .unwrap()
+            .unwrap();
+        assert_eq!(principal.subject, "user@example.com");
+        assert_eq!(principal.roles, vec!["reader", "admin"]);
+        assert_eq!(principal.scopes, vec!["read", "write"]);
+        assert_eq!(principal.claims["iss"], TEST_ISSUER);
+    }
 
-        let (parts, _) = Request::builder()
-            .header("Authorization", format!("Bearer {token}"))
+    #[test]
+    fn bearer_scheme_is_case_insensitive() {
+        let token = make_hs512_token(&valid_claims());
+        let principal = hs512().authenticate(&parts(Some(&format!("bearer {token}"))));
+        assert!(principal.unwrap().is_some());
+    }
+
+    #[test]
+    fn missing_header_is_anonymous() {
+        assert!(hs512().authenticate(&parts(None)).unwrap().is_none());
+    }
+
+    #[test]
+    fn other_scheme_is_anonymous() {
+        let principal = hs512().authenticate(&parts(Some("Basic dXNlcjpwYXNz")));
+        assert!(principal.unwrap().is_none());
+    }
+
+    #[test]
+    fn bearer_without_token_is_rejected() {
+        assert_invalid(&hs512().authenticate(&parts(Some("Bearer"))));
+        assert_invalid(&hs512().authenticate(&parts(Some("Bearer   "))));
+    }
+
+    #[test]
+    fn non_ascii_header_is_rejected() {
+        let value = http::HeaderValue::from_bytes(b"Bearer \xff").unwrap();
+        let parts = Request::builder()
+            .header("Authorization", value)
             .body(())
             .unwrap()
-            .into_parts();
-
-        let claims = auth.authenticate(&parts).unwrap();
-        assert_eq!(claims.sub, "user@example.com");
-        assert_eq!(claims.roles, vec!["reader", "admin"]);
+            .into_parts()
+            .0;
+        assert_invalid(&hs512().authenticate(&parts));
     }
 
     #[test]
-    fn hs512_missing_header_returns_unauthenticated() {
-        let auth = JwtAuthenticator::new(JwtAlgorithm::HS512, &HMAC_SECRET, TEST_ISSUER);
-
-        let (parts, _) = Request::builder().body(()).unwrap().into_parts();
-
-        let err = auth.authenticate(&parts).unwrap_err();
-        assert!(
-            matches!(err, AuthError::Unauthenticated),
-            "expected Unauthenticated, got {err:?}"
-        );
+    fn hs512_invalid_token_is_rejected() {
+        assert_invalid(&hs512().authenticate(&parts(Some("Bearer not-a-valid-jwt"))));
     }
 
     #[test]
-    fn hs512_invalid_token_returns_error() {
-        let auth = JwtAuthenticator::new(JwtAlgorithm::HS512, &HMAC_SECRET, TEST_ISSUER);
-
-        let (parts, _) = Request::builder()
-            .header("Authorization", "Bearer not-a-valid-jwt")
-            .body(())
-            .unwrap()
-            .into_parts();
-
-        let err = auth.authenticate(&parts).unwrap_err();
-        assert!(
-            matches!(err, AuthError::Unauthenticated),
-            "expected InvalidCredentials, got {err:?}"
-        );
-    }
-
-    #[test]
-    fn hs512_expired_token_returns_error() {
-        let auth = JwtAuthenticator::new(JwtAlgorithm::HS512, &HMAC_SECRET, TEST_ISSUER);
+    fn hs512_expired_token_is_rejected() {
         let mut claims = valid_claims();
-        claims.exp = 1; // long expired
-
+        claims["exp"] = 1.into();
         let token = make_hs512_token(&claims);
-        let (parts, _) = Request::builder()
-            .header("Authorization", format!("Bearer {token}"))
-            .body(())
-            .unwrap()
-            .into_parts();
-
-        let err = auth.authenticate(&parts).unwrap_err();
-        assert!(
-            matches!(err, AuthError::Unauthenticated),
-            "expected InvalidCredentials, got {err:?}"
-        );
+        assert_invalid(&hs512().authenticate(&parts(Some(&format!("Bearer {token}")))));
     }
 
     #[test]
-    fn hs512_wrong_secret_returns_error() {
+    fn hs512_wrong_secret_is_rejected() {
         let auth = JwtAuthenticator::new(JwtAlgorithm::HS512, b"different-secret", TEST_ISSUER);
         let token = make_hs512_token(&valid_claims());
+        assert_invalid(&auth.authenticate(&parts(Some(&format!("Bearer {token}")))));
+    }
 
-        let (parts, _) = Request::builder()
-            .header("Authorization", format!("Bearer {token}"))
-            .body(())
-            .unwrap()
-            .into_parts();
+    #[test]
+    fn hs512_wrong_issuer_is_rejected() {
+        let mut claims = valid_claims();
+        claims["iss"] = "wrong-issuer".into();
+        let token = make_hs512_token(&claims);
+        assert_invalid(&hs512().authenticate(&parts(Some(&format!("Bearer {token}")))));
+    }
 
-        let err = auth.authenticate(&parts).unwrap_err();
-        assert!(
-            matches!(err, AuthError::Unauthenticated),
-            "expected InvalidCredentials, got {err:?}"
-        );
+    #[test]
+    fn hs512_missing_subject_is_rejected() {
+        let mut claims = valid_claims();
+        claims.as_object_mut().unwrap().remove("sub");
+        let token = make_hs512_token(&claims);
+        assert_invalid(&hs512().authenticate(&parts(Some(&format!("Bearer {token}")))));
     }
 
     use aws_lc_rs::encoding::AsDer;
@@ -269,86 +307,47 @@ mod tests {
         }
     });
 
-    fn make_rs512_token(claims: &Claims) -> String {
+    fn make_rs512_token(claims: &Value) -> String {
         encode(
             &Header::new(Algorithm::RS512),
-            &claims,
+            claims,
             &EncodingKey::from_rsa_pem(&RSA_KEYS.private_pem).unwrap(),
         )
         .unwrap()
     }
 
+    fn rs512() -> JwtAuthenticator {
+        JwtAuthenticator::new(JwtAlgorithm::RS512, &RSA_KEYS.public_der, TEST_ISSUER)
+    }
+
     #[test]
     fn rs512_valid_token() {
-        let auth = JwtAuthenticator::new(JwtAlgorithm::RS512, &RSA_KEYS.public_der, TEST_ISSUER);
         let token = make_rs512_token(&valid_claims());
-
-        let (parts, _) = Request::builder()
-            .header("Authorization", format!("Bearer {token}"))
-            .body(())
+        let principal = rs512()
+            .authenticate(&parts(Some(&format!("Bearer {token}"))))
             .unwrap()
-            .into_parts();
-
-        let claims = auth.authenticate(&parts).unwrap();
-        assert_eq!(claims.sub, "user@example.com");
-        assert_eq!(claims.roles, vec!["reader", "admin"]);
+            .unwrap();
+        assert_eq!(principal.subject, "user@example.com");
+        assert_eq!(principal.roles, vec!["reader", "admin"]);
     }
 
     #[test]
-    fn rs512_expired_token_returns_error() {
-        let auth = JwtAuthenticator::new(JwtAlgorithm::RS512, &RSA_KEYS.public_der, TEST_ISSUER);
+    fn rs512_expired_token_is_rejected() {
         let mut claims = valid_claims();
-        claims.exp = 1;
-
+        claims["exp"] = 1.into();
         let token = make_rs512_token(&claims);
-        let (parts, _) = Request::builder()
-            .header("Authorization", format!("Bearer {token}"))
-            .body(())
-            .unwrap()
-            .into_parts();
-
-        let err = auth.authenticate(&parts).unwrap_err();
-        assert!(
-            matches!(err, AuthError::Unauthenticated),
-            "expected InvalidCredentials, got {err:?}"
-        );
+        assert_invalid(&rs512().authenticate(&parts(Some(&format!("Bearer {token}")))));
     }
 
     #[test]
-    fn rs512_invalid_token_returns_error() {
-        let auth = JwtAuthenticator::new(JwtAlgorithm::RS512, &RSA_KEYS.public_der, TEST_ISSUER);
-
-        let (parts, _) = Request::builder()
-            .header("Authorization", "Bearer not-a-valid-jwt")
-            .body(())
-            .unwrap()
-            .into_parts();
-
-        let err = auth.authenticate(&parts).unwrap_err();
-        assert!(
-            matches!(err, AuthError::Unauthenticated),
-            "expected InvalidCredentials, got {err:?}"
-        );
+    fn rs512_invalid_token_is_rejected() {
+        assert_invalid(&rs512().authenticate(&parts(Some("Bearer not-a-valid-jwt"))));
     }
 
     #[test]
-    fn hs512_wrong_issuer_returns_error() {
-        let auth = JwtAuthenticator::new(JwtAlgorithm::HS512, &HMAC_SECRET, TEST_ISSUER);
-        let mut claims = valid_claims();
-        claims.iss = Some("wrong-issuer".to_owned());
-
-        let token = make_hs512_token(&claims);
-        let (parts, _) = Request::builder()
-            .header("Authorization", format!("Bearer {token}"))
-            .body(())
-            .unwrap()
-            .into_parts();
-
-        let err = auth.authenticate(&parts).unwrap_err();
-        assert!(
-            matches!(err, AuthError::Unauthenticated),
-            "expected Unauthenticated, got {err:?}"
-        );
+    fn rs512_rejects_hs512_tokens() {
+        let token = make_hs512_token(&valid_claims());
+        assert_invalid(&rs512().authenticate(&parts(Some(&format!("Bearer {token}")))));
     }
 
     #[test]

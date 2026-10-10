@@ -80,6 +80,18 @@ Announces the gateway as `_sovd._tcp` with the `identification` and `accessurl` 
 | `--mdns-host`      | Host label published as `HOST.local` (default: derived from the identification) |
 | `--mdns-interface` | Announce only on these interfaces (comma-separated)           |
 
+### Auth Options
+
+The policy decides with `data.sovd.authz.allow` on an input of `method` (HEAD reported as GET), `route` (the matched template relative to the mount path, e.g. `/v1/components/{component_id}`), decoded `params` and, for authenticated callers, `principal` (`subject`, `roles`, `scopes`, `claims`). Without a policy, every valid token is allowed. A policy requires a JWT secret. See [the example policy](../../examples/server/auth/sovd_authz.rego).
+
+| Option               | Description                                                     |
+|----------------------|-----------------------------------------------------------------|
+| `--auth-jwt-secret`  | Base64 HMAC secret or PKCS#1 DER RSA public key (`SOVD_JWT_SECRET`) |
+| `--auth-jwt-algo`    | `HS512` (default) or `RS512`                                    |
+| `--auth-jwt-issuer`  | Required `iss` claim (default: `OpenSOVD`)                      |
+| `--auth-policy`      | Rego policy file, repeatable; requires `--auth-jwt-secret`      |
+| `--auth-policy-data` | JSON data file for the policy, repeatable                       |
+
 ## Contributing
 
 See [CONTRIBUTING.md](../../CONTRIBUTING.md) for guidelines.

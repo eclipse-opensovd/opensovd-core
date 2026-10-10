@@ -16,7 +16,7 @@ use opensovd_core::Topology;
 use opensovd_extra::{JwtAlgorithm, JwtAuthenticator, RegorusAuthorizer};
 #[cfg(feature = "mock")]
 use opensovd_mocks::create_mock_topology;
-use opensovd_server::{AllowAll, Authenticator, Authorizer, NoAuth, Server};
+use opensovd_server::{Auth, Authenticated, Server};
 use serde::Serialize;
 
 #[derive(Debug, Clone, Serialize)]
@@ -63,20 +63,20 @@ async fn run(mut cli: cli::Cli) -> anyhow::Result<()> {
         sha1 = %VENDOR_INFO.sha1,
         build_date = %VENDOR_INFO.build_date,
         "{}", cli::ABOUT);
-    let jwt_key = cli.auth.jwt_key.take();
+    let auth = create_auth(&mut cli.auth)?;
+    serve(cli, auth).await
+}
 
-    if let Some(key) = jwt_key {
-        let authenticator = create_jwt_authenticator(&key, &mut cli.auth)?;
-
-        if cli.auth.policy.is_empty() {
-            serve(cli, authenticator, AllowAll).await
-        } else {
-            let authorizer = create_rego_authorizer(&mut cli.auth)?;
-            serve(cli, authenticator, authorizer).await
-        }
+fn create_auth(args: &mut cli::AuthArgs) -> anyhow::Result<Option<Auth>> {
+    let Some(key) = args.jwt_key.take() else {
+        return Ok(None);
+    };
+    let jwt = create_jwt_authenticator(&key, args)?;
+    Ok(Some(if args.policy.is_empty() {
+        Auth::new(jwt, Authenticated)
     } else {
-        serve(cli, NoAuth, AllowAll).await
-    }
+        Auth::new(jwt, create_rego_authorizer(args)?)
+    }))
 }
 
 fn create_jwt_authenticator(
@@ -108,15 +108,7 @@ fn create_rego_authorizer(auth: &mut cli::AuthArgs) -> anyhow::Result<RegorusAut
     Ok(authorizer)
 }
 
-async fn serve<Authn, Authz>(
-    cli: cli::Cli,
-    authenticator: Authn,
-    authorizer: Authz,
-) -> anyhow::Result<()>
-where
-    Authn: Authenticator,
-    Authz: Authorizer<Authn::Identity>,
-{
+async fn serve(cli: cli::Cli, auth: Option<Auth>) -> anyhow::Result<()> {
     let uri: http::Uri = cli
         .url
         .parse()
@@ -128,9 +120,11 @@ where
         })?
         .as_str();
 
-    let builder = Server::builder()
-        .authenticator(authenticator)
-        .authorizer(authorizer);
+    let builder = Server::builder();
+    let builder = match auth {
+        Some(auth) => builder.auth(auth),
+        None => builder,
+    };
 
     #[cfg(feature = "tls")]
     let (builder, tls) = if let Some(tls) = cli.tls.config() {
@@ -220,8 +214,7 @@ where
     Ok(())
 }
 
-type Builder<Vendor, Authn, Authz, Layer> =
-    opensovd_server::ServerBuilder<Vendor, Authn, Authz, Layer>;
+type Builder<Vendor, Layer> = opensovd_server::ServerBuilder<Vendor, Layer>;
 
 #[derive(Clone, Copy)]
 struct Bound {
@@ -246,11 +239,11 @@ impl Bound {
 }
 
 #[cfg(unix)]
-async fn configure_listener<Vendor, Authn, Authz, Layer>(
-    builder: Builder<Vendor, Authn, Authz, Layer>,
+async fn configure_listener<Vendor, Layer>(
+    builder: Builder<Vendor, Layer>,
     cli: &cli::Cli,
     authority: &str,
-) -> anyhow::Result<(Builder<Vendor, Authn, Authz, Layer>, Option<Bound>)> {
+) -> anyhow::Result<(Builder<Vendor, Layer>, Option<Bound>)> {
     #[cfg(target_os = "linux")]
     if let Some(fd) = sd_notify::listen_fds()?.next() {
         use std::os::fd::FromRawFd;
@@ -293,18 +286,18 @@ async fn configure_listener<Vendor, Authn, Authz, Layer>(
 }
 
 #[cfg(not(unix))]
-async fn configure_listener<Vendor, Authn, Authz, Layer>(
-    builder: Builder<Vendor, Authn, Authz, Layer>,
+async fn configure_listener<Vendor, Layer>(
+    builder: Builder<Vendor, Layer>,
     _cli: &cli::Cli,
     authority: &str,
-) -> anyhow::Result<(Builder<Vendor, Authn, Authz, Layer>, Option<Bound>)> {
+) -> anyhow::Result<(Builder<Vendor, Layer>, Option<Bound>)> {
     bind_tcp(builder, authority).await
 }
 
-async fn bind_tcp<Vendor, Authn, Authz, Layer>(
-    builder: Builder<Vendor, Authn, Authz, Layer>,
+async fn bind_tcp<Vendor, Layer>(
+    builder: Builder<Vendor, Layer>,
     authority: &str,
-) -> anyhow::Result<(Builder<Vendor, Authn, Authz, Layer>, Option<Bound>)> {
+) -> anyhow::Result<(Builder<Vendor, Layer>, Option<Bound>)> {
     let listener = tokio::net::TcpListener::bind(authority)
         .await
         .with_context(|| format!("failed to bind {authority}"))?;
@@ -355,10 +348,10 @@ fn configure_mdns(
 }
 
 #[cfg_attr(not(feature = "mock"), expect(clippy::unused_async))]
-async fn configure_topology<Vendor, Authn, Authz, Layer>(
-    builder: opensovd_server::ServerBuilder<Vendor, Authn, Authz, Layer>,
+async fn configure_topology<Vendor, Layer>(
+    builder: opensovd_server::ServerBuilder<Vendor, Layer>,
     #[cfg_attr(not(feature = "mock"), expect(unused_variables))] cli: &cli::Cli,
-) -> opensovd_server::ServerBuilder<Vendor, Authn, Authz, Layer> {
+) -> opensovd_server::ServerBuilder<Vendor, Layer> {
     #[cfg(feature = "mock")]
     let topology = if cli.mock {
         tracing::info!(target: TARGET, "Mock topology enabled");

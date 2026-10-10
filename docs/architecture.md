@@ -8,8 +8,7 @@ classDiagram
 
     class Server {
         -listener: Listener
-        -authenticator: A
-        -authorizer: Z
+        -auth: Option~Auth~
         -topology: Topology
         -layer: L
         +builder() ServerBuilder
@@ -97,22 +96,21 @@ classDiagram
         -data_provider: Option~Arc~DataProvider~~
     }
 
+    class Auth {
+        +new(authenticator, authorizer) Auth
+    }
+
     class Authenticator {
         <<trait>>
-        +type Identity
-        +authenticate(parts) Result~Identity, AuthError~
+        +authenticate(parts) Result~Option~Principal~, AuthError~
     }
 
-    class Authorizer~I~ {
+    class Authorizer {
         <<trait>>
-        +authorize(identity, parts) Result~(), AuthError~
+        +authorize(access) bool
     }
 
-    class NoAuth {
-        Identity = ()
-    }
-
-    class AllowAll
+    class Authenticated
 
     class DataProvider {
         <<trait>>
@@ -125,8 +123,9 @@ classDiagram
     }
 
     Server --> Topology : uses
-    Server --> Authenticator : uses
-    Server --> Authorizer : uses
+    Server --> Auth : optional
+    Auth --> Authenticator : uses
+    Auth --> Authorizer : uses
     Topology --> TopologyReadGuard : produces
     Topology --> TopologyWriteGuard : produces
     TopologyReadGuard --> Component : queries
@@ -139,8 +138,7 @@ classDiagram
     App --> DataProvider : optional
     Area --> DataProvider : optional
     EntityRef --> EntityKind : has
-    NoAuth ..|> Authenticator : implements
-    AllowAll ..|> Authorizer : implements
+    Authenticated ..|> Authorizer : implements
 ```
 
 ## Main Components
@@ -211,13 +209,13 @@ Default implementations derive from `data_list()`:
 
 ### Authenticator (trait)
 
-Extracts and validates credentials from incoming requests. Has an associated type `Identity` representing the authenticated principal. Returns `Ok(Identity)` on success or `Err(AuthError::Unauthenticated)` on failure. `NoAuth` is the no-op implementation (Identity = `()`). Blanket impl for `Option<A>` returns `Option<A::Identity>`, allowing optional authentication.
+Validates the credentials of a request and returns the caller as a `Principal`, `Ok(None)` when the request carries none, or `Err(AuthError::InvalidToken)` when they are rejected.
 
 **Crate:** `opensovd-server`
 
 ### Authorizer (trait)
 
-Determines whether an authenticated identity has permission for a request. Generic over the identity type `I`. Takes `(identity, request_parts)` and returns `Ok(())` or `Err(AuthError::Unauthorized)`. Implementation: `AllowAll` permits all requests.
+Decides whether a request may proceed from its `Access`: the method, the template (relative to the mount path) and decoded parameters of the matched route, and the principal if any. `Authenticated` allows every authenticated caller.
 
 **Crate:** `opensovd-server`
 
@@ -236,7 +234,7 @@ sequenceDiagram
 
     C->>S: HTTP Request
     S->>MW: Forward request
-    MW->>MW: UserLayer → AuthN → AuthZ
+    MW->>MW: UserLayer → Auth
 
     alt Middleware rejection
         MW-->>C: 401/403 Error
@@ -268,10 +266,9 @@ sequenceDiagram
 Every request passes through the middleware stack in this order:
 
 1. **User layers** (CORS, tracing, etc.) — applied outermost via the configurable `Layer` generic.
-2. **`AuthenticationLayer`** — calls `Authenticator::authenticate()` to extract an identity from the request. On success, the identity is stored in request extensions. On failure, the request is rejected immediately with **401 (empty body)**.
-3. **`AuthorizationLayer`** — retrieves the identity from request extensions (set by AuthN) and calls `Authorizer::authorize()`. On failure, the request is rejected with **403** and a JSON `GenericError` body containing the `insufficient-access-rights` error code.
+2. **`Auth`** — runs after routing on every route and the fallback. It authenticates the request, then asks the authorizer. A denied request without a principal gets **401** with an empty body and a `WWW-Authenticate: Bearer` challenge; with a principal it gets **403** and a JSON `GenericError` body containing the `insufficient-access-rights` error code. Rejected credentials get **401** regardless of the policy.
 
-If both layers pass, the request is forwarded to the matched route handler.
+If the request is allowed, the principal is stored in the request extensions and the request is forwarded to the matched route handler.
 
 ### Entity Routes
 

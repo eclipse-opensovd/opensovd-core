@@ -14,7 +14,7 @@ categories.workspace = true
 
 [features]
 unit = ["dep:serde"]
-auth = ["dep:jsonwebtoken", "dep:regorus", "dep:serde", "dep:serde_json", "dep:http", "dep:tracing", "dep:opensovd-server"]
+auth = ["dep:jsonwebtoken", "dep:regorus", "dep:serde_json", "dep:http", "dep:tracing", "dep:opensovd-server"]
 tls = ["dep:rustls", "dep:thiserror"]
 trace = ["dep:axum", "dep:http", "dep:tower", "dep:tower-http", "dep:tracing"]
 mdns = ["dep:mdns-sd", "dep:if-addrs", "dep:rustix", "dep:thiserror", "dep:tokio", "dep:tracing"]

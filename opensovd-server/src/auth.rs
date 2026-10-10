@@ -3,45 +3,98 @@
 
 //! Authentication and authorization middleware.
 
-use std::marker::PhantomData;
-use std::pin::Pin;
-use std::task::{Context, Poll};
+use std::collections::BTreeMap;
+use std::convert::Infallible;
+use std::sync::Arc;
 
-use axum::{
-    body::Body,
-    http::StatusCode,
-    response::{IntoResponse, Json, Response},
+use axum::Router;
+use axum::extract::rejection::RawPathParamsRejection;
+use axum::extract::{
+    FromRequestParts, MatchedPath, OptionalFromRequestParts, RawPathParams, Request, State,
 };
+use axum::http::{HeaderValue, Method, StatusCode, header};
+use axum::middleware::{self, Next};
+use axum::response::{IntoResponse, Json, Response};
 use http::request::Parts;
 use opensovd_models::{ErrorCode, GenericError};
-use tower::{Layer, Service};
+use serde::Serialize;
 
-/// Authentication/Authorization error with structured JSON response.
-#[derive(Debug, thiserror::Error)]
-pub enum AuthError {
-    /// Identity not established (401)
-    #[error("authentication required")]
-    Unauthenticated,
-    /// Permission denied - valid identity but insufficient permissions (403)
-    #[error("insufficient access rights")]
-    Unauthorized,
+/// An authenticated caller.
+#[derive(Clone, Debug, Serialize)]
+pub struct Principal {
+    pub subject: String,
+    pub roles: Vec<String>,
+    pub scopes: Vec<String>,
+    /// All verified claims.
+    pub claims: serde_json::Map<String, serde_json::Value>,
 }
 
-impl AuthError {
-    /// Create an unauthorized error.
-    #[must_use]
-    pub fn unauthorized() -> Self {
-        Self::Unauthorized
+/// Establishes who sent a request.
+pub trait Authenticator: Send + Sync + 'static {
+    /// Returns `Ok(None)` when the request carries no credentials.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`AuthError::InvalidToken`] when the credentials are rejected.
+    fn authenticate(&self, parts: &Parts) -> Result<Option<Principal>, AuthError>;
+}
+
+/// A request as seen by an [`Authorizer`].
+#[derive(Debug, Serialize)]
+pub struct Access<'a> {
+    /// Request method; HEAD is reported as GET, whose handler serves it.
+    pub method: &'a str,
+    /// Template of the matched route relative to the mount path, such as
+    /// `/v1/components/{component_id}`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub route: Option<&'a str>,
+    /// Decoded parameters of the matched route.
+    pub params: BTreeMap<&'a str, &'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub principal: Option<&'a Principal>,
+}
+
+/// Decides whether a request may proceed.
+pub trait Authorizer: Send + Sync + 'static {
+    fn authorize(&self, access: &Access<'_>) -> bool;
+}
+
+/// Authorizer that allows every authenticated caller.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Authenticated;
+
+impl Authorizer for Authenticated {
+    fn authorize(&self, access: &Access<'_>) -> bool {
+        access.principal.is_some()
     }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum AuthError {
+    /// No credentials, but the request needs them (401).
+    #[error("authentication required")]
+    Unauthenticated,
+    /// Credentials were sent and rejected (401).
+    #[error("invalid token")]
+    InvalidToken,
+    /// The caller is known but not allowed (403).
+    #[error("insufficient access rights")]
+    Forbidden,
 }
 
 impl IntoResponse for AuthError {
     fn into_response(self) -> Response {
+        let challenge = |value| {
+            (
+                StatusCode::UNAUTHORIZED,
+                [(header::WWW_AUTHENTICATE, HeaderValue::from_static(value))],
+            )
+                .into_response()
+        };
         match self {
-            // 401: No response body
-            Self::Unauthenticated => StatusCode::UNAUTHORIZED.into_response(),
-            // 403: GenericError with insufficient-access-rights
-            Self::Unauthorized => {
+            Self::Unauthenticated => challenge("Bearer"),
+            Self::InvalidToken => challenge(r#"Bearer error="invalid_token""#),
+            Self::Forbidden => {
                 let body = GenericError {
                     error_code: ErrorCode::InsufficientAccessRights,
                     vendor_code: None,
@@ -55,432 +108,254 @@ impl IntoResponse for AuthError {
     }
 }
 
-/// Extractor for the authenticated identity stored by [`AuthenticationLayer`].
+/// An authenticator and an authorizer, checked on every request after routing.
 ///
-/// Unlike Axum's built-in `Extension<T>` (which returns 500 when missing),
-/// this returns 401 - the correct semantic for missing authentication.
-///
-/// # Example
-///
-/// ```ignore
-/// async fn handler(Identity(claims): Identity<MyClaims>) -> impl IntoResponse {
-///     // use claims
-/// }
-/// ```
-#[derive(Debug, Clone)]
-pub struct Identity<T>(pub T);
+/// A denied request gets 401 when no caller was identified and 403 otherwise.
+#[derive(Clone)]
+pub struct Auth {
+    authenticator: Arc<dyn Authenticator>,
+    authorizer: Arc<dyn Authorizer>,
+}
 
-impl<T, S> axum::extract::FromRequestParts<S> for Identity<T>
-where
-    T: Clone + Send + Sync + 'static,
-    S: Send + Sync,
-{
+impl Auth {
+    pub fn new(authenticator: impl Authenticator, authorizer: impl Authorizer) -> Self {
+        Self {
+            authenticator: Arc::new(authenticator),
+            authorizer: Arc::new(authorizer),
+        }
+    }
+
+    pub(crate) fn apply(self, router: Router, base: Option<&str>) -> Router {
+        let base: Arc<str> = base.unwrap_or_default().into();
+        router.layer(middleware::from_fn_with_state((self, base), enforce))
+    }
+}
+
+async fn enforce(
+    State((auth, base)): State<(Auth, Arc<str>)>,
+    request: Request,
+    next: Next,
+) -> Response {
+    let (mut parts, body) = request.into_parts();
+    // Without a matched route there are no params; undecodable ones answer a
+    // JSON 400 before the policy runs.
+    let raw = match RawPathParams::from_request_parts(&mut parts, &()).await {
+        Ok(raw) => Some(raw),
+        Err(RawPathParamsRejection::MissingPathParams(_)) => None,
+        Err(rejection) => {
+            let error = GenericError::new(ErrorCode::IncompleteRequest, rejection.body_text());
+            return (rejection.status(), Json(error)).into_response();
+        }
+    };
+    let principal = match auth.authenticator.authenticate(&parts) {
+        Ok(principal) => principal,
+        Err(error) => return error.into_response(),
+    };
+    let access = Access {
+        method: if parts.method == Method::HEAD {
+            Method::GET.as_str()
+        } else {
+            parts.method.as_str()
+        },
+        route: parts
+            .extensions
+            .get::<MatchedPath>()
+            .map(|matched| relative(matched.as_str(), &base)),
+        params: raw.iter().flat_map(|p| p.iter()).collect(),
+        principal: principal.as_ref(),
+    };
+    match (auth.authorizer.authorize(&access), principal) {
+        (true, Some(principal)) => {
+            parts.extensions.insert(principal);
+        }
+        (true, None) => {}
+        (false, Some(_)) => return AuthError::Forbidden.into_response(),
+        (false, None) => return AuthError::Unauthenticated.into_response(),
+    }
+    next.run(Request::from_parts(parts, body)).await
+}
+
+/// Strips the mount path so policies hold wherever the server is mounted.
+fn relative<'a>(route: &'a str, base: &str) -> &'a str {
+    route
+        .strip_prefix(base)
+        .filter(|rest| rest.starts_with('/'))
+        .unwrap_or(route)
+}
+
+impl<S: Send + Sync> FromRequestParts<S> for Principal {
     type Rejection = AuthError;
 
     fn from_request_parts(
         parts: &mut Parts,
-        _state: &S,
+        _: &S,
     ) -> impl Future<Output = Result<Self, Self::Rejection>> + Send {
         std::future::ready(
             parts
                 .extensions
-                .get::<T>()
+                .get::<Self>()
                 .cloned()
-                .map(Identity)
                 .ok_or(AuthError::Unauthenticated),
         )
     }
 }
 
-impl<T> std::ops::Deref for Identity<T> {
-    type Target = T;
-    fn deref(&self) -> &T {
-        &self.0
-    }
-}
+impl<S: Send + Sync> OptionalFromRequestParts<S> for Principal {
+    type Rejection = Infallible;
 
-/// Pluggable authentication backend trait.
-///
-/// Implement this trait to integrate any authentication mechanism:
-/// JWT, mTLS, API keys, `OAuth2`, Biscuit, etc.
-pub trait Authenticator: Clone + Send + Sync + 'static {
-    /// The identity type extracted from valid credentials.
-    type Identity: Clone + Send + Sync + 'static;
-
-    /// Authenticate a request and extract the identity.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`AuthError::Unauthenticated`] if authentication fails.
-    fn authenticate(&self, parts: &Parts) -> Result<Self::Identity, AuthError>;
-}
-
-/// No-op authenticator that allows all requests.
-#[derive(Clone, Debug, Default)]
-pub struct NoAuth;
-
-impl Authenticator for NoAuth {
-    type Identity = ();
-
-    fn authenticate(&self, _parts: &Parts) -> Result<Self::Identity, AuthError> {
-        Ok(())
-    }
-}
-
-/// Optional authenticator wrapper - returns None for anonymous requests.
-impl<A: Authenticator> Authenticator for Option<A> {
-    type Identity = Option<A::Identity>;
-
-    fn authenticate(&self, parts: &Parts) -> Result<Self::Identity, AuthError> {
-        match self {
-            Some(authenticator) => authenticator.authenticate(parts).map(Some),
-            None => Ok(None),
-        }
-    }
-}
-
-// Authentication Middleware Layer
-//
-
-/// Tower layer that applies authentication middleware.
-#[derive(Clone)]
-pub struct AuthenticationLayer<A> {
-    authenticator: A,
-}
-
-impl<A> AuthenticationLayer<A> {
-    /// Create a new authentication layer.
-    pub fn new(authenticator: A) -> Self {
-        Self { authenticator }
-    }
-}
-
-impl<S, A: Clone> Layer<S> for AuthenticationLayer<A> {
-    type Service = AuthenticationMiddleware<S, A>;
-
-    fn layer(&self, inner: S) -> Self::Service {
-        AuthenticationMiddleware {
-            inner,
-            authenticator: self.authenticator.clone(),
-        }
-    }
-}
-
-/// Authentication middleware service.
-#[derive(Clone)]
-pub struct AuthenticationMiddleware<S, A> {
-    inner: S,
-    authenticator: A,
-}
-
-impl<S, A> Service<http::Request<Body>> for AuthenticationMiddleware<S, A>
-where
-    S: Service<http::Request<Body>, Response = Response>,
-    S::Future: Send + 'static,
-    S::Error: Send + 'static,
-    A: Authenticator,
-{
-    type Response = Response;
-    type Error = S::Error;
-    type Future = Pin<Box<dyn Future<Output = Result<Response, S::Error>> + Send>>;
-
-    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        self.inner.poll_ready(cx)
-    }
-
-    fn call(&mut self, req: http::Request<Body>) -> Self::Future {
-        let (mut parts, body) = req.into_parts();
-
-        match self.authenticator.authenticate(&parts) {
-            Ok(identity) => {
-                // Store identity in request extensions
-                parts.extensions.insert(identity);
-
-                // Reconstruct request and continue
-                let req = http::Request::from_parts(parts, body);
-                Box::pin(self.inner.call(req))
-            }
-            Err(auth_error) => {
-                // Return 401 response immediately
-                Box::pin(std::future::ready(Ok(auth_error.into_response())))
-            }
-        }
-    }
-}
-
-// Authorization Middleware Layer
-//
-
-/// Pluggable authorization backend trait.
-///
-/// Implement this trait to integrate any authorization mechanism:
-/// RBAC, ABAC, policy engines (OPA, Casbin), custom logic.
-///
-/// The middleware passes the full request [`Parts`] so the authorizer can
-/// inspect the URI path, method, headers, or any other request metadata.
-pub trait Authorizer<I>: Clone + Send + Sync + 'static {
-    /// Check if identity is authorized for the given request.
-    ///
-    /// # Arguments
-    /// * `identity` - The authenticated identity
-    /// * `parts` - The request head (method, URI, headers, extensions, ...)
-    ///
-    /// # Errors
-    ///
-    /// Returns [`AuthError::Unauthorized`] if authorization is denied.
-    fn authorize(&self, identity: &I, parts: &Parts) -> Result<(), AuthError>;
-}
-
-/// No-op authorizer that allows all authenticated requests.
-#[derive(Clone, Debug, Default)]
-pub struct AllowAll;
-
-impl<I: Sync> Authorizer<I> for AllowAll {
-    fn authorize(&self, _: &I, _: &Parts) -> Result<(), AuthError> {
-        Ok(())
-    }
-}
-
-/// Tower layer that applies authorization middleware.
-#[derive(Clone)]
-pub struct AuthorizationLayer<Z, I> {
-    authorizer: Z,
-    _identity: PhantomData<I>,
-}
-
-impl<Z, I> AuthorizationLayer<Z, I> {
-    /// Create a new authorization layer.
-    pub fn new(authorizer: Z) -> Self {
-        Self {
-            authorizer,
-            _identity: PhantomData,
-        }
-    }
-}
-
-impl<S, Z: Clone, I> Layer<S> for AuthorizationLayer<Z, I> {
-    type Service = AuthorizationMiddleware<S, Z, I>;
-
-    fn layer(&self, inner: S) -> Self::Service {
-        AuthorizationMiddleware {
-            inner,
-            authorizer: self.authorizer.clone(),
-            _identity: PhantomData,
-        }
-    }
-}
-
-/// Authorization middleware service.
-#[derive(Clone)]
-pub struct AuthorizationMiddleware<S, Z, I> {
-    inner: S,
-    authorizer: Z,
-    _identity: PhantomData<I>,
-}
-
-impl<S, Z, I> Service<http::Request<Body>> for AuthorizationMiddleware<S, Z, I>
-where
-    S: Service<http::Request<Body>, Response = Response>,
-    S::Future: Send + 'static,
-    S::Error: Send + 'static,
-    Z: Authorizer<I>,
-    I: Clone + Send + Sync + 'static,
-{
-    type Response = Response;
-    type Error = S::Error;
-    type Future = Pin<Box<dyn Future<Output = Result<Response, S::Error>> + Send>>;
-
-    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        self.inner.poll_ready(cx)
-    }
-
-    fn call(&mut self, req: http::Request<Body>) -> Self::Future {
-        let (parts, body) = req.into_parts();
-
-        // Get identity from extensions (set by AuthenticationLayer)
-        let Some(identity) = parts.extensions.get::<I>() else {
-            return Box::pin(std::future::ready(Ok(
-                AuthError::Unauthenticated.into_response()
-            )));
-        };
-
-        // Check authorization
-        match self.authorizer.authorize(identity, &parts) {
-            Ok(()) => {
-                let req = http::Request::from_parts(parts, body);
-                Box::pin(self.inner.call(req))
-            }
-            Err(auth_error) => Box::pin(std::future::ready(Ok(auth_error.into_response()))),
-        }
+    fn from_request_parts(
+        parts: &mut Parts,
+        _: &S,
+    ) -> impl Future<Output = Result<Option<Self>, Self::Rejection>> + Send {
+        std::future::ready(Ok(parts.extensions.get::<Self>().cloned()))
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use axum::{Router, http::Request, routing::get};
+    use axum::body::Body;
+    use axum::routing::get;
     use http_body_util::BodyExt;
     use tower::ServiceExt;
 
     use super::*;
 
-    /// Test that `NoAuth` authenticator with `AllowAll` policy allows all requests.
-    #[tokio::test]
-    async fn test_noauth_allows_all() {
-        let app = Router::new()
-            .route("/test", get(|| async { "ok" }))
-            .layer(AuthorizationLayer::<AllowAll, ()>::new(AllowAll))
-            .layer(AuthenticationLayer::new(NoAuth));
+    struct Header;
 
-        let response = app
-            .oneshot(Request::get("/test").body(Body::empty()).unwrap())
-            .await
-            .unwrap();
-
-        assert!(response.status().is_success());
-    }
-
-    #[derive(Clone)]
-    struct RejectAll;
-
-    impl Authorizer<()> for RejectAll {
-        fn authorize(&self, (): &(), _: &Parts) -> Result<(), AuthError> {
-            Err(AuthError::unauthorized())
+    impl Authenticator for Header {
+        fn authenticate(&self, parts: &Parts) -> Result<Option<Principal>, AuthError> {
+            match parts.headers.get("x-user").map(HeaderValue::to_str) {
+                None => Ok(None),
+                Some(Ok("bad") | Err(_)) => Err(AuthError::InvalidToken),
+                Some(Ok(subject)) => Ok(Some(Principal {
+                    subject: subject.to_owned(),
+                    roles: Vec::new(),
+                    scopes: Vec::new(),
+                    claims: serde_json::Map::new(),
+                })),
+            }
         }
     }
 
-    /// Test that a denied authorization returns 403 with structured JSON error.
-    #[tokio::test]
-    async fn test_authorization_denied_returns_403_json() {
-        let app = Router::new()
-            .route("/test", get(|| async { "unreachable" }))
-            .layer(AuthorizationLayer::<RejectAll, ()>::new(RejectAll))
-            .layer(AuthenticationLayer::new(NoAuth));
+    struct Only(&'static str);
 
-        let response = app
-            .oneshot(Request::get("/test").body(Body::empty()).unwrap())
+    impl Authorizer for Only {
+        fn authorize(&self, access: &Access<'_>) -> bool {
+            access.principal.is_some_and(|p| p.subject == self.0)
+        }
+    }
+
+    fn app(auth: Auth) -> Router {
+        let router = Router::new().route(
+            "/items/{item_id}",
+            get(|principal: Option<Principal>| async move {
+                principal.map(|p| p.subject).unwrap_or_default()
+            }),
+        );
+        auth.apply(router, None)
+    }
+
+    async fn get_as(app: Router, user: Option<&str>) -> Response {
+        let mut request = http::Request::get("/items/1");
+        if let Some(user) = user {
+            request = request.header("x-user", user);
+        }
+        app.oneshot(request.body(Body::empty()).unwrap())
             .await
-            .unwrap();
+            .unwrap()
+    }
 
+    #[tokio::test]
+    async fn allowed_principal_reaches_the_handler() {
+        let response = get_as(app(Auth::new(Header, Only("alice"))), Some("alice")).await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        assert_eq!(&body[..], b"alice");
+    }
+
+    #[tokio::test]
+    async fn denied_principal_is_forbidden() {
+        let response = get_as(app(Auth::new(Header, Only("alice"))), Some("bob")).await;
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
-
         let body = response.into_body().collect().await.unwrap().to_bytes();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["error_code"], "insufficient-access-rights");
-        assert_eq!(json["message"], "insufficient access rights");
     }
 
-    #[derive(Clone)]
-    struct ExtractBearer;
-
-    #[derive(Clone, Debug)]
-    struct BearerClaims;
-
-    impl Authenticator for ExtractBearer {
-        type Identity = BearerClaims;
-
-        fn authenticate(&self, parts: &Parts) -> Result<BearerClaims, AuthError> {
-            parts
-                .headers
-                .get("authorization")
-                .and_then(|v| v.to_str().ok())
-                .and_then(|s| s.strip_prefix("Bearer "))
-                .ok_or(AuthError::Unauthenticated)?;
-
-            Ok(BearerClaims)
-        }
-    }
-
-    /// Test bearer token extraction using middleware layers.
     #[tokio::test]
-    async fn test_bearer_authentication() {
-        let app = Router::new()
-            .route("/test", get(|| async { "authenticated" }))
-            .layer(AuthorizationLayer::<AllowAll, BearerClaims>::new(AllowAll))
-            .layer(AuthenticationLayer::new(ExtractBearer));
-
-        // With token - should succeed
-        let response = app
-            .clone()
-            .oneshot(
-                Request::get("/test")
-                    .header("authorization", "Bearer my-token")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        assert!(response.status().is_success());
-
-        // Without token - should get 401 with empty body
-        let response = app
-            .oneshot(Request::get("/test").body(Body::empty()).unwrap())
-            .await
-            .unwrap();
-
+    async fn denied_anonymous_caller_is_challenged() {
+        let response = get_as(app(Auth::new(Header, Only("alice"))), None).await;
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        assert_eq!(response.headers()[header::WWW_AUTHENTICATE], "Bearer");
         let body = response.into_body().collect().await.unwrap().to_bytes();
-        assert!(body.is_empty(), "401 response must have no body");
+        assert!(body.is_empty());
     }
 
-    /// Test that `Identity<T>` extractor retrieves the identity from extensions.
     #[tokio::test]
-    async fn test_identity_extractor() {
-        async fn handler(Identity(claims): Identity<BearerClaims>) -> String {
-            format!("{claims:?}")
-        }
-
-        let app = Router::new()
-            .route("/test", get(handler))
-            .layer(AuthenticationLayer::new(ExtractBearer));
-
-        let response = app
-            .oneshot(
-                Request::get("/test")
-                    .header("authorization", "Bearer my-token")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        assert!(response.status().is_success());
-    }
-
-    /// Test that `Identity<T>` returns 401 when no identity is in extensions.
-    #[tokio::test]
-    async fn test_identity_extractor_missing() {
-        async fn handler(Identity(_claims): Identity<BearerClaims>) -> &'static str {
-            "unreachable"
-        }
-
-        // No authentication layer - nothing inserts BearerClaims into extensions.
-        let app = Router::new().route("/test", get(handler));
-
-        let response = app
-            .oneshot(Request::get("/test").body(Body::empty()).unwrap())
-            .await
-            .unwrap();
-
+    async fn rejected_credentials_are_named_in_the_challenge() {
+        let response = get_as(app(Auth::new(Header, Only("alice"))), Some("bad")).await;
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        assert_eq!(
+            response.headers()[header::WWW_AUTHENTICATE],
+            r#"Bearer error="invalid_token""#
+        );
     }
 
-    /// Test that `Identity<()>` works with `NoAuth`.
     #[tokio::test]
-    async fn test_identity_extractor_noauth() {
-        async fn handler(Identity(()): Identity<()>) -> &'static str {
-            "ok"
+    async fn authenticated_allows_any_principal() {
+        let app = app(Auth::new(Header, Authenticated));
+        assert_eq!(
+            get_as(app.clone(), Some("bob")).await.status(),
+            StatusCode::OK
+        );
+        assert_eq!(get_as(app, None).await.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn anonymous_callers_reach_handlers_the_policy_allows() {
+        struct Everyone;
+        impl Authorizer for Everyone {
+            fn authorize(&self, _: &Access<'_>) -> bool {
+                true
+            }
         }
+        let response = get_as(app(Auth::new(Header, Everyone)), None).await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        assert!(body.is_empty(), "anonymous callers have no principal");
+    }
 
-        let app = Router::new()
-            .route("/test", get(handler))
-            .layer(AuthenticationLayer::new(NoAuth));
-
-        let response = app
-            .oneshot(Request::get("/test").body(Body::empty()).unwrap())
+    #[tokio::test]
+    async fn head_is_authorized_as_get() {
+        struct GetOnly;
+        impl Authorizer for GetOnly {
+            fn authorize(&self, access: &Access<'_>) -> bool {
+                access.method == "GET"
+            }
+        }
+        let request = http::Request::head("/items/1").body(Body::empty()).unwrap();
+        let response = app(Auth::new(Header, GetOnly))
+            .oneshot(request)
             .await
             .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
 
-        assert!(response.status().is_success());
+    #[test]
+    fn routes_are_relative_to_the_base() {
+        assert_eq!(relative("/sovd/v1/components", "/sovd"), "/v1/components");
+        assert_eq!(relative("/sovd/v1/components", ""), "/sovd/v1/components");
+        assert_eq!(relative("/sovdx/v1", "/sovd"), "/sovdx/v1");
+        assert_eq!(relative("/ui/{*rest}", "/sovd"), "/ui/{*rest}");
+    }
+
+    #[tokio::test]
+    async fn principal_extractor_rejects_without_auth() {
+        let app = Router::new().route("/", get(|_: Principal| async {}));
+        let response = app
+            .oneshot(http::Request::get("/").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
 }

@@ -310,11 +310,11 @@ pub struct AuthArgs {
     )]
     pub jwt_issuer: String,
 
-    /// Rego policy file.
-    #[arg(long = "auth-policy", value_name = "FILE")]
+    /// Rego policy file defining `data.sovd.authz.allow`.
+    #[arg(long = "auth-policy", value_name = "FILE", requires = "jwt_key")]
     pub policy: Vec<PathBuf>,
 
     /// JSON data file for Rego policies.
-    #[arg(long = "auth-policy-data", value_name = "FILE")]
+    #[arg(long = "auth-policy-data", value_name = "FILE", requires = "policy")]
     pub policy_data: Vec<PathBuf>,
 }
