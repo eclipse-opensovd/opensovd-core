@@ -74,7 +74,10 @@ where
 async fn bulk_data_categories(
     State(topology): State<Topology>,
     OriginalUri(uri): OriginalUri,
-    Path((entity_collection, entity_id)): Path<(String, String)>,
+    WithRejection(Path((entity_collection, entity_id)), _): WithRejection<
+        Path<(String, String)>,
+        Error,
+    >,
     WithRejection(Query(query), _): WithRejection<Query<BulkDataCategoriesQuery>, Error>,
 ) -> Result<Json<Response<AvailableBulkDataCategories>>> {
     let topo = topology.read().await;
@@ -105,7 +108,10 @@ fn category_filter(query: &BulkDataDescriptorsQuery) -> CategoryFilter {
 async fn bulk_data_descriptors(
     State(topology): State<Topology>,
     OriginalUri(uri): OriginalUri,
-    Path((entity_collection, entity_id, category)): Path<(String, String, String)>,
+    WithRejection(Path((entity_collection, entity_id, category)), _): WithRejection<
+        Path<(String, String, String)>,
+        Error,
+    >,
     WithRejection(Query(query), _): WithRejection<Query<BulkDataDescriptorsQuery>, Error>,
 ) -> Result<Json<Response<BulkDataMetadata>>> {
     let topo = topology.read().await;
@@ -201,7 +207,10 @@ impl Header for ContentDisposition {
 async fn upload_bulk_data(
     State(topology): State<Topology>,
     parts: Parts,
-    Path((entity_collection, entity_id, category)): Path<(String, String, String)>,
+    WithRejection(Path((entity_collection, entity_id, category)), _): WithRejection<
+        Path<(String, String, String)>,
+        Error,
+    >,
     WithRejection(TypedHeader(content_type), _): WithRejection<TypedHeader<ContentType>, Error>,
     WithRejection(TypedHeader(content_disposition), _): WithRejection<
         TypedHeader<ContentDisposition>,
@@ -323,7 +332,10 @@ async fn upload_bulk_data(
 async fn delete_bulk_data_category(
     State(topology): State<Topology>,
     OriginalUri(uri): OriginalUri,
-    Path((entity_collection, entity_id, category)): Path<(String, String, String)>,
+    WithRejection(Path((entity_collection, entity_id, category)), _): WithRejection<
+        Path<(String, String, String)>,
+        Error,
+    >,
 ) -> Result<Json<Response<DeleteBulkDataResult>>> {
     let topo = topology.read().await;
     let provider = get_provider(topo, &entity_collection, &entity_id, &uri)?;
@@ -353,12 +365,10 @@ async fn delete_bulk_data_category(
 async fn download_bulk_data(
     State(topology): State<Topology>,
     OriginalUri(uri): OriginalUri,
-    Path((entity_collection, entity_id, category, bulk_data_id)): Path<(
-        String,
-        String,
-        String,
-        String,
-    )>,
+    WithRejection(Path((entity_collection, entity_id, category, bulk_data_id)), _): WithRejection<
+        Path<(String, String, String, String)>,
+        Error,
+    >,
 ) -> Result<impl IntoResponse> {
     let topo = topology.read().await;
     let provider = get_provider(topo, &entity_collection, &entity_id, &uri)?;
@@ -385,12 +395,10 @@ async fn download_bulk_data(
 async fn delete_bulk_data(
     State(topology): State<Topology>,
     OriginalUri(uri): OriginalUri,
-    Path((entity_collection, entity_id, category, bulk_data_id)): Path<(
-        String,
-        String,
-        String,
-        String,
-    )>,
+    WithRejection(Path((entity_collection, entity_id, category, bulk_data_id)), _): WithRejection<
+        Path<(String, String, String, String)>,
+        Error,
+    >,
 ) -> Result<StatusCode> {
     let topo = topology.read().await;
     let provider = get_provider(topo, &entity_collection, &entity_id, &uri)?;

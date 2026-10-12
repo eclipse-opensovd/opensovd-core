@@ -70,7 +70,7 @@ pub(super) async fn app_list(
 /// Returns the capabilities of a specific app.
 pub(super) async fn app_capabilities(
     State(topology): State<Topology>,
-    Path(app_id): Path<String>,
+    WithRejection(Path(app_id), _): WithRejection<Path<String>, Error>,
     parts: Parts,
     WithRejection(Query(query), _): WithRejection<Query<EntityCapabilitiesQuery>, Error>,
 ) -> Result<Json<Response<EntityCapabilities>>> {

@@ -6,7 +6,8 @@
 //! Defines error types that convert to SOVD-compliant HTTP error responses.
 
 use axum::{
-    extract::rejection::JsonRejection,
+    extract::path::ErrorKind,
+    extract::rejection::{JsonRejection, PathRejection},
     http::{StatusCode, header},
     response::{IntoResponse, Json, Response},
 };
@@ -28,6 +29,8 @@ pub enum Error {
     Data(#[from] DataError),
     #[error(transparent)]
     BulkData(#[from] BulkDataError),
+    #[error("{0}")]
+    BadPath(#[from] PathRejection),
     #[error("{0}")]
     BadQuery(#[from] QueryRejection),
     #[error("{0}")]
@@ -75,6 +78,17 @@ fn body_rejection(rejection: &JsonRejection) -> (StatusCode, ErrorDetails) {
             GenericError::new(ErrorCode::IncompleteRequest, message).into(),
         ),
     }
+}
+
+/// The message for a path that does not parse, naming a param that is not
+/// UTF-8.
+fn bad_path(rejection: &PathRejection) -> String {
+    if let PathRejection::FailedToDeserializePathParams(e) = rejection
+        && let ErrorKind::InvalidUtf8InPathParam { key } = e.kind()
+    {
+        return format!("Invalid UTF-8 in `{key}`");
+    }
+    "Bad request path".to_owned()
 }
 
 impl IntoResponse for Error {
@@ -150,6 +164,10 @@ impl IntoResponse for Error {
                     GenericError::new(ErrorCode::ErrorResponse, message).into(),
                 )
             }
+            Self::BadPath(rejection) => (
+                StatusCode::BAD_REQUEST,
+                GenericError::new(ErrorCode::IncompleteRequest, bad_path(rejection)).into(),
+            ),
             Self::BadQuery(_) => (
                 StatusCode::BAD_REQUEST,
                 GenericError::new(ErrorCode::IncompleteRequest, "Bad request").into(),

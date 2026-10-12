@@ -69,7 +69,7 @@ where
 async fn component_data_categories(
     State(topology): State<Topology>,
     OriginalUri(uri): OriginalUri,
-    Path(component_id): Path<String>,
+    WithRejection(Path(component_id), _): WithRejection<Path<String>, Error>,
 ) -> Result<Json<Response<DataCategories>>> {
     let topo = topology.read().await;
     let entity = topo
@@ -101,7 +101,7 @@ async fn component_data_categories(
 async fn component_data_groups(
     State(topology): State<Topology>,
     OriginalUri(uri): OriginalUri,
-    Path(component_id): Path<String>,
+    WithRejection(Path(component_id), _): WithRejection<Path<String>, Error>,
     WithRejection(Query(query), _): WithRejection<Query<DataGroupsQuery>, Error>,
 ) -> Result<Json<Response<DataGroups>>> {
     let topo = topology.read().await;
@@ -210,7 +210,7 @@ fn read_response_schema(id: &str, mut data: Value) -> Value {
 async fn component_data_list(
     State(topology): State<Topology>,
     OriginalUri(uri): OriginalUri,
-    Path(component_id): Path<String>,
+    WithRejection(Path(component_id), _): WithRejection<Path<String>, Error>,
     WithRejection(Query(query), _): WithRejection<Query<DataQuery>, Error>,
 ) -> Result<Json<Response<DataList>>> {
     let topo = topology.read().await;
@@ -250,7 +250,7 @@ async fn component_data_list(
 async fn component_data_read(
     State(topology): State<Topology>,
     OriginalUri(uri): OriginalUri,
-    Path((component_id, data_id)): Path<(String, String)>,
+    WithRejection(Path((component_id, data_id)), _): WithRejection<Path<(String, String)>, Error>,
     WithRejection(Query(query), _): WithRejection<Query<ReadDataQuery>, Error>,
 ) -> Result<Json<ReadResponse>> {
     let topo = topology.read().await;
@@ -283,7 +283,7 @@ async fn component_data_read(
 async fn component_data_write(
     State(topology): State<Topology>,
     OriginalUri(uri): OriginalUri,
-    Path((component_id, data_id)): Path<(String, String)>,
+    WithRejection(Path((component_id, data_id)), _): WithRejection<Path<(String, String)>, Error>,
     WithRejection(Json(body), _): WithRejection<Json<WriteRequest>, Error>,
 ) -> Result<StatusCode> {
     let topo = topology.read().await;
@@ -304,7 +304,7 @@ async fn component_data_write(
 async fn app_data_categories(
     State(topology): State<Topology>,
     OriginalUri(uri): OriginalUri,
-    Path(app_id): Path<String>,
+    WithRejection(Path(app_id), _): WithRejection<Path<String>, Error>,
 ) -> Result<Json<Response<DataCategories>>> {
     let topo = topology.read().await;
     let entity = topo
@@ -336,7 +336,7 @@ async fn app_data_categories(
 async fn app_data_groups(
     State(topology): State<Topology>,
     OriginalUri(uri): OriginalUri,
-    Path(app_id): Path<String>,
+    WithRejection(Path(app_id), _): WithRejection<Path<String>, Error>,
     WithRejection(Query(query), _): WithRejection<Query<DataGroupsQuery>, Error>,
 ) -> Result<Json<Response<DataGroups>>> {
     let topo = topology.read().await;
@@ -377,7 +377,7 @@ async fn app_data_groups(
 async fn app_data_list(
     State(topology): State<Topology>,
     OriginalUri(uri): OriginalUri,
-    Path(app_id): Path<String>,
+    WithRejection(Path(app_id), _): WithRejection<Path<String>, Error>,
     WithRejection(Query(query), _): WithRejection<Query<DataQuery>, Error>,
 ) -> Result<Json<Response<DataList>>> {
     let topo = topology.read().await;
@@ -417,7 +417,7 @@ async fn app_data_list(
 async fn app_data_read(
     State(topology): State<Topology>,
     OriginalUri(uri): OriginalUri,
-    Path((app_id, data_id)): Path<(String, String)>,
+    WithRejection(Path((app_id, data_id)), _): WithRejection<Path<(String, String)>, Error>,
     WithRejection(Query(query), _): WithRejection<Query<ReadDataQuery>, Error>,
 ) -> Result<Json<ReadResponse>> {
     let topo = topology.read().await;
@@ -450,7 +450,7 @@ async fn app_data_read(
 async fn app_data_write(
     State(topology): State<Topology>,
     OriginalUri(uri): OriginalUri,
-    Path((app_id, data_id)): Path<(String, String)>,
+    WithRejection(Path((app_id, data_id)), _): WithRejection<Path<(String, String)>, Error>,
     WithRejection(Json(body), _): WithRejection<Json<WriteRequest>, Error>,
 ) -> Result<StatusCode> {
     let topo = topology.read().await;

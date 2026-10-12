@@ -70,7 +70,7 @@ pub(super) async fn component_list(
 /// Returns the capabilities of a specific component.
 pub(super) async fn component_capabilities(
     State(topology): State<Topology>,
-    Path(component_id): Path<String>,
+    WithRejection(Path(component_id), _): WithRejection<Path<String>, Error>,
     parts: Parts,
     WithRejection(Query(query), _): WithRejection<Query<EntityCapabilitiesQuery>, Error>,
 ) -> Result<Json<Response<EntityCapabilities>>> {
@@ -140,7 +140,7 @@ pub(super) async fn component_capabilities(
 /// Returns the list of apps running on a specific component.
 pub(super) async fn component_hosts(
     State(topology): State<Topology>,
-    Path(component_id): Path<String>,
+    WithRejection(Path(component_id), _): WithRejection<Path<String>, Error>,
     parts: Parts,
     WithRejection(Query(query), _): WithRejection<Query<EntitiesQuery>, Error>,
 ) -> Result<Json<Response<Entities>>> {

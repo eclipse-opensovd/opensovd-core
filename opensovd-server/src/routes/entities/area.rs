@@ -71,7 +71,7 @@ pub(super) async fn area_list(
 /// Returns the capabilities of a specific area.
 pub(super) async fn area_capabilities(
     State(topology): State<Topology>,
-    Path(area_id): Path<String>,
+    WithRejection(Path(area_id), _): WithRejection<Path<String>, Error>,
     parts: Parts,
     WithRejection(Query(query), _): WithRejection<Query<EntityCapabilitiesQuery>, Error>,
 ) -> Result<Json<Response<EntityCapabilities>>> {
@@ -108,7 +108,7 @@ pub(super) async fn area_capabilities(
 /// Returns the list of components and apps contained in a specific area.
 pub(super) async fn area_contains(
     State(topology): State<Topology>,
-    Path(area_id): Path<String>,
+    WithRejection(Path(area_id), _): WithRejection<Path<String>, Error>,
     parts: Parts,
     WithRejection(Query(query), _): WithRejection<Query<EntitiesQuery>, Error>,
 ) -> Result<Json<Response<Entities>>> {

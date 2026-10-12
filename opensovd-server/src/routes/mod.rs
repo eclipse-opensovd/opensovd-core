@@ -133,3 +133,85 @@ where
 pub(crate) async fn not_found(uri: Uri) -> error::Error {
     error::Error::ResourceNotFound(uri.path().to_string())
 }
+
+#[cfg(test)]
+mod tests {
+    use axum::body::Body;
+    use axum::http::Request;
+    use http_body_util::BodyExt;
+    use opensovd_mocks::create_mock_topology;
+    use tower::ServiceExt;
+
+    use super::{BaseUri, router};
+
+    #[tokio::test]
+    async fn malformed_path_parameters_are_rejected_as_json() {
+        let base_uri = BaseUri {
+            scheme: "http".to_owned(),
+            path: String::new(),
+        };
+        let app = router::<()>(None, create_mock_topology().await, base_uri);
+
+        for (method, path) in [
+            ("GET", "/v1/areas/%FF"),
+            ("GET", "/v1/areas/%FF/contains"),
+            ("GET", "/v1/apps/%FF"),
+            ("GET", "/v1/components/%FF"),
+            ("GET", "/v1/components/%FF/hosts"),
+            ("GET", "/v1/components/%FF/data-categories"),
+            ("GET", "/v1/components/%FF/data-groups"),
+            ("GET", "/v1/components/%FF/data"),
+            ("GET", "/v1/components/%FF/data/x"),
+            ("PUT", "/v1/components/%FF/data/x"),
+            ("GET", "/v1/apps/%FF/data-categories"),
+            ("GET", "/v1/apps/%FF/data-groups"),
+            ("GET", "/v1/apps/%FF/data"),
+            ("GET", "/v1/apps/%FF/data/x"),
+            ("PUT", "/v1/apps/%FF/data/x"),
+            ("GET", "/v1/components/%FF/bulk-data"),
+            ("GET", "/v1/components/%FF/bulk-data/c"),
+            ("POST", "/v1/components/%FF/bulk-data/c"),
+            ("DELETE", "/v1/components/%FF/bulk-data/c"),
+            ("GET", "/v1/components/%FF/bulk-data/c/x"),
+            ("DELETE", "/v1/components/%FF/bulk-data/c/x"),
+        ] {
+            let request = Request::builder()
+                .method(method)
+                .uri(path)
+                .body(Body::empty())
+                .unwrap();
+            let response = app.clone().oneshot(request).await.unwrap();
+            assert_eq!(response.status(), 400, "{method} {path}");
+
+            let body = response.into_body().collect().await.unwrap().to_bytes();
+            let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+            assert_eq!(json["error_code"], "incomplete-request", "{method} {path}");
+        }
+    }
+
+    #[tokio::test]
+    async fn params_that_are_not_utf8_are_named() {
+        let base_uri = BaseUri {
+            scheme: "http".to_owned(),
+            path: String::new(),
+        };
+        let app = router::<()>(None, create_mock_topology().await, base_uri);
+
+        for (path, param) in [
+            ("/v1/components/%FF", "component_id"),
+            ("/v1/components/ecu/data/%FF", "data_id"),
+        ] {
+            let request = Request::builder().uri(path).body(Body::empty()).unwrap();
+            let response = app.clone().oneshot(request).await.unwrap();
+            assert_eq!(response.status(), 400, "{path}");
+
+            let body = response.into_body().collect().await.unwrap().to_bytes();
+            let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+            assert_eq!(
+                json["message"],
+                format!("Invalid UTF-8 in `{param}`"),
+                "{path}"
+            );
+        }
+    }
+}
