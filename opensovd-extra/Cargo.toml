@@ -14,7 +14,7 @@ categories.workspace = true
 
 [features]
 unit = ["dep:serde"]
-auth = ["dep:jsonwebtoken", "dep:regorus", "dep:serde_json", "dep:http", "dep:tracing", "dep:opensovd-server"]
+auth = ["dep:aws-lc-rs", "dep:jsonwebtoken", "dep:regorus", "dep:serde_json", "dep:http", "dep:tracing", "dep:opensovd-server"]
 tls = ["dep:rustls", "dep:thiserror"]
 trace = ["dep:axum", "dep:http", "dep:tower", "dep:tower-http", "dep:tracing"]
 mdns = ["dep:mdns-sd", "dep:if-addrs", "dep:rustix", "dep:thiserror", "dep:tokio", "dep:tracing"]
@@ -22,6 +22,7 @@ mdns = ["dep:mdns-sd", "dep:if-addrs", "dep:rustix", "dep:thiserror", "dep:tokio
 [dependencies]
 opensovd-server = { workspace = true, optional = true }
 axum = { workspace = true, optional = true, features = ["matched-path"] }
+aws-lc-rs = { workspace = true, optional = true }
 jsonwebtoken = { workspace = true, optional = true }
 regorus = { workspace = true, optional = true }
 serde = { workspace = true, optional = true, features = ["derive", "std"] }
@@ -41,7 +42,7 @@ rustix = { workspace = true, optional = true, features = ["std", "system"] }
 
 [dev-dependencies]
 serde_json = { workspace = true, features = ["std"] }
-tokio = { workspace = true, features = ["macros", "rt"] }
+tokio = { workspace = true, features = ["io-util", "macros", "net", "rt"] }
 bytes = { workspace = true }
 http-body = { workspace = true }
 http-body-util = { workspace = true }
@@ -51,9 +52,12 @@ tracing-subscriber = { workspace = true, features = ["registry", "std"] }
 http = { workspace = true }
 aws-lc-rs = { workspace = true }
 base64 = { workspace = true }
-rand = { workspace = true, features = ["std", "std_rng", "thread_rng"] }
 tempfile = { workspace = true }
 rcgen = { workspace = true }
+
+[[test]]
+name = "auth_trace"
+required-features = ["auth", "trace"]
 
 [lints]
 workspace = true

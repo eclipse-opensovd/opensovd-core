@@ -8,12 +8,12 @@ mod cors;
 mod serve_dir;
 
 use std::net::SocketAddr;
+use std::path::Path;
 use std::process::ExitCode;
 
 use anyhow::Context;
-use base64::Engine;
 use opensovd_core::Topology;
-use opensovd_extra::{JwtAlgorithm, JwtAuthenticator, RegorusAuthorizer};
+use opensovd_extra::{JwtAuthenticator, RegorusAuthorizer};
 #[cfg(feature = "mock")]
 use opensovd_mocks::create_mock_topology;
 use opensovd_server::{Auth, Authenticated, Server};
@@ -68,10 +68,10 @@ async fn run(mut cli: cli::Cli) -> anyhow::Result<()> {
 }
 
 fn create_auth(args: &mut cli::AuthArgs) -> anyhow::Result<Option<Auth>> {
-    let Some(key) = args.jwt_key.take() else {
+    let Some(jwks) = args.jwks.take() else {
         return Ok(None);
     };
-    let jwt = create_jwt_authenticator(&key, args)?;
+    let jwt = create_jwt_authenticator(&jwks, args)?;
     Ok(Some(if args.policy.is_empty() {
         Auth::new(jwt, Authenticated)
     } else {
@@ -80,21 +80,39 @@ fn create_auth(args: &mut cli::AuthArgs) -> anyhow::Result<Option<Auth>> {
 }
 
 fn create_jwt_authenticator(
-    secret: &str,
+    jwks: &Path,
     auth: &mut cli::AuthArgs,
 ) -> anyhow::Result<JwtAuthenticator> {
-    let algo: JwtAlgorithm = auth
-        .jwt_algo
-        .parse()
-        .map_err(|e: String| anyhow::anyhow!(e))
-        .with_context(|| format!("invalid --auth-jwt-algo {:?}", auth.jwt_algo))?;
-    let key = base64::engine::general_purpose::STANDARD
-        .decode(secret)
-        .context("--auth-jwt-secret must be base64-encoded")?;
-    let issuer = std::mem::take(&mut auth.jwt_issuer);
+    let text = std::fs::read_to_string(jwks)
+        .with_context(|| format!("failed to read --auth-jwks {}", jwks.display()))?;
+    let invalid = || format!("invalid --auth-jwks {}", jwks.display());
+    let set: serde_json::Value = serde_json::from_str(&text).with_context(invalid)?;
+    if let Some(kid) = private_key(&set) {
+        anyhow::bail!("--auth-jwks {} holds the private key {kid}", jwks.display());
+    }
+    let set = serde_json::from_value(set).with_context(invalid)?;
+    let issuer = auth
+        .issuer
+        .take()
+        .context("--auth-jwks requires --auth-issuer")?;
+    let audience = std::mem::take(&mut auth.audience);
+    let authenticator = JwtAuthenticator::new(&set, &issuer, &audience)
+        .map_err(anyhow::Error::from_boxed)
+        .with_context(invalid)?;
 
-    tracing::info!(target: TARGET, %algo, %issuer, "JWT authentication enabled");
-    Ok(JwtAuthenticator::new(algo, &key, &issuer))
+    tracing::info!(target: TARGET, jwks = %jwks.display(), %issuer, ?audience, "JWT authentication enabled");
+    Ok(authenticator)
+}
+
+/// The `kid` of the first key in `jwks` with private key material.
+fn private_key(jwks: &serde_json::Value) -> Option<&str> {
+    let keys = jwks.get("keys")?.as_array()?;
+    let key = keys.iter().find(|key| key.get("d").is_some())?;
+    Some(
+        key.get("kid")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("without kid"),
+    )
 }
 
 fn create_rego_authorizer(auth: &mut cli::AuthArgs) -> anyhow::Result<RegorusAuthorizer> {

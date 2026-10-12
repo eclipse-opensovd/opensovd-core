@@ -26,7 +26,7 @@ impl Authenticator for ExtractBearer {
         let role = match header.to_str() {
             Ok("Bearer admin-token") => "admin",
             Ok("Bearer user-token") => "user",
-            _ => return Err(AuthError::InvalidToken),
+            _ => return Err(AuthError::InvalidToken("unknown token".into())),
         };
         Ok(Some(Principal {
             subject: format!("{role}@example.com"),

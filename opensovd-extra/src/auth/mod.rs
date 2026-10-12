@@ -6,5 +6,5 @@
 pub mod jwt;
 pub mod rego;
 
-pub use jwt::{JwtAlgorithm, JwtAuthenticator};
+pub use jwt::JwtAuthenticator;
 pub use rego::RegorusAuthorizer;

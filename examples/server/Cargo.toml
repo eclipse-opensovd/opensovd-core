@@ -35,6 +35,7 @@ tls = ["opensovd-server/tls", "opensovd-extra/tls"]
 
 [dependencies]
 async-trait = { workspace = true }
+aws-lc-rs = { workspace = true }
 bytes = { workspace = true }
 chrono = { workspace = true }
 futures = { workspace = true, features = ["std", "async-await"] }

@@ -7,6 +7,7 @@ use std::path::PathBuf;
 
 #[cfg(feature = "tls")]
 use clap::ValueEnum;
+use clap::builder::NonEmptyStringValueParser;
 use clap::{Args, CommandFactory, FromArgMatches, Parser};
 
 pub const ABOUT: &str = "OpenSOVD Gateway Server";
@@ -286,35 +287,51 @@ fn check_mdns(
 #[derive(Args)]
 #[command(next_help_heading = "Authentication & Authorization")]
 pub struct AuthArgs {
-    /// Base64-encoded key for JWT validation (HMAC secret or RSA public key in PKCS#1 DER).
+    /// JSON Web Key Set with the public keys that sign tokens; a token names its key with `kid`.
     #[arg(
-        long = "auth-jwt-secret",
-        value_name = "SECRET",
-        env = "SOVD_JWT_SECRET"
+        long = "auth-jwks",
+        value_name = "FILE",
+        env = "SOVD_AUTH_JWKS",
+        requires = "issuer"
     )]
-    pub jwt_key: Option<String>,
+    pub jwks: Option<PathBuf>,
 
-    /// JWT signing algorithm (HS512 or RS512). Defaults to HS512.
+    /// The `iss` (issuer) claim tokens must carry.
     #[arg(
-        long = "auth-jwt-algo",
-        value_name = "ALGORITHM",
-        default_value = "HS512"
-    )]
-    pub jwt_algo: String,
-
-    /// Expected `iss` (issuer) claim in JWT tokens.
-    #[arg(
-        long = "auth-jwt-issuer",
+        long = "auth-issuer",
         value_name = "ISSUER",
-        default_value = "OpenSOVD"
+        env = "SOVD_AUTH_ISSUER",
+        value_parser = NonEmptyStringValueParser::new(),
+        requires = "jwks"
     )]
-    pub jwt_issuer: String,
+    pub issuer: Option<String>,
+
+    /// An `aud` (audience) claim value accepted in tokens, repeatable; without one, `aud` is not checked.
+    #[arg(
+        long = "auth-audience",
+        value_name = "AUDIENCE",
+        env = "SOVD_AUTH_AUDIENCE",
+        value_delimiter = ',',
+        value_parser = NonEmptyStringValueParser::new(),
+        requires = "jwks"
+    )]
+    pub audience: Vec<String>,
 
     /// Rego policy file defining `data.sovd.authz.allow`.
-    #[arg(long = "auth-policy", value_name = "FILE", requires = "jwt_key")]
+    #[arg(
+        long = "auth-policy",
+        value_name = "FILE",
+        env = "SOVD_AUTH_POLICY",
+        requires = "jwks"
+    )]
     pub policy: Vec<PathBuf>,
 
     /// JSON data file for Rego policies.
-    #[arg(long = "auth-policy-data", value_name = "FILE", requires = "policy")]
+    #[arg(
+        long = "auth-policy-data",
+        value_name = "FILE",
+        env = "SOVD_AUTH_POLICY_DATA",
+        requires = "policy"
+    )]
     pub policy_data: Vec<PathBuf>,
 }

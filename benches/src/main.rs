@@ -7,18 +7,21 @@
 use std::collections::BTreeMap;
 use std::sync::{Arc, LazyLock};
 
+use aws_lc_rs::signature::{ECDSA_P256_SHA256_FIXED_SIGNING, EcdsaKeyPair};
 use criterion::{Criterion, criterion_group, criterion_main};
+use jsonwebtoken::jwk::{Jwk, JwkSet};
 use jsonwebtoken::{Algorithm, EncodingKey, Header, encode};
-use opensovd_extra::{JwtAlgorithm, JwtAuthenticator, RegorusAuthorizer};
+use opensovd_extra::{JwtAuthenticator, RegorusAuthorizer};
 use opensovd_server::{Access, Authenticator, Authorizer, Principal};
 
 const BENCH_ISSUER: &str = "OpenSOVD";
+const KID: &str = "bench";
 
-static HMAC_SECRET: LazyLock<Vec<u8>> = LazyLock::new(|| {
-    use rand::RngExt;
-    let mut secret = vec![0u8; 32];
-    rand::rng().fill(&mut secret[..]);
-    secret
+static SIGNING_KEY: LazyLock<EncodingKey> = LazyLock::new(|| {
+    let pkcs8 = EcdsaKeyPair::generate(&ECDSA_P256_SHA256_FIXED_SIGNING)
+        .and_then(|key| key.to_pkcs8v1())
+        .expect("Failed to generate key");
+    EncodingKey::from_ec_der(pkcs8.as_ref())
 });
 
 const REGO_POLICY_PATH: &str = concat!(
@@ -42,12 +45,9 @@ fn make_token() -> String {
         "roles": ["reader"],
         "scope": "read",
     });
-    encode(
-        &Header::new(Algorithm::HS512),
-        &claims,
-        &EncodingKey::from_secret(&HMAC_SECRET),
-    )
-    .expect("Failed to encode JWT")
+    let mut header = Header::new(Algorithm::ES256);
+    header.kid = Some(KID.to_owned());
+    encode(&header, &claims, &SIGNING_KEY).expect("Failed to encode JWT")
 }
 
 fn request(token: &str) -> http::request::Parts {
@@ -69,7 +69,11 @@ fn access(principal: &Principal) -> Access<'_> {
 }
 
 fn authenticator() -> JwtAuthenticator {
-    JwtAuthenticator::new(JwtAlgorithm::HS512, &HMAC_SECRET, BENCH_ISSUER)
+    let mut jwk =
+        Jwk::from_encoding_key(&SIGNING_KEY, Algorithm::ES256).expect("Failed to build JWK");
+    jwk.common.key_id = Some(KID.to_owned());
+    JwtAuthenticator::new(&JwkSet { keys: vec![jwk] }, BENCH_ISSUER, &[])
+        .expect("Failed to load JWKS")
 }
 
 fn authorizer() -> RegorusAuthorizer {
@@ -84,21 +88,21 @@ fn authenticate(authenticator: &JwtAuthenticator, parts: &http::request::Parts) 
         .expect("No principal")
 }
 
-fn bench_authenticate_hs512(c: &mut Criterion) {
+fn bench_authenticate_es256(c: &mut Criterion) {
     let authenticator = authenticator();
     let parts = request(&make_token());
 
-    c.bench_function("authenticate_hs512", |b| {
+    c.bench_function("authenticate_es256", |b| {
         b.iter(|| authenticate(&authenticator, &parts));
     });
 }
 
-fn bench_authenticate_hs512_authorize_rego(c: &mut Criterion) {
+fn bench_authenticate_es256_authorize_rego(c: &mut Criterion) {
     let authenticator = authenticator();
     let authorizer = authorizer();
     let parts = request(&make_token());
 
-    c.bench_function("authenticate_hs512_authorize_rego", |b| {
+    c.bench_function("authenticate_es256_authorize_rego", |b| {
         b.iter(|| {
             let principal = authenticate(&authenticator, &parts);
             assert!(authorizer.authorize(&access(&principal)));
@@ -106,7 +110,7 @@ fn bench_authenticate_hs512_authorize_rego(c: &mut Criterion) {
     });
 }
 
-fn bench_authenticate_hs512_authorize_rego_concurrent(c: &mut Criterion) {
+fn bench_authenticate_es256_authorize_rego_concurrent(c: &mut Criterion) {
     let rt = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(4)
         .enable_all()
@@ -117,7 +121,7 @@ fn bench_authenticate_hs512_authorize_rego_concurrent(c: &mut Criterion) {
     let authorizer = Arc::new(authorizer());
     let parts = Arc::new(request(&make_token()));
 
-    c.bench_function("authenticate_hs512_authorize_rego_concurrent", |b| {
+    c.bench_function("authenticate_es256_authorize_rego_concurrent", |b| {
         b.to_async(&rt).iter(|| {
             let handles: Vec<_> = (0..50)
                 .map(|_| {
@@ -141,8 +145,8 @@ fn bench_authenticate_hs512_authorize_rego_concurrent(c: &mut Criterion) {
 
 criterion_group!(
     benches,
-    bench_authenticate_hs512,
-    bench_authenticate_hs512_authorize_rego,
-    bench_authenticate_hs512_authorize_rego_concurrent
+    bench_authenticate_es256,
+    bench_authenticate_es256_authorize_rego,
+    bench_authenticate_es256_authorize_rego_concurrent
 );
 criterion_main!(benches);

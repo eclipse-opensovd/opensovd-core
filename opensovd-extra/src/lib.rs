@@ -11,7 +11,7 @@ pub use unit::{PhysicalDimension, Unit};
 pub mod auth;
 
 #[cfg(feature = "auth")]
-pub use auth::{JwtAlgorithm, JwtAuthenticator, RegorusAuthorizer};
+pub use auth::{JwtAuthenticator, RegorusAuthorizer};
 
 #[cfg(feature = "tls")]
 pub mod tls;

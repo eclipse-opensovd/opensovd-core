@@ -24,6 +24,9 @@ fn trace_layer<L: Logs>() -> Trace<L> {
 }
 
 /// Traces the requests a server handles.
+///
+/// The request span declares `subject` and `reason`, which the server's auth
+/// middleware fills in.
 #[must_use]
 pub fn server_layer() -> ServerLayer {
     ServerLayer
@@ -98,6 +101,8 @@ mod logs {
                 status = Empty,
                 latency_us = Empty,
                 error = Empty,
+                subject = Empty,
+                reason = Empty,
             )
         }
 
@@ -403,6 +408,20 @@ mod tests {
             .unwrap();
         router.oneshot(request).await.unwrap();
         assert_eq!(capture.field("route").as_deref(), Some("/components/{id}"));
+    }
+
+    #[tokio::test]
+    async fn server_layer_keeps_the_subject_and_rejection_reason_of_the_request() {
+        let (capture, _guard) = Capture::install();
+        let service = server_layer().layer(service_fn(|req| {
+            let span = tracing::Span::current();
+            span.record("subject", "alice");
+            span.record("reason", "expired");
+            ok(req)
+        }));
+        service.oneshot(request()).await.unwrap();
+        assert_eq!(capture.field("subject").as_deref(), Some("alice"));
+        assert_eq!(capture.field("reason").as_deref(), Some("expired"));
     }
 
     #[tokio::test]

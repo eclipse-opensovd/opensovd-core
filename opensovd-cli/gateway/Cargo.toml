@@ -34,8 +34,8 @@ opensovd-extra = { workspace = true, features = ["auth", "trace"] }
 opensovd-mocks = { workspace = true, optional = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true, features = ["std"] }
 tokio = { workspace = true, features = ["net", "rt", "signal", "time", "sync"] }
-base64 = { workspace = true }
 http = { workspace = true }
 tower = { workspace = true, features = ["util"] }
 tower-http = { workspace = true, features = ["cors", "fs"] }

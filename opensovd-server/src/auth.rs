@@ -3,6 +3,7 @@
 
 //! Authentication and authorization middleware.
 
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::convert::Infallible;
 use std::sync::Arc;
@@ -74,9 +75,9 @@ pub enum AuthError {
     /// No credentials, but the request needs them (401).
     #[error("authentication required")]
     Unauthenticated,
-    /// Credentials were sent and rejected (401).
-    #[error("invalid token")]
-    InvalidToken,
+    /// Credentials were sent and rejected (401), for the given reason.
+    #[error("invalid token: {0}")]
+    InvalidToken(Cow<'static, str>),
     /// The caller is known but not allowed (403).
     #[error("insufficient access rights")]
     Forbidden,
@@ -93,7 +94,7 @@ impl IntoResponse for AuthError {
         };
         match self {
             Self::Unauthenticated => challenge("Bearer"),
-            Self::InvalidToken => challenge(r#"Bearer error="invalid_token""#),
+            Self::InvalidToken(_) => challenge(r#"Bearer error="invalid_token""#),
             Self::Forbidden => {
                 let body = GenericError {
                     error_code: ErrorCode::InsufficientAccessRights,
@@ -111,6 +112,8 @@ impl IntoResponse for AuthError {
 /// An authenticator and an authorizer, checked on every request after routing.
 ///
 /// A denied request gets 401 when no caller was identified and 403 otherwise.
+/// The caller's `subject`, or the `reason` its credentials were rejected, is
+/// recorded on the current span if the span declares that field.
 #[derive(Clone)]
 pub struct Auth {
     authenticator: Arc<dyn Authenticator>,
@@ -147,10 +150,19 @@ async fn enforce(
             return (rejection.status(), Json(error)).into_response();
         }
     };
+    let span = tracing::Span::current();
     let principal = match auth.authenticator.authenticate(&parts) {
         Ok(principal) => principal,
-        Err(error) => return error.into_response(),
+        Err(error) => {
+            if let AuthError::InvalidToken(reason) = &error {
+                span.record("reason", reason.as_ref());
+            }
+            return error.into_response();
+        }
     };
+    if let Some(principal) = &principal {
+        span.record("subject", principal.subject.as_str());
+    }
     let access = Access {
         method: if parts.method == Method::HEAD {
             Method::GET.as_str()
@@ -226,7 +238,7 @@ mod tests {
         fn authenticate(&self, parts: &Parts) -> Result<Option<Principal>, AuthError> {
             match parts.headers.get("x-user").map(HeaderValue::to_str) {
                 None => Ok(None),
-                Some(Ok("bad") | Err(_)) => Err(AuthError::InvalidToken),
+                Some(Ok("bad") | Err(_)) => Err(AuthError::InvalidToken("bad user".into())),
                 Some(Ok(subject)) => Ok(Some(Principal {
                     subject: subject.to_owned(),
                     roles: Vec::new(),

@@ -10,6 +10,7 @@ publish = false
 autobins = false
 
 [dependencies]
+aws-lc-rs = { workspace = true }
 opensovd-core = { workspace = true }
 opensovd-extra = { workspace = true, features = ["auth"] }
 opensovd-models = { workspace = true }
@@ -18,7 +19,6 @@ opensovd-server = { workspace = true, default-features = true }
 criterion = { workspace = true, features = ["async_tokio"] }
 http = { workspace = true }
 jsonwebtoken = { workspace = true }
-rand = { workspace = true, features = ["std", "std_rng", "thread_rng"] }
 serde_json = { workspace = true, features = ["std"] }
 tokio = { workspace = true, features = ["rt", "rt-multi-thread"] }
 
