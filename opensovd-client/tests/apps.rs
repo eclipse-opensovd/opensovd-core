@@ -17,7 +17,7 @@ async fn list_apps() {
         .unwrap();
     let client = mock_client(builder.build());
     let result = client.list_apps().send().await.unwrap();
-    assert!(result.data.items.is_empty());
+    assert!(result.items.is_empty());
 }
 
 #[tokio::test]
@@ -94,6 +94,6 @@ async fn list_apps_with_schema() {
         .unwrap();
     let client = mock_client(builder.build());
     let result = client.list_apps().schema(true).send().await.unwrap();
-    assert!(result.data.items.is_empty());
+    assert!(result.items.is_empty());
     assert_eq!(result.schema.unwrap(), json!({"type": "object"}));
 }

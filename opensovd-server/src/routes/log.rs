@@ -21,7 +21,6 @@ use opensovd_core::{
     Topology,
 };
 use opensovd_models::{
-    Response,
     error::{ErrorCode, GenericError},
     log::{
         EventEnvelope, LogConfiguration, LogConfigurationQuery, LogConfigurationRequest,
@@ -68,7 +67,7 @@ async fn log_resources(
     >,
     WithRejection(Query(query), _): WithRejection<Query<LogResourcesQuery>, Error>,
     parts: Parts,
-) -> Result<Json<Response<LogResources>>> {
+) -> Result<Json<LogResources>> {
     let provider = get_provider(&topology, &entity_collection, &entity_id).await?;
     let base = versioned_uri(&parts);
     let stream = provider.supports_streaming().then(|| {
@@ -78,20 +77,18 @@ async fn log_resources(
         )
         .into()
     });
-    Ok(Json(Response {
-        data: LogResources {
-            entries: format!(
-                "{base}/{entity_collection}/{}/logs/entries",
-                encode_path_segment(&entity_id)
-            )
-            .into(),
-            config: format!(
-                "{base}/{entity_collection}/{}/logs/config",
-                encode_path_segment(&entity_id)
-            )
-            .into(),
-            stream,
-        },
+    Ok(Json(LogResources {
+        entries: format!(
+            "{base}/{entity_collection}/{}/logs/entries",
+            encode_path_segment(&entity_id)
+        )
+        .into(),
+        config: format!(
+            "{base}/{entity_collection}/{}/logs/config",
+            encode_path_segment(&entity_id)
+        )
+        .into(),
+        stream,
         schema: query.include_schema.then(LogResources::schema),
     }))
 }
@@ -103,7 +100,7 @@ async fn log_entries(
         Error,
     >,
     WithRejection(Query(query), _): WithRejection<Query<LogEntriesQuery>, Error>,
-) -> Result<Json<Response<LogEntries>>> {
+) -> Result<Json<LogEntries>> {
     validate_entries_filter(&query)?;
     let provider = get_provider(&topology, &entity_collection, &entity_id).await?;
     let include_schema = query.include_schema;
@@ -118,8 +115,8 @@ async fn log_entries(
         .map(model_entry)
         .collect();
 
-    Ok(Json(Response {
-        data: LogEntries { items: entries },
+    Ok(Json(LogEntries {
+        items: entries,
         schema: include_schema.then(LogEntries::schema),
     }))
 }
@@ -198,7 +195,7 @@ async fn log_configuration(
         Error,
     >,
     WithRejection(Query(query), _): WithRejection<Query<LogConfigurationQuery>, Error>,
-) -> Result<Json<Response<LogConfigurationResponse>>> {
+) -> Result<Json<LogConfigurationResponse>> {
     let provider = get_provider(&topology, &entity_collection, &entity_id).await?;
     let contexts = provider
         .configuration()
@@ -206,8 +203,8 @@ async fn log_configuration(
         .into_iter()
         .map(model_configuration)
         .collect();
-    Ok(Json(Response {
-        data: LogConfigurationResponse { contexts },
+    Ok(Json(LogConfigurationResponse {
+        contexts,
         schema: query.include_schema.then(LogConfigurationResponse::schema),
     }))
 }

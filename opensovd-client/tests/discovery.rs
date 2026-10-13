@@ -42,7 +42,7 @@ async fn select_reuses_transport() {
 
     // The selected client must reuse the same (mock) transport and hit the advertised base.
     let list = client.list_components().send().await.unwrap();
-    assert!(list.data.items.is_empty());
+    assert!(list.items.is_empty());
 }
 
 #[tokio::test]
@@ -116,7 +116,6 @@ async fn select_matches_on_vendor_info() {
             .send()
             .await
             .unwrap()
-            .data
             .items
             .is_empty()
     );

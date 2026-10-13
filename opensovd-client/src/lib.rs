@@ -18,6 +18,6 @@ pub use discovery::Discovery;
 pub use error::{Error, Result};
 pub use opensovd_models::data::DataCategory;
 pub use opensovd_models::version::{SovdInfo, VendorInfo, VersionInfo};
-pub use opensovd_models::{ErrorDetails, Response};
+pub use opensovd_models::{Collection, ErrorDetails};
 #[cfg(unix)]
 pub use unix::UnixConnector;

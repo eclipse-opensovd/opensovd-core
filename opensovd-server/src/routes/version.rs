@@ -8,7 +8,6 @@
 
 use axum::{Router, extract::State, http::request::Parts, response::Json, routing::get};
 use axum_extra::extract::{Query, WithRejection};
-use opensovd_models::Response;
 use opensovd_models::version::{SovdInfo, VersionInfo, VersionInfoQuery};
 use serde::Serialize;
 
@@ -31,21 +30,19 @@ async fn version_info<V>(
     State(state): State<AppState<V>>,
     parts: Parts,
     WithRejection(Query(query), _): WithRejection<Query<VersionInfoQuery>, Error>,
-) -> Json<Response<VersionInfo<V>>>
+) -> Json<VersionInfo<V>>
 where
     V: Serialize + Clone + Send + Sync + 'static,
     VersionInfo<V>: JsonSchema,
 {
     let base_uri = super::versioned_uri(&parts);
 
-    Json(Response {
-        data: VersionInfo {
-            sovd_info: vec![SovdInfo {
-                version: super::SOVD_VERSION.into(),
-                base_uri: base_uri.into(),
-                vendor_info: state.vendor_info,
-            }],
-        },
+    Json(VersionInfo {
+        sovd_info: vec![SovdInfo {
+            version: super::SOVD_VERSION.into(),
+            base_uri: base_uri.into(),
+            vendor_info: state.vendor_info,
+        }],
         schema: query.include_schema.then(VersionInfo::<V>::schema),
     })
 }

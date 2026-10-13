@@ -10,7 +10,6 @@ use axum::{
 };
 use axum_extra::extract::{Query, WithRejection};
 use opensovd_core::Topology;
-use opensovd_models::Response;
 use opensovd_models::discovery::{
     Entities, EntitiesQuery, EntityCapabilities, EntityCapabilitiesQuery, EntityReference,
 };
@@ -37,7 +36,7 @@ pub(super) async fn area_list(
     State(topology): State<Topology>,
     parts: Parts,
     WithRejection(Query(query), _): WithRejection<Query<EntitiesQuery>, Error>,
-) -> Result<Json<Response<Entities>>> {
+) -> Result<Json<Entities>> {
     let base = super::super::versioned_uri(&parts);
     let items = topology
         .read()
@@ -60,8 +59,8 @@ pub(super) async fn area_list(
         })
         .collect();
 
-    Ok(Json(Response {
-        data: Entities { items },
+    Ok(Json(Entities {
+        items,
         schema: query.include_schema.then(Entities::schema),
     }))
 }
@@ -74,7 +73,7 @@ pub(super) async fn area_capabilities(
     WithRejection(Path(area_id), _): WithRejection<Path<String>, Error>,
     parts: Parts,
     WithRejection(Query(query), _): WithRejection<Query<EntityCapabilitiesQuery>, Error>,
-) -> Result<Json<Response<EntityCapabilities>>> {
+) -> Result<Json<EntityCapabilities>> {
     let topo = topology.read().await;
     let entity = topo
         .get_area(&area_id)
@@ -90,16 +89,14 @@ pub(super) async fn area_capabilities(
     let contains = has_members
         .then(|| format!("{base}/areas/{}/contains", encode_path_segment(&area_id)).into());
 
-    Ok(Json(Response {
-        data: EntityCapabilities {
-            id: area_id,
-            name: entity.name().to_string(),
-            translation_id,
-            variant,
-            contains,
-            ..Default::default()
-        },
+    Ok(Json(EntityCapabilities {
+        id: area_id,
+        name: entity.name().to_string(),
+        translation_id,
+        variant,
+        contains,
         schema: query.include_schema.then(EntityCapabilities::schema),
+        ..Default::default()
     }))
 }
 
@@ -111,7 +108,7 @@ pub(super) async fn area_contains(
     WithRejection(Path(area_id), _): WithRejection<Path<String>, Error>,
     parts: Parts,
     WithRejection(Query(query), _): WithRejection<Query<EntitiesQuery>, Error>,
-) -> Result<Json<Response<Entities>>> {
+) -> Result<Json<Entities>> {
     // Verify area exists and get contained entities atomically
     let topo = topology.read().await;
     topo.get_area(&area_id)
@@ -161,8 +158,8 @@ pub(super) async fn area_contains(
         }),
     );
 
-    Ok(Json(Response {
-        data: Entities { items },
+    Ok(Json(Entities {
+        items,
         schema: query.include_schema.then(Entities::schema),
     }))
 }

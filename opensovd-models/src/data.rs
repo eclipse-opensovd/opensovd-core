@@ -3,7 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::Items;
+use crate::Collection;
 use crate::error::DataError;
 
 /// Data category type.
@@ -39,7 +39,7 @@ pub struct Metadata {
 }
 
 /// Data list response.
-pub type DataList = Items<Metadata>;
+pub type DataList = Collection<Metadata>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "jsonschema", derive(schemars::JsonSchema))]
@@ -87,7 +87,7 @@ pub struct ReadDataQuery {
 }
 
 /// Data categories response.
-pub type DataCategories = Items<DataCategoryInformation>;
+pub type DataCategories = Collection<DataCategoryInformation>;
 
 /// Data category information.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -99,7 +99,7 @@ pub struct DataCategoryInformation {
 }
 
 /// Data groups response.
-pub type DataGroups = Items<Group>;
+pub type DataGroups = Collection<Group>;
 
 /// Value group information.
 #[derive(Debug, Clone, Serialize, Deserialize)]

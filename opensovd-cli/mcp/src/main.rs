@@ -8,7 +8,7 @@ use std::process::ExitCode;
 
 use clap::Parser;
 use opensovd_client::Client;
-use opensovd_models::{Response, discovery::Entities};
+use opensovd_models::discovery::Entities;
 use rmcp::{
     Json, RoleServer, ServerHandler, ServiceExt,
     handler::server::{router::prompt::PromptRouter, tool::ToolRouter},
@@ -41,7 +41,7 @@ struct McpServer {
 #[tool_router]
 impl McpServer {
     #[tool(description = "List all SOVD components")]
-    async fn list_components(&self) -> Result<Json<Response<Entities>>, McpError> {
+    async fn list_components(&self) -> Result<Json<Entities>, McpError> {
         let response = self
             .client
             .list_components()
@@ -53,7 +53,7 @@ impl McpServer {
     }
 
     #[tool(description = "List all SOVD areas")]
-    async fn list_areas(&self) -> Result<Json<Response<Entities>>, McpError> {
+    async fn list_areas(&self) -> Result<Json<Entities>, McpError> {
         let response = self
             .client
             .list_areas()
@@ -65,7 +65,7 @@ impl McpServer {
     }
 
     #[tool(description = "List all SOVD apps")]
-    async fn list_apps(&self) -> Result<Json<Response<Entities>>, McpError> {
+    async fn list_apps(&self) -> Result<Json<Entities>, McpError> {
         let response = self
             .client
             .list_apps()
@@ -166,9 +166,9 @@ impl ServerHandler for McpServer {
         let _ = writeln!(
             text,
             "## Components ({count})\n",
-            count = components.data.items.len()
+            count = components.items.len()
         );
-        for component in &components.data.items {
+        for component in &components.items {
             let _ = writeln!(
                 text,
                 "- {name} (id: {id})",
@@ -177,17 +177,13 @@ impl ServerHandler for McpServer {
             );
         }
 
-        let _ = writeln!(
-            text,
-            "\n## Areas ({count})\n",
-            count = areas.data.items.len()
-        );
-        for area in &areas.data.items {
+        let _ = writeln!(text, "\n## Areas ({count})\n", count = areas.items.len());
+        for area in &areas.items {
             let _ = writeln!(text, "- {name} (id: {id})", name = area.name, id = area.id);
         }
 
-        let _ = writeln!(text, "\n## Apps ({count})\n", count = apps.data.items.len());
-        for app in &apps.data.items {
+        let _ = writeln!(text, "\n## Apps ({count})\n", count = apps.items.len());
+        for app in &apps.items {
             let _ = writeln!(text, "- {name} (id: {id})", name = app.name, id = app.id);
         }
 
@@ -304,14 +300,18 @@ mod tests {
 
     #[tokio::test]
     async fn read_topology_resource() -> TestResult {
-        let components = serde_json::to_string(&opensovd_models::Items {
+        let components = serde_json::to_string(&Entities {
             items: vec![entity("components", "ecu1", "Engine ECU")],
+            schema: None,
         })?;
-        let areas = serde_json::to_string(&opensovd_models::Items {
+        let areas = serde_json::to_string(&Entities {
             items: vec![entity("areas", "powertrain", "Powertrain")],
+            schema: None,
         })?;
-        let apps =
-            serde_json::to_string(&opensovd_models::Items::<EntityReference> { items: vec![] })?;
+        let apps = serde_json::to_string(&Entities {
+            items: vec![],
+            schema: None,
+        })?;
 
         let mut builder = mock_http_connector::Connector::builder();
         builder
@@ -429,10 +429,8 @@ mod tests {
 
     #[tokio::test]
     async fn list_components_returns_json() -> TestResult {
-        let components = serde_json::to_string(&Response {
-            data: opensovd_models::Items {
-                items: vec![entity("components", "ecu1", "Engine ECU")],
-            },
+        let components = serde_json::to_string(&Entities {
+            items: vec![entity("components", "ecu1", "Engine ECU")],
             schema: Some(serde_json::json!({"type": "object"})),
         })?;
 
@@ -465,10 +463,8 @@ mod tests {
 
     #[tokio::test]
     async fn list_areas_returns_json() -> TestResult {
-        let areas = serde_json::to_string(&Response {
-            data: opensovd_models::Items {
-                items: vec![entity("areas", "powertrain", "Powertrain")],
-            },
+        let areas = serde_json::to_string(&Entities {
+            items: vec![entity("areas", "powertrain", "Powertrain")],
             schema: Some(serde_json::json!({"type": "object"})),
         })?;
 
@@ -501,10 +497,8 @@ mod tests {
 
     #[tokio::test]
     async fn list_apps_returns_json() -> TestResult {
-        let apps = serde_json::to_string(&Response {
-            data: opensovd_models::Items {
-                items: vec![entity("apps", "diag_app", "Diagnostic App")],
-            },
+        let apps = serde_json::to_string(&Entities {
+            items: vec![entity("apps", "diag_app", "Diagnostic App")],
             schema: Some(serde_json::json!({"type": "object"})),
         })?;
 

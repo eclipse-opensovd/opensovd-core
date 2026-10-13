@@ -52,7 +52,7 @@ async fn connect_unix_path() {
     let client =
         opensovd_client::Client::connect_unix("http://localhost/sovd/v1", &sock_path).unwrap();
     let result = client.list_components().send().await.unwrap();
-    assert!(result.data.items.is_empty());
+    assert!(result.items.is_empty());
 
     // Clean up.
     let _ = std::fs::remove_file(&sock_path);
@@ -76,7 +76,7 @@ async fn connect_unix_abstract() {
     let client =
         opensovd_client::Client::connect_unix_abstract("http://localhost/sovd/v1", &name).unwrap();
     let result = client.list_components().send().await.unwrap();
-    assert!(result.data.items.is_empty());
+    assert!(result.items.is_empty());
 }
 
 #[tokio::test]
@@ -142,7 +142,7 @@ async fn builder_can_use_exported_unix_connector() {
         .build()
         .unwrap();
     let result = client.list_components().send().await.unwrap();
-    assert!(result.data.items.is_empty());
+    assert!(result.items.is_empty());
 }
 
 #[cfg(target_os = "linux")]
@@ -165,5 +165,5 @@ async fn builder_unix_socket_abstract() {
         .build()
         .unwrap();
     let result = client.list_components().send().await.unwrap();
-    assert!(result.data.items.is_empty());
+    assert!(result.items.is_empty());
 }

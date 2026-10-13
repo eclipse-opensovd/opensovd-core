@@ -3,7 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::{DateTime, GenericError};
+use crate::{Collection, DateTime, GenericError};
 
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(default, rename_all = "kebab-case")]
@@ -47,17 +47,9 @@ pub struct BulkDataDescriptor {
     pub tags: Option<Vec<String>>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "jsonschema", derive(schemars::JsonSchema))]
-pub struct AvailableBulkDataCategories {
-    pub items: Vec<BulkDataCategory>,
-}
+pub type AvailableBulkDataCategories = Collection<BulkDataCategory>;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "jsonschema", derive(schemars::JsonSchema))]
-pub struct BulkDataMetadata {
-    pub items: Vec<BulkDataDescriptor>,
-}
+pub type BulkDataMetadata = Collection<BulkDataDescriptor>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "jsonschema", derive(schemars::JsonSchema))]
@@ -162,13 +154,19 @@ mod tests {
 
     #[test]
     fn bulk_data_metadata_and_categories_empty_items() {
-        let metadata = BulkDataMetadata { items: vec![] };
+        let metadata = BulkDataMetadata {
+            items: vec![],
+            schema: None,
+        };
         let json = serde_json::to_value(&metadata).unwrap();
-        assert_eq!(json["items"], serde_json::json!([]));
+        assert_eq!(json, serde_json::json!({ "items": [] }));
 
-        let categories = AvailableBulkDataCategories { items: vec![] };
+        let categories = AvailableBulkDataCategories {
+            items: vec![],
+            schema: None,
+        };
         let json = serde_json::to_value(&categories).unwrap();
-        assert_eq!(json["items"], serde_json::json!([]));
+        assert_eq!(json, serde_json::json!({ "items": [] }));
     }
 
     #[test]

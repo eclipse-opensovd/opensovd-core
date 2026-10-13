@@ -59,27 +59,27 @@ struct Cli {
 async fn run(client: &Client) -> Result<(), opensovd_client::Error> {
     // Components
     let components = client.list_components().send().await?;
-    for c in &components.data.items {
+    for c in &components.items {
         println!("component: {} ({})", c.id, c.name);
     }
 
     // Data items for the first component
-    if let Some(first) = components.data.items.first() {
+    if let Some(first) = components.items.first() {
         let data = client.component(&first.id).list_data().send().await?;
-        for d in &data.data.items {
+        for d in &data.items {
             println!("  data: {} ({})", d.id, d.name);
         }
     }
 
     // Apps
     let apps = client.list_apps().send().await?;
-    for a in &apps.data.items {
+    for a in &apps.items {
         println!("app: {} ({})", a.id, a.name);
     }
 
     // Areas
     let areas = client.list_areas().send().await?;
-    for a in &areas.data.items {
+    for a in &areas.items {
         println!("area: {} ({})", a.id, a.name);
     }
 

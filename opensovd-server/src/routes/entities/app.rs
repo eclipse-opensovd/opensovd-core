@@ -10,7 +10,6 @@ use axum::{
 };
 use axum_extra::extract::{Query, WithRejection};
 use opensovd_core::Topology;
-use opensovd_models::Response;
 use opensovd_models::discovery::{
     Entities, EntitiesQuery, EntityCapabilities, EntityCapabilitiesQuery, EntityReference,
 };
@@ -36,7 +35,7 @@ pub(super) async fn app_list(
     State(topology): State<Topology>,
     parts: Parts,
     WithRejection(Query(query), _): WithRejection<Query<EntitiesQuery>, Error>,
-) -> Result<Json<Response<Entities>>> {
+) -> Result<Json<Entities>> {
     let base = super::super::versioned_uri(&parts);
     let items = topology
         .read()
@@ -59,8 +58,8 @@ pub(super) async fn app_list(
         })
         .collect();
 
-    Ok(Json(Response {
-        data: Entities { items },
+    Ok(Json(Entities {
+        items,
         schema: query.include_schema.then(Entities::schema),
     }))
 }
@@ -73,7 +72,7 @@ pub(super) async fn app_capabilities(
     WithRejection(Path(app_id), _): WithRejection<Path<String>, Error>,
     parts: Parts,
     WithRejection(Query(query), _): WithRejection<Query<EntityCapabilitiesQuery>, Error>,
-) -> Result<Json<Response<EntityCapabilities>>> {
+) -> Result<Json<EntityCapabilities>> {
     let topo = topology.read().await;
     let entity = topo
         .get_app(&app_id)
@@ -108,20 +107,18 @@ pub(super) async fn app_capabilities(
         .log_provider()
         .map(|_| format!("{base}/apps/{}/logs", encode_path_segment(&app_id)).into());
 
-    Ok(Json(Response {
-        data: EntityCapabilities {
-            id: app_id,
-            name: entity.name().to_string(),
-            translation_id,
-            variant,
-            located_on,
-            belongs_to,
-            data,
-            bulk_data,
-            logs,
-            ..Default::default()
-        },
+    Ok(Json(EntityCapabilities {
+        id: app_id,
+        name: entity.name().to_string(),
+        translation_id,
+        variant,
+        located_on,
+        belongs_to,
+        data,
+        bulk_data,
+        logs,
         schema: query.include_schema.then(EntityCapabilities::schema),
+        ..Default::default()
     }))
 }
 

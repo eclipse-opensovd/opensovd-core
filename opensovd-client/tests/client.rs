@@ -19,7 +19,7 @@ async fn percent_encodes_path_segments() {
         .unwrap();
     let client = mock_client(builder.build());
     let result = client.component("ecu/1").list_data().send().await.unwrap();
-    assert!(result.data.items.is_empty());
+    assert!(result.items.is_empty());
 }
 
 #[tokio::test]
@@ -71,7 +71,7 @@ async fn with_layer_builds_client() {
         .expect("valid test client with layer");
 
     let list = client.list_components().send().await.unwrap();
-    assert!(list.data.items.is_empty());
+    assert!(list.items.is_empty());
 }
 
 // TODO: Add tests for hyper-timeout (https://github.com/hjr3/hyper-timeout)
@@ -176,6 +176,6 @@ async fn backpressure_layer_does_not_panic() {
 
     for _ in 0..2 {
         let list = client.list_components().send().await.unwrap();
-        assert!(list.data.items.is_empty());
+        assert!(list.items.is_empty());
     }
 }

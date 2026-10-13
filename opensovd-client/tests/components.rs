@@ -17,7 +17,7 @@ async fn list_components() {
         .unwrap();
     let client = mock_client(builder.build());
     let result = client.list_components().send().await.unwrap();
-    assert!(result.data.items.is_empty());
+    assert!(result.items.is_empty());
 }
 
 #[tokio::test]
@@ -92,6 +92,6 @@ async fn list_components_with_schema() {
         .unwrap();
     let client = mock_client(builder.build());
     let result = client.list_components().schema(true).send().await.unwrap();
-    assert!(result.data.items.is_empty());
+    assert!(result.items.is_empty());
     assert_eq!(result.schema.unwrap(), json!({"type": "object"}));
 }

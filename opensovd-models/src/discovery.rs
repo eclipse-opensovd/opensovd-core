@@ -6,7 +6,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
-use crate::{Items, UriReference};
+use crate::{Collection, UriReference};
 
 /// Entity reference.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -27,7 +27,7 @@ pub struct EntityReference {
 }
 
 /// Entity collection response.
-pub type Entities = Items<EntityReference>;
+pub type Entities = Collection<EntityReference>;
 
 /// Entity collection query parameters.
 #[derive(Debug, Deserialize)]
@@ -153,4 +153,8 @@ pub struct EntityCapabilities {
     /// Reference to the triggers collection
     #[serde(skip_serializing_if = "Option::is_none")]
     pub triggers: Option<UriReference>,
+
+    /// Schema of the response, sent for `include-schema=true`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub schema: Option<Value>,
 }

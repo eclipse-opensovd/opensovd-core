@@ -24,7 +24,6 @@ use axum::{
 };
 use axum_extra::extract::{Query, WithRejection};
 use opensovd_core::{DataFilter, DataScope, Topology};
-use opensovd_models::Response;
 use opensovd_models::data::{
     DataCategories, DataCategoryInformation, DataGroups, DataGroupsQuery, DataList, DataQuery,
     Group, Metadata, ReadDataQuery, ReadResponse, WriteRequest,
@@ -70,7 +69,7 @@ async fn component_data_categories(
     State(topology): State<Topology>,
     OriginalUri(uri): OriginalUri,
     WithRejection(Path(component_id), _): WithRejection<Path<String>, Error>,
-) -> Result<Json<Response<DataCategories>>> {
+) -> Result<Json<DataCategories>> {
     let topo = topology.read().await;
     let entity = topo
         .get_component(&component_id)
@@ -89,8 +88,8 @@ async fn component_data_categories(
         })
         .collect();
 
-    Ok(Json(Response {
-        data: DataCategories { items },
+    Ok(Json(DataCategories {
+        items,
         schema: None,
     }))
 }
@@ -103,7 +102,7 @@ async fn component_data_groups(
     OriginalUri(uri): OriginalUri,
     WithRejection(Path(component_id), _): WithRejection<Path<String>, Error>,
     WithRejection(Query(query), _): WithRejection<Query<DataGroupsQuery>, Error>,
-) -> Result<Json<Response<DataGroups>>> {
+) -> Result<Json<DataGroups>> {
     let topo = topology.read().await;
     let entity = topo
         .get_component(&component_id)
@@ -129,8 +128,8 @@ async fn component_data_groups(
         })
         .collect();
 
-    Ok(Json(Response {
-        data: DataGroups { items },
+    Ok(Json(DataGroups {
+        items,
         schema: None,
     }))
 }
@@ -212,7 +211,7 @@ async fn component_data_list(
     OriginalUri(uri): OriginalUri,
     WithRejection(Path(component_id), _): WithRejection<Path<String>, Error>,
     WithRejection(Query(query), _): WithRejection<Query<DataQuery>, Error>,
-) -> Result<Json<Response<DataList>>> {
+) -> Result<Json<DataList>> {
     let topo = topology.read().await;
     let entity = topo
         .get_component(&component_id)
@@ -238,8 +237,8 @@ async fn component_data_list(
         })
         .collect();
 
-    Ok(Json(Response {
-        data: DataList { items },
+    Ok(Json(DataList {
+        items,
         schema: include_schema.then(DataList::schema),
     }))
 }
@@ -305,7 +304,7 @@ async fn app_data_categories(
     State(topology): State<Topology>,
     OriginalUri(uri): OriginalUri,
     WithRejection(Path(app_id), _): WithRejection<Path<String>, Error>,
-) -> Result<Json<Response<DataCategories>>> {
+) -> Result<Json<DataCategories>> {
     let topo = topology.read().await;
     let entity = topo
         .get_app(&app_id)
@@ -324,8 +323,8 @@ async fn app_data_categories(
         })
         .collect();
 
-    Ok(Json(Response {
-        data: DataCategories { items },
+    Ok(Json(DataCategories {
+        items,
         schema: None,
     }))
 }
@@ -338,7 +337,7 @@ async fn app_data_groups(
     OriginalUri(uri): OriginalUri,
     WithRejection(Path(app_id), _): WithRejection<Path<String>, Error>,
     WithRejection(Query(query), _): WithRejection<Query<DataGroupsQuery>, Error>,
-) -> Result<Json<Response<DataGroups>>> {
+) -> Result<Json<DataGroups>> {
     let topo = topology.read().await;
     let entity = topo
         .get_app(&app_id)
@@ -364,8 +363,8 @@ async fn app_data_groups(
         })
         .collect();
 
-    Ok(Json(Response {
-        data: DataGroups { items },
+    Ok(Json(DataGroups {
+        items,
         schema: None,
     }))
 }
@@ -379,7 +378,7 @@ async fn app_data_list(
     OriginalUri(uri): OriginalUri,
     WithRejection(Path(app_id), _): WithRejection<Path<String>, Error>,
     WithRejection(Query(query), _): WithRejection<Query<DataQuery>, Error>,
-) -> Result<Json<Response<DataList>>> {
+) -> Result<Json<DataList>> {
     let topo = topology.read().await;
     let entity = topo
         .get_app(&app_id)
@@ -405,8 +404,8 @@ async fn app_data_list(
         })
         .collect();
 
-    Ok(Json(Response {
-        data: DataList { items },
+    Ok(Json(DataList {
+        items,
         schema: include_schema.then(DataList::schema),
     }))
 }

@@ -10,7 +10,6 @@ use axum::{
 };
 use axum_extra::extract::{Query, WithRejection};
 use opensovd_core::Topology;
-use opensovd_models::Response;
 use opensovd_models::discovery::{
     Entities, EntitiesQuery, EntityCapabilities, EntityCapabilitiesQuery, EntityReference,
 };
@@ -37,7 +36,7 @@ pub(super) async fn component_list(
     State(topology): State<Topology>,
     parts: Parts,
     WithRejection(Query(query), _): WithRejection<Query<EntitiesQuery>, Error>,
-) -> Result<Json<Response<Entities>>> {
+) -> Result<Json<Entities>> {
     let base = super::super::versioned_uri(&parts);
     let items = topology
         .read()
@@ -59,8 +58,8 @@ pub(super) async fn component_list(
         })
         .collect();
 
-    Ok(Json(Response {
-        data: Entities { items },
+    Ok(Json(Entities {
+        items,
         schema: query.include_schema.then(Entities::schema),
     }))
 }
@@ -73,7 +72,7 @@ pub(super) async fn component_capabilities(
     WithRejection(Path(component_id), _): WithRejection<Path<String>, Error>,
     parts: Parts,
     WithRejection(Query(query), _): WithRejection<Query<EntityCapabilitiesQuery>, Error>,
-) -> Result<Json<Response<EntityCapabilities>>> {
+) -> Result<Json<EntityCapabilities>> {
     let topo = topology.read().await;
     let entity = topo
         .get_component(&component_id)
@@ -127,20 +126,18 @@ pub(super) async fn component_capabilities(
         .into()
     });
 
-    Ok(Json(Response {
-        data: EntityCapabilities {
-            id: component_id,
-            name: entity.name().to_string(),
-            translation_id,
-            variant,
-            hosts,
-            belongs_to,
-            data,
-            bulk_data,
-            logs,
-            ..Default::default()
-        },
+    Ok(Json(EntityCapabilities {
+        id: component_id,
+        name: entity.name().to_string(),
+        translation_id,
+        variant,
+        hosts,
+        belongs_to,
+        data,
+        bulk_data,
+        logs,
         schema: query.include_schema.then(EntityCapabilities::schema),
+        ..Default::default()
     }))
 }
 
@@ -152,7 +149,7 @@ pub(super) async fn component_hosts(
     WithRejection(Path(component_id), _): WithRejection<Path<String>, Error>,
     parts: Parts,
     WithRejection(Query(query), _): WithRejection<Query<EntitiesQuery>, Error>,
-) -> Result<Json<Response<Entities>>> {
+) -> Result<Json<Entities>> {
     // Verify component exists and get hosted apps atomically
     let topo = topology.read().await;
     topo.get_component(&component_id)
@@ -179,8 +176,8 @@ pub(super) async fn component_hosts(
         })
         .collect();
 
-    Ok(Json(Response {
-        data: Entities { items },
+    Ok(Json(Entities {
+        items,
         schema: query.include_schema.then(Entities::schema),
     }))
 }

@@ -35,10 +35,10 @@ for info in discovery.versions::<VendorInfo>().await? {
 let client = discovery.select(|s: &SovdInfo<VendorInfo>| s.version == "1.1.0").await?;
 match client.list_components().send().await {
     Ok(list) => {
-        for c in &list.data.items {
+        for c in &list.items {
             println!("component: {} ({})", c.id, c.name);
         }
-        println!("{} components", list.data.items.len());
+        println!("{} components", list.items.len());
     }
     Err(Error::Timeout(d)) => eprintln!("request timed out after {d:?}"),
     Err(other) => return Err(other.into()),

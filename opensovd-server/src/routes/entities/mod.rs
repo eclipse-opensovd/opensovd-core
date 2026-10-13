@@ -23,7 +23,6 @@ use std::collections::HashMap;
 use axum::{Router, extract::State, http::request::Parts, response::Json, routing::get};
 use axum_extra::extract::{Query, WithRejection};
 use opensovd_core::Topology;
-use opensovd_models::Response;
 use opensovd_models::discovery::{EntityCapabilities, EntityCapabilitiesQuery};
 use percent_encoding::{AsciiSet, CONTROLS, utf8_percent_encode};
 use serde_json::{Map, Value};
@@ -50,7 +49,7 @@ async fn root_capabilities(
     State(topology): State<Topology>,
     parts: Parts,
     WithRejection(Query(query), _): WithRejection<Query<EntityCapabilitiesQuery>, Error>,
-) -> Result<Json<Response<EntityCapabilities>>> {
+) -> Result<Json<EntityCapabilities>> {
     let base = super::versioned_uri(&parts);
     let topo = topology.read().await;
 
@@ -61,16 +60,14 @@ async fn root_capabilities(
 
     let areas = (topo.areas().len() > 0).then(|| format!("{base}/areas").into());
 
-    Ok(Json(Response {
-        data: EntityCapabilities {
-            id: String::new(),   // Empty for SOVDServer
-            name: String::new(), // Empty for SOVDServer
-            components,
-            apps,
-            areas,
-            ..Default::default()
-        },
+    Ok(Json(EntityCapabilities {
+        id: String::new(),   // Empty for SOVDServer
+        name: String::new(), // Empty for SOVDServer
+        components,
+        apps,
+        areas,
         schema: query.include_schema.then(EntityCapabilities::schema),
+        ..Default::default()
     }))
 }
 

@@ -10,6 +10,9 @@ use crate::UriReference;
 #[cfg_attr(feature = "jsonschema", derive(schemars::JsonSchema))]
 pub struct VersionInfo<V> {
     pub sovd_info: Vec<SovdInfo<V>>,
+    /// Schema of the response, sent for `include-schema=true`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub schema: Option<serde_json::Value>,
 }
 
 /// Single SOVD instance info

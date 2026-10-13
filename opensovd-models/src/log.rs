@@ -8,7 +8,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::{DateTime, UriReference, error::GenericError};
+use crate::{Collection, DateTime, UriReference, error::GenericError};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "jsonschema", derive(schemars::JsonSchema))]
@@ -51,6 +51,9 @@ pub struct LogResources {
         skip_serializing_if = "Option::is_none"
     )]
     pub stream: Option<UriReference>,
+    /// Schema of the response, sent for `include-schema=true`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub schema: Option<serde_json::Value>,
 }
 
 /// Event envelope used by the OpenSOVD live-log SSE extension.
@@ -63,11 +66,7 @@ pub struct EventEnvelope<T> {
     pub error: Option<GenericError>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "jsonschema", derive(schemars::JsonSchema))]
-pub struct LogEntries {
-    pub items: Vec<LogEntry>,
-}
+pub type LogEntries = Collection<LogEntry>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "jsonschema", derive(schemars::JsonSchema))]
@@ -86,6 +85,9 @@ pub struct LogConfigurationRequest {
 #[cfg_attr(feature = "jsonschema", derive(schemars::JsonSchema))]
 pub struct LogConfigurationResponse {
     pub contexts: Vec<LogConfiguration>,
+    /// Schema of the response, sent for `include-schema=true`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub schema: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -172,6 +174,7 @@ mod tests {
                     .to_string()
                     .into(),
             ),
+            schema: None,
         };
 
         let value = serde_json::to_value(resources).unwrap();

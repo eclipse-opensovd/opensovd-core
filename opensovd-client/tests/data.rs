@@ -18,7 +18,7 @@ async fn list_component_data() {
         .unwrap();
     let client = mock_client(builder.build());
     let result = client.component("ecu1").list_data().send().await.unwrap();
-    assert!(result.data.items.is_empty());
+    assert!(result.items.is_empty());
 }
 
 #[tokio::test]
@@ -140,7 +140,7 @@ async fn app_data() {
         .unwrap();
     let client = mock_client(builder.build());
     let result = client.app("diag").list_data().send().await.unwrap();
-    assert!(result.data.items.is_empty());
+    assert!(result.items.is_empty());
 }
 
 #[tokio::test]
@@ -199,7 +199,7 @@ async fn list_data_with_schema() {
         .send()
         .await
         .unwrap();
-    assert!(result.data.items.is_empty());
+    assert!(result.items.is_empty());
     assert_eq!(result.schema.unwrap(), json!({"type": "object"}));
 }
 
@@ -219,7 +219,7 @@ async fn list_data_with_groups() {
         .send()
         .await
         .unwrap();
-    assert!(result.data.items.is_empty());
+    assert!(result.items.is_empty());
 }
 
 #[tokio::test]
@@ -240,7 +240,7 @@ async fn list_data_with_categories() {
         .send()
         .await
         .unwrap();
-    assert!(result.data.items.is_empty());
+    assert!(result.items.is_empty());
 }
 
 #[tokio::test]
@@ -264,7 +264,7 @@ async fn list_data_with_all_filters() {
         .send()
         .await
         .unwrap();
-    assert!(result.data.items.is_empty());
+    assert!(result.items.is_empty());
     assert_eq!(result.schema.unwrap(), json!({"type": "object"}));
 }
 
@@ -284,7 +284,7 @@ async fn list_data_with_tags() {
         .send()
         .await
         .unwrap();
-    assert!(result.data.items.is_empty());
+    assert!(result.items.is_empty());
 }
 
 #[tokio::test]
@@ -306,5 +306,5 @@ async fn list_data_percent_encodes_filter_values() {
         .send()
         .await
         .unwrap();
-    assert!(result.data.items.is_empty());
+    assert!(result.items.is_empty());
 }

@@ -1,7 +1,6 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 Contributors to the Eclipse Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use opensovd_models::Response;
 use opensovd_models::discovery::Entities;
 
 use crate::client::{Client, schema_query};
@@ -23,7 +22,7 @@ impl ListEntitiesRequest<'_> {
     }
 
     /// Send the request.
-    pub async fn send(&self) -> Result<Response<Entities>> {
+    pub async fn send(&self) -> Result<Entities> {
         self.client.get(&self.path, schema_query(self.schema)).await
     }
 }

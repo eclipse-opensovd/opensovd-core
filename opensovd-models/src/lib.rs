@@ -27,21 +27,12 @@ pub struct Tag {
     pub translation_id: Option<String>,
 }
 
-/// Generic response wrapper with optional schema
-#[derive(Debug, Serialize, Deserialize)]
+/// A collection of items.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "jsonschema", derive(schemars::JsonSchema))]
-pub struct Response<T> {
-    #[serde(flatten)]
-    pub data: T,
-    /// JSON Schema describing the payload, provided by the SOVD server
-    /// when `include-schema=true` is requested
+pub struct Collection<T> {
+    pub items: Vec<T>,
+    /// Schema of the response, sent for `include-schema=true`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub schema: Option<serde_json::Value>,
-}
-
-/// Generic response for collections with items
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[cfg_attr(feature = "jsonschema", derive(schemars::JsonSchema))]
-pub struct Items<T> {
-    pub items: Vec<T>,
 }
