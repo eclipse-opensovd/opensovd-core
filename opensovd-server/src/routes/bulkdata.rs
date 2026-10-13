@@ -35,7 +35,6 @@ use opensovd_models::{
         BulkDataDescriptorsQuery, BulkDataMetadata, BulkDataUpload, DeleteBulkDataError,
         DeleteBulkDataResult,
     },
-    types::SupportedTags,
 };
 
 use crate::routes::{
@@ -133,10 +132,7 @@ async fn bulk_data_descriptors(
                     last_modified: metadata.last_modified,
                     hash: metadata.hash.clone(),
                     hash_algorithm: metadata.hash_algorithm.clone(),
-                    tags: metadata
-                        .tags
-                        .as_ref()
-                        .map(|tags| SupportedTags(tags.clone())),
+                    tags: metadata.tags.clone(),
                 })
                 .collect::<Vec<_>>(),
         },

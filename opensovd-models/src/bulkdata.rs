@@ -4,7 +4,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::{GenericError, types::SupportedTags};
+use crate::GenericError;
 
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(default, rename_all = "kebab-case")]
@@ -45,7 +45,7 @@ pub struct BulkDataDescriptor {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hash_algorithm: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub tags: Option<SupportedTags>,
+    pub tags: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -120,7 +120,7 @@ mod tests {
             last_modified: Some("2026-06-01T00:00:00Z".parse::<DateTime<Utc>>().unwrap()),
             hash: Some("abc123".into()),
             hash_algorithm: Some("sha256".into()),
-            tags: Some(SupportedTags(vec!["sensor".into(), "camera".into()])),
+            tags: Some(vec!["sensor".into(), "camera".into()]),
         };
         let json = serde_json::to_value(&desc).unwrap();
         assert_eq!(json["id"], "file2");
