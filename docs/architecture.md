@@ -276,7 +276,7 @@ If the request is allowed, the principal is stored in the request extensions and
 
 ### Data Routes
 
-`GET /{entity}/{id}/data/{data_id}` acquires a read lock, fetches the entity from the `TopologyReadGuard`, extracts its `DataProvider`, and calls `data_read()`. `PUT` follows the same lookup but calls `data_write()` instead. Returns **404** if the entity or data item is not found, **405** with `Allow: GET` if a write is attempted on a read-only item, **400** with a `DataError` body if the request body is malformed or the value does not fit the item, and **204 No Content** on a successful write.
+`GET /{entity}/{id}/data/{data_id}` acquires a read lock, fetches the entity from the `TopologyReadGuard`, extracts its `DataProvider`, and calls `data_read()`. `PUT` follows the same lookup but calls `data_write()` instead. Returns **404** if the entity or data item is not found, **405** with `Allow: GET` if a write is attempted on a read-only item, **405** with `Allow: PUT` if a read is attempted on a write-only item, **400** with a `DataError` body if the request body is malformed or the value does not fit the item, and **204 No Content** on a successful write.
 
 ### Version Route
 

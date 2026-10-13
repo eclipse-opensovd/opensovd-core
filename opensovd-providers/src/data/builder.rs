@@ -82,7 +82,7 @@ struct WriteOnlyAdapter<T>(T);
 #[async_trait]
 impl<T: WriteableDataResource> DataResourceDyn for WriteOnlyAdapter<T> {
     async fn read(&self) -> Result<Value, DataError> {
-        Err(DataError::Internal("resource is write-only".to_string()))
+        Err(DataError::WriteOnly)
     }
 
     async fn write(&self, value: Value) -> Result<(), DataError> {
@@ -548,6 +548,28 @@ mod tests {
             .data_write("sw.version", json!({"value": "2.0.0"}))
             .await;
         assert!(matches!(result, Err(DataError::ReadOnly)));
+    }
+
+    #[tokio::test]
+    async fn test_write_only_read_fails() {
+        struct Volume;
+
+        #[async_trait]
+        impl WriteableDataResource for Volume {
+            type Value = u8;
+
+            async fn write(&self, _value: &u8) -> Result<(), DataError> {
+                Ok(())
+            }
+        }
+
+        let provider = DataProviderBuilder::new()
+            .write_data("volume", "Volume", &DataCategory::StoredData, Volume)
+            .build()
+            .unwrap();
+
+        let result = provider.data_read("volume", false).await;
+        assert!(matches!(result, Err(DataError::WriteOnly)));
     }
 
     #[tokio::test]

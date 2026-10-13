@@ -52,6 +52,8 @@ pub enum DataError {
     NotFound(String),
     #[error("read only")]
     ReadOnly,
+    #[error("write only")]
+    WriteOnly,
     /// The value does not fit the resource's type. `path` is a JSON
     /// pointer to the erroneous element within the value.
     #[error("invalid value at '{path}': {message}")]

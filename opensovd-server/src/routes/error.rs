@@ -148,6 +148,14 @@ impl IntoResponse for Error {
                     )
                         .into_response();
                 }
+                DataError::WriteOnly => {
+                    return (
+                        StatusCode::METHOD_NOT_ALLOWED,
+                        [(header::ALLOW, "PUT")],
+                        Json(GenericError::with_vendor_code("write-only", e.to_string())),
+                    )
+                        .into_response();
+                }
                 DataError::InvalidValue { path, message } => (
                     StatusCode::BAD_REQUEST,
                     data_error(format!("/data{path}"), message),
@@ -251,6 +259,19 @@ mod tests {
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["error_code"], "vendor-specific");
         assert_eq!(json["vendor_code"], "read-only");
+    }
+
+    #[tokio::test]
+    async fn test_error_data_write_only() {
+        let error = Error::Data(DataError::WriteOnly);
+        let response = error.into_response();
+
+        assert_eq!(response.status(), 405);
+        assert_eq!(response.headers()[header::ALLOW], "PUT");
+
+        let json = json_body(response).await;
+        assert_eq!(json["error_code"], "vendor-specific");
+        assert_eq!(json["vendor_code"], "write-only");
     }
 
     #[tokio::test]
