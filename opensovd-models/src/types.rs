@@ -23,6 +23,8 @@ impl From<String> for JsonPointer {
     }
 }
 
+pub type DateTime = chrono::DateTime<chrono::Utc>;
+
 impl From<&serde_path_to_error::Error<serde_json::Error>> for JsonPointer {
     /// Points at the element where deserialization failed, or at the field
     /// itself if it is missing.

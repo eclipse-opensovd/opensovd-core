@@ -11,7 +11,7 @@ pub mod version;
 
 pub use error::{DataError, ErrorCode, ErrorDetails, GenericError};
 use serde::{Deserialize, Serialize};
-pub use types::{JsonPointer, UriReference};
+pub use types::{DateTime, JsonPointer, UriReference};
 
 /// SOVD tag definition.
 #[derive(Debug, Clone, Serialize, Deserialize)]

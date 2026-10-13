@@ -6,10 +6,9 @@
 
 //! SOVD logging API models.
 
-use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::{UriReference, error::GenericError};
+use crate::{DateTime, UriReference, error::GenericError};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "jsonschema", derive(schemars::JsonSchema))]
@@ -34,7 +33,7 @@ pub struct LogContext {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "jsonschema", derive(schemars::JsonSchema))]
 pub struct LogEntry {
-    pub timestamp: DateTime<Utc>,
+    pub timestamp: DateTime,
     pub context: LogContext,
     pub severity: LogSeverity,
     pub msg: String,
@@ -58,7 +57,7 @@ pub struct LogResources {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "jsonschema", derive(schemars::JsonSchema))]
 pub struct EventEnvelope<T> {
-    pub timestamp: DateTime<Utc>,
+    pub timestamp: DateTime,
     pub payload: Option<T>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<GenericError>,
@@ -93,9 +92,9 @@ pub struct LogConfigurationResponse {
 pub struct LogEntriesQuery {
     pub severity: Option<LogSeverity>,
     #[serde(rename = "created-after")]
-    pub created_after: Option<DateTime<Utc>>,
+    pub created_after: Option<DateTime>,
     #[serde(rename = "created-before")]
-    pub created_before: Option<DateTime<Utc>>,
+    pub created_before: Option<DateTime>,
     #[serde(default, rename = "include-schema")]
     pub include_schema: bool,
 }
@@ -114,14 +113,14 @@ pub type LogConfigurationQuery = LogResourcesQuery;
 pub struct LogStreamQuery {
     pub severity: Option<LogSeverity>,
     #[serde(rename = "created-after")]
-    pub created_after: Option<DateTime<Utc>>,
+    pub created_after: Option<DateTime>,
     #[serde(rename = "created-before")]
-    pub created_before: Option<DateTime<Utc>>,
+    pub created_before: Option<DateTime>,
 }
 
 #[cfg(test)]
 mod tests {
-    use chrono::TimeZone;
+    use chrono::{TimeZone, Utc};
     use serde_json::json;
 
     use super::*;
