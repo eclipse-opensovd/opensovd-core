@@ -93,7 +93,7 @@ async fn bulk_data_categories(
         },
         schema: query
             .include_schema
-            .then_some(AvailableBulkDataCategories::schema()),
+            .then(AvailableBulkDataCategories::schema),
     }))
 }
 
@@ -140,7 +140,7 @@ async fn bulk_data_descriptors(
                 })
                 .collect::<Vec<_>>(),
         },
-        schema: query.include_schema.then_some(BulkDataMetadata::schema()),
+        schema: query.include_schema.then(BulkDataMetadata::schema),
     }))
 }
 
