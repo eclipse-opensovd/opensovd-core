@@ -177,7 +177,7 @@ impl IntoResponse for Error {
                 let status = match e {
                     TopologyError::NotFound(_) => StatusCode::NOT_FOUND,
                 };
-                tracing::error!(target: "srv", error = %e, "Topology error");
+                tracing::debug!(target: "srv", error = %e, "Topology error");
                 (
                     status,
                     GenericError::with_vendor_code("entity-not-found", e.to_string()).into(),
