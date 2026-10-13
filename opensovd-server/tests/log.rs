@@ -236,6 +236,20 @@ async fn log_resources_do_not_advertise_live_stream_for_snapshot_only_provider()
 }
 
 #[tokio::test]
+async fn unsupported_live_stream_returns_not_implemented() {
+    let server = server_with_snapshot_only_provider().await;
+
+    let (status, body) = get_json(
+        &server,
+        "/sovd/v1/apps/snapshot-app/logs/x-opensovd-log-streams",
+    )
+    .await;
+
+    assert_eq!(status, hyper::StatusCode::NOT_IMPLEMENTED);
+    assert_eq!(body["error_code"], "error-response");
+}
+
+#[tokio::test]
 async fn component_logs_use_the_generic_entity_route() {
     let provider = RecordingProvider {
         entries: vec![test_entry(LogSeverity::Info, "component heartbeat")],
