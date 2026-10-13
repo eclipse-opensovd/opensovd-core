@@ -29,7 +29,7 @@ use futures::StreamExt;
 use http::{HeaderMap, HeaderName, HeaderValue, StatusCode, Uri, request::Parts};
 use opensovd_core::{BulkDataError, BulkDataProvider, CategoryFilter, Topology, TopologyReadGuard};
 use opensovd_models::{
-    GenericError, Response,
+    Response,
     bulkdata::{
         AvailableBulkDataCategories, BulkDataCategoriesQuery, BulkDataCategory, BulkDataDescriptor,
         BulkDataDescriptorsQuery, BulkDataMetadata, BulkDataUpload, DeleteBulkDataError,
@@ -41,7 +41,7 @@ use opensovd_models::{
 use crate::routes::{
     AppState,
     entities::encode_path_segment,
-    error::{Error, Result},
+    error::{Error, Result, bulk_data_error},
     versioned_uri,
 };
 use crate::schema::JsonSchema;
@@ -347,9 +347,10 @@ async fn delete_bulk_data_category(
     };
     for item in deleted {
         if let Some(error) = item.error {
+            let (_, error) = bulk_data_error(&error);
             result.errors.push(DeleteBulkDataError {
                 id: item.id.clone(),
-                error: GenericError::with_vendor_code("unable-to-delete", error.to_string()),
+                error,
             });
         } else {
             result.deleted_ids.push(item.id.clone());
