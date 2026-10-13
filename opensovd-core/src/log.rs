@@ -9,8 +9,8 @@
 //! A [`LogProvider`] supplies log entries for an application or component.
 //! The provider owns log acquisition and filtering; the server passes the
 //! requested [`LogFilter`] to the provider without imposing a storage model.
-//! Providers can read from an in-memory buffer, a file, a DLT client, a
-//! realtime unit, or another backend.
+//! Providers can read from an in-memory buffer, a file, a realtime unit, or
+//! another backend.
 //!
 //! # Entity integration
 //!
@@ -30,18 +30,18 @@
 //! or above the requested severity. Use [`LogSeverity::rank`] rather than enum
 //! declaration order when comparing levels: lower ranks are more severe, so an
 //! `Info` threshold includes fatal, error, warning, and info entries.
-//! Generic and AUTOSAR DLT spellings with the same level share a rank while
-//! remaining distinct wire values.
+//! Backend-specific levels must be normalized by the provider before they are
+//! exposed through this API.
 //!
 //! # Live streaming
 //!
 //! The optional [`LogProvider::stream`] method supports the OpenSOVD live-log
 //! SSE extension. Providers that implement it must also return `true` from
 //! [`LogProvider::supports_streaming`]. The server advertises the extension
-//! through the `x-opensovd-live-entries` discovery link only for those
-//! providers and serves events at `/logs/entries/stream`. Events use a fixed
-//! `EventEnvelope<LogEntry>` shape; schema negotiation is therefore not part of
-//! the stream query.
+//! through the `x-opensovd-log-streams` discovery link only for those
+//! providers and serves events at `/logs/x-opensovd-log-streams`. Events use
+//! a fixed `EventEnvelope<LogEntry>` shape; schema negotiation is therefore
+//! not part of the stream query.
 
 use std::pin::Pin;
 
@@ -51,9 +51,7 @@ use futures_core::Stream;
 
 /// SOVD log severity levels.
 ///
-/// The `Dlt*` variants preserve AUTOSAR DLT vocabulary when an entry uses an
-/// `AUTOSAR_DLT` context. Generic severities remain available for other
-/// contexts.
+/// Providers map backend-specific levels to these common severity values.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LogSeverity {
     Fatal,
@@ -61,27 +59,20 @@ pub enum LogSeverity {
     Warn,
     Info,
     Debug,
-    DltFatal,
-    DltError,
-    DltWarn,
-    DltInfo,
-    DltDebug,
 }
 
 impl LogSeverity {
     /// Returns the severity rank used for threshold filtering.
     ///
-    /// Lower values represent more severe messages. Generic and AUTOSAR DLT
-    /// spellings intentionally share ranks so providers can filter either
-    /// representation without relying on enum declaration order.
+    /// Lower values represent more severe messages.
     #[must_use]
     pub const fn rank(self) -> u8 {
         match self {
-            Self::Fatal | Self::DltFatal => 0,
-            Self::Error | Self::DltError => 1,
-            Self::Warn | Self::DltWarn => 2,
-            Self::Info | Self::DltInfo => 3,
-            Self::Debug | Self::DltDebug => 4,
+            Self::Fatal => 0,
+            Self::Error => 1,
+            Self::Warn => 2,
+            Self::Info => 3,
+            Self::Debug => 4,
         }
     }
 }
@@ -93,13 +84,6 @@ pub enum LogContext {
         host: Option<String>,
         process: Option<String>,
         pid: Option<i64>,
-    },
-    AutosarDlt {
-        session: Option<String>,
-        session_id: Option<String>,
-        application_id: Option<String>,
-        context_id: Option<String>,
-        message_id: Option<String>,
     },
     Custom {
         context_type: String,
@@ -139,6 +123,8 @@ pub enum LogError {
     InvalidRequest(String),
     #[error("log resource not found: {0}")]
     NotFound(String),
+    #[error("log provider does not support this operation: {0}")]
+    NotSupported(String),
     #[error("internal log provider error: {0}")]
     Internal(String),
 }
@@ -159,7 +145,7 @@ pub trait LogProvider: Send + Sync + 'static {
 
     /// Opens a live log stream for the OpenSOVD SSE extension.
     async fn stream(&self, _filter: LogFilter) -> LogResult<LogStream> {
-        Err(LogError::Internal(
+        Err(LogError::NotSupported(
             "live log streaming is not supported by this provider".into(),
         ))
     }
@@ -209,13 +195,8 @@ mod tests {
         let Err(error) = Provider.stream(LogFilter::default()).await else {
             panic!("default stream implementation unexpectedly succeeded")
         };
-        assert!(matches!(error, LogError::Internal(message) if message.contains("not supported")));
-    }
-
-    #[test]
-    fn severity_rank_is_independent_of_enum_declaration_order() {
-        assert!(LogSeverity::DltFatal.rank() < LogSeverity::DltInfo.rank());
-        assert_eq!(LogSeverity::Info.rank(), LogSeverity::DltInfo.rank());
-        assert_eq!(LogSeverity::Debug.rank(), LogSeverity::DltDebug.rank());
+        assert!(
+            matches!(error, LogError::NotSupported(message) if message.contains("not supported"))
+        );
     }
 }

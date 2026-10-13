@@ -20,16 +20,6 @@ pub enum LogSeverity {
     Warn,
     Info,
     Debug,
-    #[serde(rename = "DLT_FATAL")]
-    DltFatal,
-    #[serde(rename = "DLT_ERROR")]
-    DltError,
-    #[serde(rename = "DLT_WARN")]
-    DltWarn,
-    #[serde(rename = "DLT_INFO")]
-    DltInfo,
-    #[serde(rename = "DLT_DEBUG")]
-    DltDebug,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -58,10 +48,10 @@ pub struct LogResources {
     pub entries: UriReference,
     pub config: UriReference,
     #[serde(
-        rename = "x-opensovd-live-entries",
+        rename = "x-opensovd-log-streams",
         skip_serializing_if = "Option::is_none"
     )]
-    pub live_entries: Option<UriReference>,
+    pub stream: Option<UriReference>,
 }
 
 /// Event envelope used by the OpenSOVD live-log SSE extension.
@@ -137,30 +127,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn dlt_severities_use_the_autosar_wire_names() {
-        for (severity, expected) in [
-            (LogSeverity::DltFatal, "DLT_FATAL"),
-            (LogSeverity::DltError, "DLT_ERROR"),
-            (LogSeverity::DltWarn, "DLT_WARN"),
-            (LogSeverity::DltInfo, "DLT_INFO"),
-            (LogSeverity::DltDebug, "DLT_DEBUG"),
-        ] {
-            assert_eq!(serde_json::to_value(severity).unwrap(), json!(expected));
-            assert_eq!(
-                serde_json::from_value::<LogSeverity>(json!(expected)).unwrap(),
-                severity
-            );
-        }
-    }
-
-    #[test]
-    fn generic_and_dlt_severities_are_distinguishable() {
+    fn severities_use_generic_wire_names() {
         assert_eq!(
             serde_json::to_value(LogSeverity::Info).unwrap(),
             json!("info")
         );
-        assert_ne!(LogSeverity::Info, LogSeverity::DltInfo);
-        assert!(serde_json::from_str::<LogSeverity>(r#""DLT_TRACE""#).is_err());
     }
 
     #[test]
@@ -171,7 +142,7 @@ mod tests {
             payload: Some(LogEntry {
                 timestamp,
                 context: LogContext {
-                    context_type: "AUTOSAR_DLT".into(),
+                    context_type: "custom".into(),
                     attributes: [
                         ("application_id".into(), json!("TRAC")),
                         ("context_id".into(), json!("Main")),
@@ -179,7 +150,7 @@ mod tests {
                     .into_iter()
                     .collect(),
                 },
-                severity: LogSeverity::DltInfo,
+                severity: LogSeverity::Info,
                 msg: "heartbeat".into(),
                 href: None,
             }),
@@ -188,17 +159,17 @@ mod tests {
 
         let value = serde_json::to_value(envelope).unwrap();
         assert_eq!(value["timestamp"], json!("2026-10-07T08:00:00Z"));
-        assert_eq!(value["payload"]["severity"], json!("DLT_INFO"));
+        assert_eq!(value["payload"]["severity"], json!("info"));
         assert!(value.get("error").is_none());
     }
 
     #[test]
-    fn log_resources_advertise_the_live_entries_extension() {
+    fn log_resources_advertise_the_stream_extension() {
         let resources = LogResources {
             entries: "/sovd/v1/apps/diag-app/logs/entries".to_string().into(),
             config: "/sovd/v1/apps/diag-app/logs/config".to_string().into(),
-            live_entries: Some(
-                "/sovd/v1/apps/diag-app/logs/entries/stream"
+            stream: Some(
+                "/sovd/v1/apps/diag-app/logs/x-opensovd-log-streams"
                     .to_string()
                     .into(),
             ),
@@ -206,8 +177,8 @@ mod tests {
 
         let value = serde_json::to_value(resources).unwrap();
         assert_eq!(
-            value["x-opensovd-live-entries"],
-            json!("/sovd/v1/apps/diag-app/logs/entries/stream")
+            value["x-opensovd-log-streams"],
+            json!("/sovd/v1/apps/diag-app/logs/x-opensovd-log-streams")
         );
     }
 }

@@ -113,16 +113,16 @@ impl LogProvider for ErrorStreamProvider {
     }
 }
 
-fn dlt_entry(severity: LogSeverity, message: &str) -> LogEntry {
+fn test_entry(severity: LogSeverity, message: &str) -> LogEntry {
     let timestamp = Utc.with_ymd_and_hms(2026, 10, 7, 8, 0, 0).unwrap();
     LogEntry {
         timestamp,
-        context: LogContext::AutosarDlt {
-            session: Some("DIAG".into()),
-            session_id: Some("session-1".into()),
-            application_id: Some("TRAC".into()),
-            context_id: Some("Main".into()),
-            message_id: None,
+        context: LogContext::Custom {
+            context_type: "test".into(),
+            attributes: [("source".into(), "diag".into())]
+                .into_iter()
+                .map(|(key, value)| (key, Value::String(value)))
+                .collect(),
         },
         severity,
         msg: message.into(),
@@ -199,7 +199,7 @@ async fn get_json(server: &common::TestServer, path: &str) -> (hyper::StatusCode
 #[tokio::test]
 async fn log_resources_advertise_snapshot_config_and_live_stream() {
     let provider = RecordingProvider {
-        entries: vec![dlt_entry(LogSeverity::DltInfo, "heartbeat")],
+        entries: vec![test_entry(LogSeverity::Info, "heartbeat")],
         seen_filter: Arc::new(Mutex::new(None)),
     };
     let (server, _) = server_with_provider(provider).await;
@@ -216,9 +216,9 @@ async fn log_resources_advertise_snapshot_config_and_live_stream() {
         format!("http://{}/sovd/v1/apps/diag-app/logs/config", server.addr)
     );
     assert_eq!(
-        body["x-opensovd-live-entries"],
+        body["x-opensovd-log-streams"],
         format!(
-            "http://{}/sovd/v1/apps/diag-app/logs/entries/stream",
+            "http://{}/sovd/v1/apps/diag-app/logs/x-opensovd-log-streams",
             server.addr
         )
     );
@@ -232,20 +232,20 @@ async fn log_resources_do_not_advertise_live_stream_for_snapshot_only_provider()
     let (status, body) = get_json(&server, "/sovd/v1/apps/snapshot-app/logs").await;
 
     assert_eq!(status, hyper::StatusCode::OK);
-    assert!(body.get("x-opensovd-live-entries").is_none());
+    assert!(body.get("x-opensovd-log-streams").is_none());
 }
 
 #[tokio::test]
 async fn component_logs_use_the_generic_entity_route() {
     let provider = RecordingProvider {
-        entries: vec![dlt_entry(LogSeverity::DltInfo, "component heartbeat")],
+        entries: vec![test_entry(LogSeverity::Info, "component heartbeat")],
         seen_filter: Arc::new(Mutex::new(None)),
     };
     let (server, _) = server_with_provider(provider).await;
 
     let (status, body) = get_json(
         &server,
-        "/sovd/v1/components/diag-ecu/logs/entries?severity=DLT_INFO",
+        "/sovd/v1/components/diag-ecu/logs/entries?severity=info",
     )
     .await;
 
@@ -272,25 +272,22 @@ async fn log_configuration_honors_include_schema() {
 }
 
 #[tokio::test]
-async fn log_entries_accept_dlt_severity_filters() {
+async fn log_entries_accept_severity_filters() {
     let seen_filter = Arc::new(Mutex::new(None));
     let provider = RecordingProvider {
-        entries: vec![dlt_entry(LogSeverity::DltInfo, "heartbeat")],
+        entries: vec![test_entry(LogSeverity::Info, "heartbeat")],
         seen_filter: Arc::clone(&seen_filter),
     };
     let (server, _) = server_with_provider(provider).await;
 
-    let (status, body) = get_json(
-        &server,
-        "/sovd/v1/apps/diag-app/logs/entries?severity=DLT_INFO",
-    )
-    .await;
+    let (status, body) =
+        get_json(&server, "/sovd/v1/apps/diag-app/logs/entries?severity=info").await;
 
     assert_eq!(status, hyper::StatusCode::OK);
-    assert_eq!(body["items"][0]["severity"], "DLT_INFO");
+    assert_eq!(body["items"][0]["severity"], "info");
     assert_eq!(
         seen_filter.lock().unwrap().as_ref().unwrap().severity,
-        Some(LogSeverity::DltInfo)
+        Some(LogSeverity::Info)
     );
 }
 
@@ -298,12 +295,12 @@ async fn log_entries_accept_dlt_severity_filters() {
 async fn log_entry_stream_returns_sse_event_envelope() {
     let seen_filter = Arc::new(Mutex::new(None));
     let provider = RecordingProvider {
-        entries: vec![dlt_entry(LogSeverity::DltInfo, "live heartbeat")],
+        entries: vec![test_entry(LogSeverity::Info, "live heartbeat")],
         seen_filter: Arc::clone(&seen_filter),
     };
     let (server, _) = server_with_provider(provider).await;
     let request = Request::builder()
-        .uri(server.url("/sovd/v1/apps/diag-app/logs/entries/stream?severity=DLT_INFO"))
+        .uri(server.url("/sovd/v1/apps/diag-app/logs/x-opensovd-log-streams?severity=info"))
         .body(http_body_util::Empty::<bytes::Bytes>::new())
         .unwrap();
 
@@ -323,10 +320,10 @@ async fn log_entry_stream_returns_sse_event_envelope() {
     let body = String::from_utf8(body.to_vec()).unwrap();
     assert!(body.starts_with("data: "));
     assert!(body.contains("\"payload\""));
-    assert!(body.contains("\"severity\":\"DLT_INFO\""));
+    assert!(body.contains("\"severity\":\"info\""));
     assert_eq!(
         seen_filter.lock().unwrap().as_ref().unwrap().severity,
-        Some(LogSeverity::DltInfo)
+        Some(LogSeverity::Info)
     );
 }
 
@@ -334,7 +331,7 @@ async fn log_entry_stream_returns_sse_event_envelope() {
 async fn log_entry_stream_emits_sanitized_provider_errors() {
     let server = server_with_error_stream_provider().await;
     let request = Request::builder()
-        .uri(server.url("/sovd/v1/apps/error-app/logs/entries/stream"))
+        .uri(server.url("/sovd/v1/apps/error-app/logs/x-opensovd-log-streams"))
         .body(http_body_util::Empty::<bytes::Bytes>::new())
         .unwrap();
 

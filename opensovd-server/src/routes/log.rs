@@ -50,7 +50,7 @@ where
             get(log_entries),
         )
         .route(
-            "/{entity_collection}/{entity_id}/logs/entries/stream",
+            "/{entity_collection}/{entity_id}/logs/x-opensovd-log-streams",
             get(log_entry_stream),
         )
         .route(
@@ -69,9 +69,9 @@ async fn log_resources(
 ) -> Result<Json<Response<LogResources>>> {
     let provider = get_provider(&topology, &entity_collection, &entity_id).await?;
     let base = versioned_uri(&parts);
-    let live_entries = provider.supports_streaming().then(|| {
+    let stream = provider.supports_streaming().then(|| {
         format!(
-            "{base}/{entity_collection}/{}/logs/entries/stream",
+            "{base}/{entity_collection}/{}/logs/x-opensovd-log-streams",
             encode_path_segment(&entity_id)
         )
         .into()
@@ -88,7 +88,7 @@ async fn log_resources(
                 encode_path_segment(&entity_id)
             )
             .into(),
-            live_entries,
+            stream,
         },
         schema: query.include_schema.then(LogResources::schema),
     }))
@@ -169,6 +169,10 @@ fn stream_error(error: &LogError) -> GenericError {
             ErrorCode::ErrorResponse,
             "the log stream resource was not found",
         ),
+        LogError::NotSupported(_) => (
+            ErrorCode::ErrorResponse,
+            "the log provider does not support live streaming",
+        ),
         LogError::Internal(_) => (
             ErrorCode::SovdServerFailure,
             "the log provider failed to produce a stream item",
@@ -243,11 +247,6 @@ fn core_severity(value: LogSeverity) -> CoreLogSeverity {
         LogSeverity::Warn => CoreLogSeverity::Warn,
         LogSeverity::Info => CoreLogSeverity::Info,
         LogSeverity::Debug => CoreLogSeverity::Debug,
-        LogSeverity::DltFatal => CoreLogSeverity::DltFatal,
-        LogSeverity::DltError => CoreLogSeverity::DltError,
-        LogSeverity::DltWarn => CoreLogSeverity::DltWarn,
-        LogSeverity::DltInfo => CoreLogSeverity::DltInfo,
-        LogSeverity::DltDebug => CoreLogSeverity::DltDebug,
     }
 }
 
@@ -258,11 +257,6 @@ fn model_severity(value: CoreLogSeverity) -> LogSeverity {
         CoreLogSeverity::Warn => LogSeverity::Warn,
         CoreLogSeverity::Info => LogSeverity::Info,
         CoreLogSeverity::Debug => LogSeverity::Debug,
-        CoreLogSeverity::DltFatal => LogSeverity::DltFatal,
-        CoreLogSeverity::DltError => LogSeverity::DltError,
-        CoreLogSeverity::DltWarn => LogSeverity::DltWarn,
-        CoreLogSeverity::DltInfo => LogSeverity::DltInfo,
-        CoreLogSeverity::DltDebug => LogSeverity::DltDebug,
     }
 }
 
@@ -276,13 +270,6 @@ fn core_context(value: LogContext) -> CoreLogContext {
             host: take_string(&mut attributes, "host"),
             process: take_string(&mut attributes, "process"),
             pid: take_i64(&mut attributes, "pid"),
-        },
-        "AUTOSAR_DLT" => CoreLogContext::AutosarDlt {
-            session: take_string(&mut attributes, "session"),
-            session_id: take_string(&mut attributes, "session_id"),
-            application_id: take_string(&mut attributes, "application_id"),
-            context_id: take_string(&mut attributes, "context_id"),
-            message_id: take_string(&mut attributes, "message_id"),
         },
         _ => CoreLogContext::Custom {
             context_type,
@@ -299,22 +286,6 @@ fn model_context(value: CoreLogContext) -> LogContext {
                 ("host", host.map(Value::from)),
                 ("process", process.map(Value::from)),
                 ("pid", pid.map(Value::from)),
-            ]),
-        },
-        CoreLogContext::AutosarDlt {
-            session,
-            session_id,
-            application_id,
-            context_id,
-            message_id,
-        } => LogContext {
-            context_type: "AUTOSAR_DLT".into(),
-            attributes: attributes([
-                ("session", session.map(Value::from)),
-                ("session_id", session_id.map(Value::from)),
-                ("application_id", application_id.map(Value::from)),
-                ("context_id", context_id.map(Value::from)),
-                ("message_id", message_id.map(Value::from)),
             ]),
         },
         CoreLogContext::Custom {

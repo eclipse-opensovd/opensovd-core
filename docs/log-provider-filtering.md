@@ -31,7 +31,7 @@ the response.
 
 The common OpenSOVD implementation does not perform a second filtering pass.
 This avoids retrieving all log entries unnecessarily and allows providers to
-use indexes, server-side DLT filtering, journald predicates, or equivalent
+use indexes, backend-native filtering, journald predicates, or equivalent
 backend mechanisms.
 
 ## API filters
@@ -73,19 +73,10 @@ Do not rely on Rust's derived enum ordering unless the ordering has been
 explicitly defined to match this table. Backend-specific levels must first be
 mapped to the SOVD severity model.
 
-For example, the S-CORE/DLT mapping should normalize levels approximately as
-follows:
-
-| SOVD severity | AUTOSAR DLT levels |
-| --- | --- |
-| `fatal` | `DLT_FATAL` |
-| `error` | `DLT_ERROR` |
-| `warn` | `DLT_WARN` |
-| `info` | `DLT_INFO` |
-| `debug` | `DLT_DEBUG`, `DLT_VERBOSE` |
-
 The provider should apply the threshold using normalized `LogSeverity` values,
-not by comparing backend-specific strings.
+not by comparing backend-specific strings. The mapping from a backend's native
+levels to these values belongs entirely to that provider and must not be added
+to the common core or model crates.
 
 ## Time filtering
 
@@ -158,7 +149,7 @@ impl LogProvider for RealtimeUnitLogProvider {
 
 The names of `BackendQuery`, `to_backend_level`, `map_record`, and
 `matches_filter` are illustrative. They should be adapted to the realtime
-unit’s actual DLT, IPC, journald, or file-log interface.
+unit’s actual backend, IPC, journald, or file-log interface.
 
 ## Context handling
 
@@ -170,7 +161,7 @@ The provider should therefore:
 
 - use configured application/context filters when querying the backend;
 - return the normalized context in each `LogEntry`;
-- preserve RFC 5424 and AUTOSAR DLT fields where available;
+- preserve backend context fields where available;
 - use an `x-sovd-*` context type for provider-specific extensions;
 - include `href` when the original log file is available through bulk-data.
 
@@ -192,15 +183,12 @@ is not an error; it returns:
 }
 ```
 
-## S-CORE integration guidance
+## Backend integration guidance
 
-The S-CORE logging backend already supports filtering by log level and context
-at the DLT/datarouter layer. A realtime-unit provider should translate
-`LogFilter` into those native filters instead of fetching the complete log
-stream and filtering only after transfer.
-
+A backend provider should translate `LogFilter` into its native filters
+instead of fetching the complete log stream and filtering only after transfer.
 The provider should remain an adapter. The generic OpenSOVD crates should not
-depend directly on S-CORE logging types or transport APIs.
+depend directly on backend logging types or transport APIs.
 
 ## Implementation checklist
 
