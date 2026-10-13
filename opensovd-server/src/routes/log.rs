@@ -1,7 +1,8 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 Contributors to the Eclipse Foundation
 // SPDX-License-Identifier: Apache-2.0
 //
-// This file was created with the assistance of generative AI.
+// AI Disclosure: This file was created with the assistance of OpenAI Codex.
+// Assisted-by: OpenAI Codex
 
 //! SOVD logging resource endpoints.
 
@@ -16,10 +17,12 @@ use futures::StreamExt;
 use http::{StatusCode, request::Parts};
 use opensovd_core::{
     LogConfiguration as CoreLogConfiguration, LogContext as CoreLogContext,
-    LogEntry as CoreLogEntry, LogFilter, LogProvider, LogSeverity as CoreLogSeverity, Topology,
+    LogEntry as CoreLogEntry, LogError, LogFilter, LogProvider, LogSeverity as CoreLogSeverity,
+    Topology,
 };
 use opensovd_models::{
     Response,
+    error::{ErrorCode, GenericError},
     log::{
         EventEnvelope, LogConfiguration, LogConfigurationQuery, LogConfigurationRequest,
         LogConfigurationResponse, LogContext, LogEntries, LogEntriesQuery, LogEntry, LogResources,
@@ -64,8 +67,15 @@ async fn log_resources(
     WithRejection(Query(query), _): WithRejection<Query<LogResourcesQuery>, Error>,
     parts: Parts,
 ) -> Result<Json<Response<LogResources>>> {
-    get_provider(&topology, &entity_collection, &entity_id).await?;
+    let provider = get_provider(&topology, &entity_collection, &entity_id).await?;
     let base = versioned_uri(&parts);
+    let live_entries = provider.supports_streaming().then(|| {
+        format!(
+            "{base}/{entity_collection}/{}/logs/entries/stream",
+            encode_path_segment(&entity_id)
+        )
+        .into()
+    });
     Ok(Json(Response {
         data: LogResources {
             entries: format!(
@@ -78,13 +88,7 @@ async fn log_resources(
                 encode_path_segment(&entity_id)
             )
             .into(),
-            live_entries: Some(
-                format!(
-                    "{base}/{entity_collection}/{}/logs/entries/stream",
-                    encode_path_segment(&entity_id)
-                )
-                .into(),
-            ),
+            live_entries,
         },
         schema: query.include_schema.then(LogResources::schema),
     }))
@@ -130,24 +134,47 @@ async fn log_entry_stream(
         })
         .await?;
 
-    let events = stream.filter_map(|item| async move {
-        let Ok(entry) = item else {
-            return None;
+    let events = stream.map(|item| {
+        let envelope = match item {
+            Ok(entry) => EventEnvelope {
+                timestamp: entry.timestamp,
+                payload: Some(model_entry(entry)),
+                error: None,
+            },
+            Err(error) => EventEnvelope {
+                // Provider errors do not carry an entry timestamp. The epoch
+                // makes that absence deterministic and keeps the envelope valid.
+                timestamp: chrono::DateTime::<chrono::Utc>::UNIX_EPOCH,
+                payload: None,
+                error: Some(stream_error(&error)),
+            },
         };
-        let timestamp = entry.timestamp;
-        let envelope = EventEnvelope {
-            timestamp,
-            payload: Some(model_entry(entry)),
-            error: None,
-        };
-        Some(Ok(Event::default().data(
+        Ok(Event::default().data(
             serde_json::to_string(&envelope).unwrap_or_else(|_| {
                 "{\"error\":{\"message\":\"failed to encode log event\"}}".into()
             }),
-        )))
+        ))
     });
 
     Ok(Sse::new(events).keep_alive(KeepAlive::default()))
+}
+
+fn stream_error(error: &LogError) -> GenericError {
+    let (error_code, message) = match error {
+        LogError::InvalidRequest(_) => (
+            ErrorCode::ErrorResponse,
+            "the log provider rejected a stream item",
+        ),
+        LogError::NotFound(_) => (
+            ErrorCode::ErrorResponse,
+            "the log stream resource was not found",
+        ),
+        LogError::Internal(_) => (
+            ErrorCode::SovdServerFailure,
+            "the log provider failed to produce a stream item",
+        ),
+    };
+    GenericError::new(error_code, message)
 }
 
 async fn log_configuration(

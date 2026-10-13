@@ -1,7 +1,8 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 Contributors to the Eclipse Foundation
 // SPDX-License-Identifier: Apache-2.0
 //
-// This file was created with the assistance of generative AI.
+// AI Disclosure: This file was created with the assistance of OpenAI Codex.
+// Assisted-by: OpenAI Codex
 
 //! SOVD logging provider trait and types.
 //!
@@ -35,10 +36,12 @@
 //! # Live streaming
 //!
 //! The optional [`LogProvider::stream`] method supports the OpenSOVD live-log
-//! SSE extension. The server advertises it through the
-//! `x-opensovd-live-entries` discovery link and serves events at
-//! `/logs/entries/stream`. Events use a fixed `EventEnvelope<LogEntry>` shape;
-//! schema negotiation is therefore not part of the stream query.
+//! SSE extension. Providers that implement it must also return `true` from
+//! [`LogProvider::supports_streaming`]. The server advertises the extension
+//! through the `x-opensovd-live-entries` discovery link only for those
+//! providers and serves events at `/logs/entries/stream`. Events use a fixed
+//! `EventEnvelope<LogEntry>` shape; schema negotiation is therefore not part of
+//! the stream query.
 
 use std::pin::Pin;
 
@@ -145,6 +148,15 @@ pub enum LogError {
 pub trait LogProvider: Send + Sync + 'static {
     async fn entries(&self, filter: LogFilter) -> LogResult<Vec<LogEntry>>;
 
+    /// Returns whether this provider supports live log streaming.
+    ///
+    /// Providers that implement [`Self::stream`] must override this method to
+    /// return `true`. The default is `false`, so snapshot-only providers do not
+    /// advertise the live-stream extension.
+    fn supports_streaming(&self) -> bool {
+        false
+    }
+
     /// Opens a live log stream for the OpenSOVD SSE extension.
     async fn stream(&self, _filter: LogFilter) -> LogResult<LogStream> {
         Err(LogError::Internal(
@@ -166,7 +178,6 @@ pub type LogResult<T> = Result<T, LogError>;
 pub type LogStream = Pin<Box<dyn Stream<Item = LogResult<LogEntry>> + Send + 'static>>;
 
 #[cfg(test)]
-#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use async_trait::async_trait;
 

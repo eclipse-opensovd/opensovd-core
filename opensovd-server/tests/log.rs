@@ -1,7 +1,8 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 Contributors to the Eclipse Foundation
 // SPDX-License-Identifier: Apache-2.0
 //
-// This file was created with the assistance of generative AI.
+// AI Disclosure: This file was created with the assistance of OpenAI Codex.
+// Assisted-by: OpenAI Codex
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
@@ -17,8 +18,8 @@ use futures::stream;
 use http_body_util::BodyExt;
 use hyper::Request;
 use opensovd_core::{
-    App, Component, LogConfiguration, LogContext, LogEntry, LogFilter, LogProvider, LogResult,
-    LogSeverity, LogStream, Topology,
+    App, Component, LogConfiguration, LogContext, LogEntry, LogError, LogFilter, LogProvider,
+    LogResult, LogSeverity, LogStream, Topology,
 };
 use serde_json::Value;
 
@@ -35,10 +36,68 @@ impl LogProvider for RecordingProvider {
         Ok(self.entries.clone())
     }
 
+    fn supports_streaming(&self) -> bool {
+        true
+    }
+
     async fn stream(&self, filter: LogFilter) -> LogResult<LogStream> {
         *self.seen_filter.lock().unwrap() = Some(filter);
         let entry = self.entries.first().cloned().expect("test entry");
         Ok(Box::pin(stream::once(async move { Ok(entry) })))
+    }
+
+    async fn configuration(&self) -> LogResult<Vec<LogConfiguration>> {
+        Ok(Vec::new())
+    }
+
+    async fn configure(&self, _configuration: Vec<LogConfiguration>) -> LogResult<()> {
+        Ok(())
+    }
+
+    async fn reset_configuration(&self) -> LogResult<()> {
+        Ok(())
+    }
+}
+
+#[derive(Clone)]
+struct SnapshotOnlyProvider;
+
+#[async_trait]
+impl LogProvider for SnapshotOnlyProvider {
+    async fn entries(&self, _filter: LogFilter) -> LogResult<Vec<LogEntry>> {
+        Ok(Vec::new())
+    }
+
+    async fn configuration(&self) -> LogResult<Vec<LogConfiguration>> {
+        Ok(Vec::new())
+    }
+
+    async fn configure(&self, _configuration: Vec<LogConfiguration>) -> LogResult<()> {
+        Ok(())
+    }
+
+    async fn reset_configuration(&self) -> LogResult<()> {
+        Ok(())
+    }
+}
+
+#[derive(Clone)]
+struct ErrorStreamProvider;
+
+#[async_trait]
+impl LogProvider for ErrorStreamProvider {
+    async fn entries(&self, _filter: LogFilter) -> LogResult<Vec<LogEntry>> {
+        Ok(Vec::new())
+    }
+
+    fn supports_streaming(&self) -> bool {
+        true
+    }
+
+    async fn stream(&self, _filter: LogFilter) -> LogResult<LogStream> {
+        Ok(Box::pin(stream::once(async {
+            Err(LogError::Internal("secret provider details".into()))
+        })))
     }
 
     async fn configuration(&self) -> LogResult<Vec<LogConfiguration>> {
@@ -95,6 +154,37 @@ async fn server_with_provider(
     (server, seen_filter)
 }
 
+async fn server_with_snapshot_only_provider() -> common::TestServer {
+    let topology = Topology::new();
+    {
+        let mut state = topology.write().await;
+        state.add_app(
+            App::new("snapshot-app", "Snapshot Application")
+                .with_log_provider(SnapshotOnlyProvider),
+        );
+    }
+
+    common::TestServer::builder()
+        .topology(topology)
+        .build()
+        .await
+}
+
+async fn server_with_error_stream_provider() -> common::TestServer {
+    let topology = Topology::new();
+    {
+        let mut state = topology.write().await;
+        state.add_app(
+            App::new("error-app", "Error Application").with_log_provider(ErrorStreamProvider),
+        );
+    }
+
+    common::TestServer::builder()
+        .topology(topology)
+        .build()
+        .await
+}
+
 async fn get_json(server: &common::TestServer, path: &str) -> (hyper::StatusCode, Value) {
     let request = Request::builder()
         .uri(server.url(path))
@@ -133,6 +223,16 @@ async fn log_resources_advertise_snapshot_config_and_live_stream() {
         )
     );
     assert!(body["schema"].is_object());
+}
+
+#[tokio::test]
+async fn log_resources_do_not_advertise_live_stream_for_snapshot_only_provider() {
+    let server = server_with_snapshot_only_provider().await;
+
+    let (status, body) = get_json(&server, "/sovd/v1/apps/snapshot-app/logs").await;
+
+    assert_eq!(status, hyper::StatusCode::OK);
+    assert!(body.get("x-opensovd-live-entries").is_none());
 }
 
 #[tokio::test]
@@ -228,4 +328,23 @@ async fn log_entry_stream_returns_sse_event_envelope() {
         seen_filter.lock().unwrap().as_ref().unwrap().severity,
         Some(LogSeverity::DltInfo)
     );
+}
+
+#[tokio::test]
+async fn log_entry_stream_emits_sanitized_provider_errors() {
+    let server = server_with_error_stream_provider().await;
+    let request = Request::builder()
+        .uri(server.url("/sovd/v1/apps/error-app/logs/entries/stream"))
+        .body(http_body_util::Empty::<bytes::Bytes>::new())
+        .unwrap();
+
+    let response = common::client().request(request).await.unwrap();
+    assert_eq!(response.status(), hyper::StatusCode::OK);
+
+    let body = response.into_body().collect().await.unwrap().to_bytes();
+    let body = String::from_utf8(body.to_vec()).unwrap();
+    assert!(body.contains("\"payload\":null"));
+    assert!(body.contains("\"error\":{"));
+    assert!(body.contains("the log provider failed to produce a stream item"));
+    assert!(!body.contains("secret provider details"));
 }

@@ -1,7 +1,8 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 Contributors to the Eclipse Foundation
 // SPDX-License-Identifier: Apache-2.0
 //
-// This file was created with the assistance of generative AI.
+// AI Disclosure: This file was created with the assistance of OpenAI Codex.
+// Assisted-by: OpenAI Codex
 
 //! SOVD logging API models.
 
@@ -129,7 +130,6 @@ pub struct LogStreamQuery {
 }
 
 #[cfg(test)]
-#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use chrono::TimeZone;
     use serde_json::json;
