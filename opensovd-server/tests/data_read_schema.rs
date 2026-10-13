@@ -13,7 +13,7 @@ use http_body_util::BodyExt;
 use hyper::Request;
 use opensovd_core::{Component, Data, DataError, DataFilter, DataProvider, Metadata, Topology};
 use opensovd_models::data::DataCategory;
-use opensovd_providers::data::{Constant, DataProviderBuilder, ReadableDataResource};
+use opensovd_providers::data::{Constant, DataProviderBuilder};
 use schemars::JsonSchema;
 use serde::Serialize;
 use serde_json::{Value, json};
@@ -53,46 +53,6 @@ struct FanLevel {
 enum Mode {
     Auto,
     Manual,
-}
-
-/// Display menu whose entries are data values themselves.
-#[derive(Serialize, JsonSchema)]
-struct Menu {
-    label: String,
-    entries: Vec<opensovd_providers::data::Value<Menu>>,
-}
-
-/// Fault code reported by the blower, named like an error code of the response.
-#[derive(Serialize, JsonSchema)]
-struct ErrorCode(u16);
-
-#[derive(Serialize, JsonSchema)]
-struct BlowerFault {
-    code: ErrorCode,
-}
-
-/// Media folder, recursive at the root of its schema.
-#[derive(Serialize, JsonSchema)]
-struct Folder {
-    name: String,
-    folders: Vec<Folder>,
-}
-
-struct Folders;
-
-#[async_trait]
-impl ReadableDataResource for Folders {
-    type Value = Folder;
-
-    async fn read(&self) -> Result<Folder, DataError> {
-        Ok(Folder {
-            name: "Media".into(),
-            folders: vec![Folder {
-                name: "Podcasts".into(),
-                folders: Vec::new(),
-            }],
-        })
-    }
 }
 
 async fn get(topology: Topology, path: &str) -> Value {
@@ -135,41 +95,6 @@ async fn read_climate(data_id: &str) -> Value {
             })
             .unwrap(),
         )
-        .read_data(
-            "menu",
-            "Menu",
-            &category,
-            Constant::new(Menu {
-                label: "Main".into(),
-                entries: vec![opensovd_providers::data::Value::new(Menu {
-                    label: "Radio".into(),
-                    entries: Vec::new(),
-                })],
-            })
-            .unwrap(),
-        )
-        .read_data(
-            "fault",
-            "Fault",
-            &category,
-            Constant::new(BlowerFault {
-                code: ErrorCode(0x2a),
-            })
-            .unwrap(),
-        )
-        .read_data("folders", "Folders", &category, Folders)
-        .read_data("level", "Level", &category, Constant::new(2u8).unwrap())
-        .schema(json!({
-            "$schema": "https://json-schema.org/draft/2020-12/schema",
-            "$ref": "#/$defs/Level",
-            "$defs": {
-                "Level": {
-                    "type": "object",
-                    "properties": { "value": { "type": "integer", "maximum": 5 } },
-                    "required": ["value"],
-                },
-            },
-        }))
         .build()
         .unwrap();
     let topology = Topology::new();
@@ -215,49 +140,4 @@ async fn read_without_include_schema_has_no_schema() {
 async fn struct_value_matches_its_schema() {
     let body = read_climate("fan").await;
     assert_schema_holds(&body, |data| data["value"]["mode"] = json!("Turbo"));
-}
-
-#[tokio::test]
-async fn value_containing_itself_matches_its_schema() {
-    let body = read_climate("menu").await;
-    assert_schema_holds(&body, |data| {
-        data["value"]["entries"][0]["value"]["label"] = json!(1);
-    });
-}
-
-#[tokio::test]
-async fn value_named_like_a_response_definition_matches_its_schema() {
-    let body = read_climate("fault").await;
-    assert!(
-        body.pointer("/schema/properties/data/$defs/ErrorCode")
-            .is_some()
-    );
-    assert_schema_holds(&body, |data| {
-        data["value"]["code"] = json!("not-responding");
-    });
-}
-
-#[tokio::test]
-async fn recursive_root_type_matches_its_schema() {
-    let body = read_climate("folders").await;
-    assert_schema_holds(&body, |data| data["folders"][0]["name"] = json!(1));
-}
-
-#[tokio::test]
-async fn hand_written_schema_with_root_ref_matches() {
-    let body = read_climate("level").await;
-    assert_schema_holds(&body, |data| data["value"] = json!(9));
-}
-
-#[tokio::test]
-async fn each_data_resource_has_its_own_schema_id() {
-    for data_id in ["fan", "menu"] {
-        let body = read_climate(data_id).await;
-        assert_eq!(
-            body.pointer("/schema/properties/data/$id"),
-            Some(&json!(format!(
-                "urn:opensovd:components/Climate/data/{data_id}"
-            )))
-        );
-    }
 }

@@ -15,6 +15,14 @@ pub use builder::{BuildError, BuiltDataProvider, DataProviderBuilder};
 pub use constant::{Constant, ConstantError};
 pub use resource::{DataResource, ReadableDataResource, WriteableDataResource};
 
+/// Schema of a data value of type `T`, with the schemas of other types inlined.
+fn value_schema<T: schemars::JsonSchema>() -> schemars::Schema {
+    schemars::generate::SchemaSettings::draft2020_12()
+        .with(|settings| settings.inline_subschemas = true)
+        .into_generator()
+        .into_root_schema_for::<T>()
+}
+
 /// Wraps a scalar `T` in `{"value": <T>}` so the data value is a JSON object.
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 #[schemars(description = "")]

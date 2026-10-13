@@ -44,7 +44,7 @@ impl Constant {
         let wrapped = super::Value::new(value);
         Ok(Self {
             value: serde_json::to_value(&wrapped).map_err(|e| ConstantError(e.to_string()))?,
-            stored_schema: schemars::schema_for!(super::Value<T>),
+            stored_schema: super::value_schema::<super::Value<T>>(),
         })
     }
 }

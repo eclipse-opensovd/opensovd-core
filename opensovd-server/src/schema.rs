@@ -10,7 +10,7 @@
 #[cfg(feature = "jsonschema")]
 use schemars::{
     generate::{Contract, SchemaSettings},
-    transform::RecursiveTransform,
+    transform::{RecursiveTransform, Transform},
 };
 use serde_json::Value;
 
@@ -42,6 +42,18 @@ impl<T: serde::Serialize> JsonSchema for T {
     fn schema() -> Value {
         serde_json::json!({ "type": "object" })
     }
+}
+
+/// Leaves out of a provider's schema of a value what the schemas of the
+/// responses leave out.
+pub(crate) fn normalize(value: Value) -> Value {
+    #[cfg(feature = "jsonschema")]
+    if let Value::Object(object) = value {
+        let mut schema = schemars::Schema::from(object);
+        RecursiveTransform(strip).transform(&mut schema);
+        return schema.to_value();
+    }
+    value
 }
 
 /// Leaves out `$schema`, `title` and `description`, keeping the order of the
@@ -102,6 +114,48 @@ mod tests {
             json!({ "type": ["string", "null"] })
         );
     }
+
+    #[test]
+    fn normalize_leaves_out_annotations_of_subschemas() {
+        let value = json!({
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "title": "Fan",
+            "description": "Blower fan.",
+            "type": "object",
+            "properties": {
+                "level": { "description": "Fan level.", "type": "integer" },
+                "title": { "type": "string" },
+            },
+            "$defs": { "Mode": { "title": "Mode", "enum": ["Auto"] } },
+        });
+        assert_eq!(
+            normalize(value),
+            json!({
+                "type": "object",
+                "properties": {
+                    "level": { "type": "integer" },
+                    "title": { "type": "string" },
+                },
+                "$defs": { "Mode": { "enum": ["Auto"] } },
+            })
+        );
+        assert_eq!(normalize(json!(true)), json!(true));
+    }
+
+    #[cfg(feature = "json-preserve-order")]
+    #[test]
+    fn normalize_keeps_the_order_of_keywords() {
+        let value = json!({
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "title": "Fan",
+            "properties": {},
+            "required": [],
+        });
+        let normalized = normalize(value);
+        let keywords: Vec<&String> = normalized.as_object().unwrap().keys().collect();
+        assert_eq!(keywords, ["type", "properties", "required"]);
+    }
 }
 
 #[cfg(all(test, not(feature = "jsonschema")))]
@@ -114,5 +168,11 @@ mod tests {
     fn test_fallback_schema() {
         let schema = <String as JsonSchema>::schema();
         assert_eq!(schema, json!({ "type": "object" }));
+    }
+
+    #[test]
+    fn normalize_keeps_value_schemas() {
+        let value = json!({ "title": "Fan", "type": "integer" });
+        assert_eq!(normalize(value.clone()), value);
     }
 }

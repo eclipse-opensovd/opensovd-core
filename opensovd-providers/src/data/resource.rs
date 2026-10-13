@@ -21,9 +21,10 @@ pub trait ReadableDataResource: Send + Sync + 'static {
 
     /// Get the JSON schema for this resource.
     ///
-    /// Default implementation uses `schema_for!(Self::Value)`.
+    /// The default is the schema of `Self::Value`, with the schemas of other
+    /// types inlined.
     fn schema(&self) -> Schema {
-        schemars::schema_for!(Self::Value)
+        super::value_schema::<Self::Value>()
     }
 
     /// Read the current value of this data resource.
@@ -42,9 +43,10 @@ pub trait WriteableDataResource: Send + Sync + 'static {
 
     /// Get the JSON schema for this resource.
     ///
-    /// Default implementation uses `schema_for!(Self::Value)`.
+    /// The default is the schema of `Self::Value`, with the schemas of other
+    /// types inlined.
     fn schema(&self) -> Schema {
-        schemars::schema_for!(Self::Value)
+        super::value_schema::<Self::Value>()
     }
 
     /// Write a new value to this data resource.
