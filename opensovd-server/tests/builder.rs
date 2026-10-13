@@ -7,7 +7,7 @@ mod common;
 
 use http_body_util::BodyExt;
 use hyper::Request;
-use opensovd_core::Topology;
+use opensovd_core::{App, Component, Topology};
 use opensovd_server::Server;
 
 // not a #[test] fn, so the test-only unwrap allowance does not apply here
@@ -224,6 +224,55 @@ async fn test_unknown_path_returns_generic_error() {
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["error_code"], "vendor-specific", "{path}");
         assert_eq!(json["vendor_code"], "resource-not-found", "{path}");
+    }
+}
+
+#[tokio::test]
+async fn test_missing_data_provider_returns_resource_not_found() {
+    let topology = Topology::new();
+    {
+        let mut topo = topology.write().await;
+        topo.add_component(Component::new("Display", "Display"));
+        topo.add_app(App::new("Radio", "Radio"));
+    }
+    let server = common::TestServer::builder()
+        .topology(topology)
+        .build()
+        .await;
+    let client = hyper_util::client::legacy::Client::builder(hyper_util::rt::TokioExecutor::new())
+        .build_http::<http_body_util::Full<bytes::Bytes>>();
+
+    for entity in ["components/Display", "apps/Radio"] {
+        for (method, resource, body) in [
+            ("GET", "data-categories", ""),
+            ("GET", "data-groups", ""),
+            ("GET", "data", ""),
+            ("GET", "data/volume", ""),
+            ("PUT", "data/volume", r#"{"data": 1}"#),
+        ] {
+            let path = format!("/sovd/v1/{entity}/{resource}");
+            let request = Request::builder()
+                .method(method)
+                .uri(server.url(&path))
+                .header("content-type", "application/json")
+                .body(http_body_util::Full::new(bytes::Bytes::from_static(
+                    body.as_bytes(),
+                )))
+                .unwrap();
+
+            let response = client.request(request).await.unwrap();
+            assert_eq!(response.status(), 404, "{method} {path}");
+
+            let body = response.into_body().collect().await.unwrap().to_bytes();
+            let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+            assert_eq!(json["error_code"], "vendor-specific", "{method} {path}");
+            assert_eq!(json["vendor_code"], "resource-not-found", "{method} {path}");
+            assert_eq!(
+                json["message"],
+                format!("Resource not found: {path}"),
+                "{method} {path}"
+            );
+        }
     }
 }
 
