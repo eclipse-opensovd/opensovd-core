@@ -17,10 +17,6 @@ name = "simple"
 path = "simple/simple.rs"
 
 [[example]]
-name = "log"
-path = "log/log.rs"
-
-[[example]]
 name = "systemd"
 path = "systemd/systemd.rs"
 
