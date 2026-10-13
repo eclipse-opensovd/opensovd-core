@@ -26,6 +26,5 @@ def test_version_info_with_schema(client):
     data = response.json()
     assert "sovd_info" in data
     assert "schema" in data
-    assert "$schema" in data["schema"]
     # Validate that the response data conforms to the returned schema
-    jsonschema.validate(instance=data, schema=data["schema"])
+    jsonschema.validate(instance=data, schema=data["schema"], cls=jsonschema.Draft202012Validator)

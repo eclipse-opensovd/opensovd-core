@@ -526,8 +526,8 @@ mod tests {
             Some(&serde_json::json!({ "type": "string" }))
         );
         assert_eq!(
-            schema.pointer("/$defs/GenericError"),
-            ReadResponse::schema().pointer("/$defs/GenericError")
+            schema.pointer("/properties/errors"),
+            ReadResponse::schema().pointer("/properties/errors")
         );
     }
 

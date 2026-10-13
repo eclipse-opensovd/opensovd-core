@@ -150,16 +150,14 @@ curl -s http://localhost:7690/sovd/v1/components/gateway/data/sw.version | jq
   }
 }
 
-# Read data with schema included (definitions omitted)
-curl -s http://localhost:7690/sovd/v1/components/gateway/data/sw.version?include-schema=true | jq 'del(.schema."$defs")'
+# Read data with schema included (error schema omitted)
+curl -s http://localhost:7690/sovd/v1/components/gateway/data/sw.version?include-schema=true | jq 'del(.schema.properties.errors.items)'
 {
   "id": "sw.version",
   "data": {
     "value": "0.1.0-mock"
   },
   "schema": {
-    "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "title": "ReadResponse",
     "type": "object",
     "properties": {
       "id": {
@@ -178,10 +176,7 @@ curl -s http://localhost:7690/sovd/v1/components/gateway/data/sw.version?include
         "required": ["value"]
       },
       "errors": {
-        "type": ["array", "null"],
-        "items": {
-          "$ref": "#/$defs/DataError"
-        }
+        "type": ["array", "null"]
       },
       "schema": true
     },

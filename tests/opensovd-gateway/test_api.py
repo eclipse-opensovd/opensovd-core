@@ -18,8 +18,7 @@ def validate_schema(data):
     """Validate response data against the schema it carries."""
     assert "schema" in data, "expected schema with include-schema=true"
     schema = data["schema"]
-    assert "$schema" in schema, "Schema must have $schema property"
-    jsonschema.validate(instance=data, schema=schema)
+    jsonschema.validate(instance=data, schema=schema, cls=jsonschema.Draft202012Validator)
 
 
 def get_json(client, url, params, include_schema):

@@ -150,7 +150,7 @@ def test_include_schema(client, path):
     assert resp.status_code == 200
     body = resp.json()
     assert "schema" in body, "expected schema key when include-schema=true"
-    jsonschema.validate(instance=body, schema=body["schema"])
+    jsonschema.validate(instance=body, schema=body["schema"], cls=jsonschema.Draft202012Validator)
 
 
 # ---------------------------------------------------------------------------

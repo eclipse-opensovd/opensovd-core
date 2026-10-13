@@ -194,17 +194,11 @@ mod tests {
         assert_eq!(json["sovd_info"][0]["vendor_info"]["product"], "SOVD");
         assert_eq!(json["sovd_info"][0]["vendor_info"]["build"], 42);
 
-        // Verify schema structure (schemars 1.0 uses JSON Schema 2020-12)
         let schema = &json["schema"];
-        assert_eq!(
-            schema["$schema"],
-            "https://json-schema.org/draft/2020-12/schema"
-        );
-        assert_eq!(schema["title"], "VersionInfo");
 
-        // Verify CustomVendor is in $defs with correct properties (schemars 1.0 uses $defs)
-        let vendor_def = &schema["$defs"]["CustomVendor"];
-        assert_eq!(vendor_def["type"], "object");
+        // Verify CustomVendor is inlined with correct properties
+        let vendor_def = &schema["properties"]["sovd_info"]["items"]["properties"]["vendor_info"];
+        assert_eq!(vendor_def["type"], serde_json::json!(["object", "null"]));
         assert_eq!(vendor_def["properties"]["product"]["type"], "string");
         assert_eq!(vendor_def["properties"]["build"]["type"], "integer");
         assert_eq!(vendor_def["properties"]["build"]["format"], "uint32");

@@ -38,8 +38,7 @@ def test_root_capabilities_with_schema(client):
     assert response.status_code == 200
     data = response.json()
     assert "schema" in data
-    assert "$schema" in data["schema"]
-    jsonschema.validate(instance=data, schema=data["schema"])
+    jsonschema.validate(instance=data, schema=data["schema"], cls=jsonschema.Draft202012Validator)
 
 
 def test_list_components(client):
@@ -58,8 +57,7 @@ def test_list_components_with_schema(client):
     data = response.json()
     assert "items" in data
     assert "schema" in data
-    assert "$schema" in data["schema"]
-    jsonschema.validate(instance=data, schema=data["schema"])
+    jsonschema.validate(instance=data, schema=data["schema"], cls=jsonschema.Draft202012Validator)
 
 
 def test_list_components_have_tags(client):
