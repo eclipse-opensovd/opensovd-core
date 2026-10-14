@@ -17,12 +17,13 @@
 ```rust,no_run
 use std::time::Duration;
 
-use opensovd_client::{Client, Error, SovdInfo, VendorInfo};
+use opensovd_client::{Auth, Client, Error, SovdInfo, VendorInfo};
 
 # async fn run() -> Result<(), Box<dyn std::error::Error>> {
 // Point at the SOVD server root (no version identifier).
 let discovery = Client::builder()
     .base_uri("http://localhost:7690/sovd")?
+    .auth(Auth::bearer("example-token"))
     .timeout(Duration::from_secs(5))
     .discovery()?;
 
@@ -48,6 +49,10 @@ match client.list_components().send().await {
 ```
 
 If no timeout is configured, requests have no deadline.
+
+Authentication is optional. When configured on the builder, the client sends the
+credential as an `Authorization` header on every request, and clients returned
+from `Discovery::select` inherit the same credential.
 
 On Unix, `Discovery::connect_unix` / `connect_unix_abstract` reach `version-info`
 over a Unix domain socket. A runnable example lives in `examples/client`.
