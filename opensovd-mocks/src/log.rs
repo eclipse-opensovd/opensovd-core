@@ -135,10 +135,15 @@ mod tests {
     fn entry(second: u32, severity: LogSeverity, msg: &str) -> LogEntry {
         LogEntry {
             timestamp: Utc.with_ymd_and_hms(2026, 10, 12, 12, 0, second).unwrap(),
-            context: LogContext::Rfc5424 {
-                host: Some("test-host".into()),
-                process: Some("test-process".into()),
-                pid: Some(1),
+            context: LogContext {
+                context_type: "RFC5424".into(),
+                attributes: [
+                    ("host".into(), "test-host".into()),
+                    ("process".into(), "test-process".into()),
+                    ("pid".into(), 1.into()),
+                ]
+                .into_iter()
+                .collect(),
             },
             severity,
             msg: msg.into(),

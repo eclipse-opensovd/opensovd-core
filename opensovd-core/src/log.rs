@@ -77,18 +77,15 @@ impl LogSeverity {
     }
 }
 
-/// Context identifying the source and format of a log entry.
+/// Opaque context identifying the source and format of a log entry.
+///
+/// Context formats and their attributes are provider-specific. The common
+/// logging interface transports the type and attributes without interpreting
+/// them; providers are responsible for matching and filtering contexts.
 #[derive(Debug, Clone, PartialEq)]
-pub enum LogContext {
-    Rfc5424 {
-        host: Option<String>,
-        process: Option<String>,
-        pid: Option<i64>,
-    },
-    Custom {
-        context_type: String,
-        attributes: serde_json::Map<String, serde_json::Value>,
-    },
+pub struct LogContext {
+    pub context_type: String,
+    pub attributes: serde_json::Map<String, serde_json::Value>,
 }
 
 /// A log entry exposed through the SOVD API.

@@ -93,23 +93,23 @@ The ISO wording is “after” and “before”, so the boundaries are exclusive
 All timestamps must be compared as instants, after parsing them into a common
 timezone representation such as `DateTime<Utc>`.
 
-If both bounds are present and `created-after >= created-before`, the provider
-should return `LogError::InvalidRequest` rather than silently returning an
-unexpected result.
+If both bounds are present and `created-after >= created-before`, the server
+rejects the request with `LogError::InvalidRequest` before invoking the
+provider. Providers may repeat this validation defensively when they are used
+outside the HTTP server.
 
 ## Provider implementation sequence
 
 An implementation should follow this sequence:
 
-1. Validate the filter combination.
-2. Translate the SOVD severity threshold to the backend’s level representation.
-3. Translate the time bounds to the backend’s timestamp query format.
-4. Execute the narrowest backend query possible.
-5. Map backend records to `opensovd_core::LogEntry`.
-6. Normalize backend severity and context values.
-7. Apply a final provider-local check after mapping if the backend has
+1. Translate the SOVD severity threshold to the backend’s level representation.
+2. Translate the time bounds to the backend’s timestamp query format.
+3. Execute the narrowest backend query possible.
+4. Map backend records to `opensovd_core::LogEntry`.
+5. Normalize backend severity and context values.
+6. Apply a final provider-local check after mapping if the backend has
    approximate filtering or inclusive boundary behavior.
-8. Return entries in a documented deterministic order, preferably timestamp
+7. Return entries in a documented deterministic order, preferably timestamp
    ascending or descending consistently.
 
 The final provider-local check is still part of the provider implementation;
@@ -121,14 +121,6 @@ it is not a second filter in the generic OpenSOVD server.
 #[async_trait]
 impl LogProvider for RealtimeUnitLogProvider {
     async fn entries(&self, filter: LogFilter) -> Result<Vec<LogEntry>> {
-        if let (Some(after), Some(before)) = (filter.created_after, filter.created_before) {
-            if after >= before {
-                return Err(LogError::InvalidRequest(
-                    "created-after must be earlier than created-before".into(),
-                ));
-            }
-        }
-
         let query = BackendQuery {
             minimum_level: filter.severity.map(to_backend_level),
             created_after: filter.created_after,
@@ -167,10 +159,11 @@ The provider should therefore:
 
 ## Error behavior
 
-Use these errors for provider-side filtering failures:
+Use these errors for filtering failures:
 
-- `LogError::InvalidRequest` for inconsistent filter ranges or unsupported
-  provider-specific filter input;
+- `LogError::InvalidRequest` for unsupported provider-specific filter input;
+  the common time-range validation is performed by the server routes before
+  the provider is called;
 - `LogError::Internal` for backend connection, query, or decoding failures;
 - `LogError::NotFound` only when the provider’s log resource itself is absent.
 
@@ -192,7 +185,7 @@ depend directly on backend logging types or transport APIs.
 
 ## Implementation checklist
 
-- [ ] Validate `created-after` and `created-before` combinations.
+- [x] Common `created-after`/`created-before` validation is performed by the server routes.
 - [ ] Map SOVD severity to backend severity.
 - [ ] Apply equal-or-higher severity semantics.
 - [ ] Apply exclusive timestamp bounds.

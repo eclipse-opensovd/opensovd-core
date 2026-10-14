@@ -117,7 +117,7 @@ fn test_entry(severity: LogSeverity, message: &str) -> LogEntry {
     let timestamp = Utc.with_ymd_and_hms(2026, 10, 7, 8, 0, 0).unwrap();
     LogEntry {
         timestamp,
-        context: LogContext::Custom {
+        context: LogContext {
             context_type: "test".into(),
             attributes: [("source".into(), "diag".into())]
                 .into_iter()
@@ -283,6 +283,44 @@ async fn log_configuration_honors_include_schema() {
 
     assert_eq!(status, hyper::StatusCode::OK);
     assert!(body["schema"].is_object());
+}
+
+#[tokio::test]
+async fn invalid_time_range_is_rejected_before_snapshot_provider() {
+    let provider = RecordingProvider {
+        entries: vec![],
+        seen_filter: Arc::new(Mutex::new(None)),
+    };
+    let (server, seen_filter) = server_with_provider(provider).await;
+
+    let (status, body) = get_json(
+        &server,
+        "/sovd/v1/apps/diag-app/logs/entries?created-after=2026-10-07T09:00:00Z&created-before=2026-10-07T08:00:00Z",
+    )
+    .await;
+
+    assert_eq!(status, hyper::StatusCode::BAD_REQUEST);
+    assert_eq!(body["error_code"], "error-response");
+    assert!(seen_filter.lock().unwrap().is_none());
+}
+
+#[tokio::test]
+async fn invalid_time_range_is_rejected_before_stream_provider() {
+    let provider = RecordingProvider {
+        entries: vec![test_entry(LogSeverity::Info, "heartbeat")],
+        seen_filter: Arc::new(Mutex::new(None)),
+    };
+    let (server, seen_filter) = server_with_provider(provider).await;
+
+    let (status, body) = get_json(
+        &server,
+        "/sovd/v1/apps/diag-app/logs/x-opensovd-log-streams?created-after=2026-10-07T09:00:00Z&created-before=2026-10-07T08:00:00Z",
+    )
+    .await;
+
+    assert_eq!(status, hyper::StatusCode::BAD_REQUEST);
+    assert_eq!(body["error_code"], "error-response");
+    assert!(seen_filter.lock().unwrap().is_none());
 }
 
 #[tokio::test]

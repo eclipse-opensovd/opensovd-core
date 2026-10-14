@@ -29,7 +29,6 @@ use opensovd_models::{
         LogResourcesQuery, LogSeverity, LogStreamQuery,
     },
 };
-use serde_json::{Map, Value};
 
 use super::{
     AppState,
@@ -99,6 +98,7 @@ async fn log_entries(
     Path((entity_collection, entity_id)): Path<(String, String)>,
     WithRejection(Query(query), _): WithRejection<Query<LogEntriesQuery>, Error>,
 ) -> Result<Json<Response<LogEntries>>> {
+    validate_entries_filter(&query)?;
     let provider = get_provider(&topology, &entity_collection, &entity_id).await?;
     let include_schema = query.include_schema;
     let entries = provider
@@ -125,6 +125,7 @@ async fn log_entry_stream(
 ) -> Result<
     Sse<impl futures_core::Stream<Item = std::result::Result<Event, std::convert::Infallible>>>,
 > {
+    validate_stream_filter(&query)?;
     let provider = get_provider(&topology, &entity_collection, &entity_id).await?;
     let stream = provider
         .stream(LogFilter {
@@ -261,60 +262,40 @@ fn model_severity(value: CoreLogSeverity) -> LogSeverity {
 }
 
 fn core_context(value: LogContext) -> CoreLogContext {
-    let LogContext {
-        context_type,
-        mut attributes,
-    } = value;
-    match context_type.as_str() {
-        "RFC5424" => CoreLogContext::Rfc5424 {
-            host: take_string(&mut attributes, "host"),
-            process: take_string(&mut attributes, "process"),
-            pid: take_i64(&mut attributes, "pid"),
-        },
-        _ => CoreLogContext::Custom {
-            context_type,
-            attributes,
-        },
+    CoreLogContext {
+        context_type: value.context_type,
+        attributes: value.attributes,
     }
 }
 
 fn model_context(value: CoreLogContext) -> LogContext {
-    match value {
-        CoreLogContext::Rfc5424 { host, process, pid } => LogContext {
-            context_type: "RFC5424".into(),
-            attributes: attributes([
-                ("host", host.map(Value::from)),
-                ("process", process.map(Value::from)),
-                ("pid", pid.map(Value::from)),
-            ]),
-        },
-        CoreLogContext::Custom {
-            context_type,
-            attributes,
-        } => LogContext {
-            context_type,
-            attributes,
-        },
+    LogContext {
+        context_type: value.context_type,
+        attributes: value.attributes,
     }
 }
 
-fn attributes(
-    items: impl IntoIterator<Item = (&'static str, Option<Value>)>,
-) -> Map<String, Value> {
-    items
-        .into_iter()
-        .filter_map(|(key, value)| value.map(|value| (key.to_string(), value)))
-        .collect()
+fn validate_entries_filter(query: &LogEntriesQuery) -> Result<()> {
+    validate_time_range(query.created_after, query.created_before)
 }
 
-fn take_string(attributes: &mut Map<String, Value>, key: &str) -> Option<String> {
-    attributes
-        .remove(key)
-        .and_then(|value| value.as_str().map(ToOwned::to_owned))
+fn validate_stream_filter(query: &LogStreamQuery) -> Result<()> {
+    validate_time_range(query.created_after, query.created_before)
 }
 
-fn take_i64(attributes: &mut Map<String, Value>, key: &str) -> Option<i64> {
-    attributes.remove(key).and_then(|value| value.as_i64())
+fn validate_time_range(
+    created_after: Option<chrono::DateTime<chrono::Utc>>,
+    created_before: Option<chrono::DateTime<chrono::Utc>>,
+) -> Result<()> {
+    if let (Some(after), Some(before)) = (created_after, created_before)
+        && after >= before
+    {
+        return Err(LogError::InvalidRequest(
+            "created-after must be earlier than created-before".into(),
+        )
+        .into());
+    }
+    Ok(())
 }
 
 fn core_configuration(value: LogConfiguration) -> CoreLogConfiguration {
