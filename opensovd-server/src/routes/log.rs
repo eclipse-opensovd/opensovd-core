@@ -238,7 +238,7 @@ async fn get_provider(
             .log_provider(),
         _ => return Err(Error::EntityNotFound(entity_collection.to_string())),
     };
-    provider.ok_or_else(|| Error::ProviderNotAvailable("logs".into()))
+    provider.ok_or_else(|| LogError::NotSupported("logs resource is not supported".into()).into())
 }
 
 fn core_severity(value: LogSeverity) -> CoreLogSeverity {
