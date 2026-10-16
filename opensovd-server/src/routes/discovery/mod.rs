@@ -20,14 +20,14 @@ pub(super) mod component;
 
 use std::collections::HashMap;
 
-use axum::{extract::State, http::request::Parts, response::Json};
-use axum_extra::extract::{Query, WithRejection};
+use axum::{extract::State, http::request::Parts};
 use opensovd_core::Topology;
 use opensovd_models::discovery::{EntityCapabilities, EntityCapabilitiesQuery};
 use percent_encoding::{AsciiSet, CONTROLS, utf8_percent_encode};
 use serde_json::{Map, Value};
 
-use super::error::{Error, Result};
+use super::error::Result;
+use super::extract::{Json, Query};
 use crate::schema::JsonSchema;
 
 /// GET / - Query for capabilities of the server.
@@ -36,7 +36,7 @@ use crate::schema::JsonSchema;
 pub(super) async fn server_capabilities(
     State(topology): State<Topology>,
     parts: Parts,
-    WithRejection(Query(query), _): WithRejection<Query<EntityCapabilitiesQuery>, Error>,
+    Query(query): Query<EntityCapabilitiesQuery>,
 ) -> Result<Json<EntityCapabilities>> {
     let base = super::versioned_uri(&parts);
     let topo = topology.read().await;

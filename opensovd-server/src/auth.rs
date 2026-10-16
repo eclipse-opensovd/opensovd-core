@@ -15,10 +15,12 @@ use axum::extract::{
 };
 use axum::http::{HeaderValue, Method, StatusCode, header};
 use axum::middleware::{self, Next};
-use axum::response::{IntoResponse, Json, Response};
+use axum::response::{IntoResponse, Response};
 use http::request::Parts;
 use opensovd_models::{ErrorCode, GenericError};
 use serde::Serialize;
+
+use crate::routes::extract::Json;
 
 /// An authenticated caller.
 #[derive(Clone, Debug, Serialize)]

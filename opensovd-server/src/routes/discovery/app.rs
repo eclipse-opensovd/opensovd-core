@@ -1,15 +1,15 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 Contributors to the Eclipse Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use axum::{extract::State, http::request::Parts, response::Json};
-use axum_extra::extract::{Query, WithRejection};
+use axum::{extract::State, http::request::Parts};
 use opensovd_core::Topology;
 use opensovd_models::discovery::{
     Entities, EntitiesQuery, EntityCapabilities, EntityCapabilitiesQuery, EntityReference,
 };
 
 use super::super::entity::Entity;
-use super::super::error::{Error, Result};
+use super::super::error::Result;
+use super::super::extract::{Json, Query};
 use super::encode_path_segment;
 use crate::schema::JsonSchema;
 
@@ -19,7 +19,7 @@ use crate::schema::JsonSchema;
 pub(crate) async fn app_list(
     State(topology): State<Topology>,
     parts: Parts,
-    WithRejection(Query(query), _): WithRejection<Query<EntitiesQuery>, Error>,
+    Query(query): Query<EntitiesQuery>,
 ) -> Result<Json<Entities>> {
     let base = super::super::versioned_uri(&parts);
     let items = topology
@@ -56,7 +56,7 @@ pub(crate) async fn app_capabilities(
     State(topology): State<Topology>,
     entity: Entity,
     parts: Parts,
-    WithRejection(Query(query), _): WithRejection<Query<EntityCapabilitiesQuery>, Error>,
+    Query(query): Query<EntityCapabilitiesQuery>,
 ) -> Result<Json<EntityCapabilities>> {
     let topo = topology.read().await;
     let app = entity.app(&topo)?;

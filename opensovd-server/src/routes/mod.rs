@@ -20,6 +20,7 @@
 //! - then the operation.
 //!
 //! - `entity`: the `Entity` extractor and the stub answer
+//! - `extract`: `Path`, `Query`, `TypedHeader` and `Json`, which reject with `Error`
 //! - `discovery`: capabilities, listings and relations
 //! - `data`, `bulk_data`, `log`: the served resource collections
 //! - `stubs`: the routers of collections that are not served yet
@@ -30,6 +31,7 @@ mod data;
 mod discovery;
 mod entity;
 mod error;
+pub(crate) mod extract;
 mod log;
 mod stubs;
 mod version;

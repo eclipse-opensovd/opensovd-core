@@ -15,17 +15,13 @@
 use std::vec;
 
 use axum::{
-    Json, Router,
+    Router,
     body::Body,
-    extract::{DefaultBodyLimit, FromRequest, Multipart, Path, Request, State},
+    extract::{DefaultBodyLimit, FromRequest, Multipart, Request, State},
     response::IntoResponse,
     routing::get,
 };
-use axum_extra::{
-    TypedHeader,
-    extract::{Query, WithRejection},
-    headers::{ContentLength, ContentType, Header},
-};
+use axum_extra::headers::{ContentLength, ContentType, Header};
 use futures::StreamExt;
 use http::{HeaderMap, HeaderName, HeaderValue, StatusCode, request::Parts};
 use opensovd_core::{BulkDataError, CategoryFilter, Topology};
@@ -39,7 +35,8 @@ use serde::Deserialize;
 use crate::routes::{
     discovery::encode_path_segment,
     entity::Entity,
-    error::{Error, Result, bulk_data_error},
+    error::{Result, bulk_data_error},
+    extract::{Json, Path, Query, TypedHeader},
     versioned_uri,
 };
 use crate::schema::JsonSchema;
@@ -80,7 +77,7 @@ struct BulkDataId {
 async fn bulk_data_categories(
     State(topology): State<Topology>,
     entity: Entity,
-    WithRejection(Query(query), _): WithRejection<Query<BulkDataCategoriesQuery>, Error>,
+    Query(query): Query<BulkDataCategoriesQuery>,
 ) -> Result<Json<AvailableBulkDataCategories>> {
     let provider = entity.bulk_data_provider(&topology.read().await)?;
     Ok(Json(AvailableBulkDataCategories {
@@ -112,7 +109,7 @@ async fn bulk_data_descriptors(
     State(topology): State<Topology>,
     entity: Entity,
     Path(Category { category }): Path<Category>,
-    WithRejection(Query(query), _): WithRejection<Query<BulkDataDescriptorsQuery>, Error>,
+    Query(query): Query<BulkDataDescriptorsQuery>,
 ) -> Result<Json<BulkDataMetadata>> {
     let provider = entity.bulk_data_provider(&topology.read().await)?;
 
@@ -207,12 +204,9 @@ async fn bulk_data_upload(
     entity: Entity,
     Path(Category { category }): Path<Category>,
     parts: Parts,
-    WithRejection(TypedHeader(content_type), _): WithRejection<TypedHeader<ContentType>, Error>,
-    WithRejection(TypedHeader(content_disposition), _): WithRejection<
-        TypedHeader<ContentDisposition>,
-        Error,
-    >,
-    WithRejection(TypedHeader(content_length), _): WithRejection<TypedHeader<ContentLength>, Error>,
+    TypedHeader(content_type): TypedHeader<ContentType>,
+    TypedHeader(content_disposition): TypedHeader<ContentDisposition>,
+    TypedHeader(content_length): TypedHeader<ContentLength>,
     req: Request,
 ) -> Result<(StatusCode, HeaderMap, Json<BulkDataUpload>)> {
     let provider = entity.bulk_data_provider(&topology.read().await)?;

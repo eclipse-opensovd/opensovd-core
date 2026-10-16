@@ -4,3 +4,11 @@
 allow-expect-in-tests = true
 allow-unwrap-in-tests = true
 allow-indexing-slicing-in-tests = true
+
+disallowed-types = [
+    { path = "axum::extract::Path", reason = "use routes::extract::Path, which rejects with Error" },
+    { path = "axum::extract::Query", reason = "use routes::extract::Query, which rejects with Error" },
+    { path = "axum_extra::extract::Query", reason = "use routes::extract::Query, which rejects with Error" },
+    { path = "axum::Json", reason = "use routes::extract::Json, which rejects with Error" },
+    { path = "axum_extra::TypedHeader", reason = "use routes::extract::TypedHeader, which rejects with Error" },
+]

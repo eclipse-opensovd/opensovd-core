@@ -5,7 +5,7 @@
 
 use std::sync::Arc;
 
-use axum::extract::{FromRequestParts, Path, State};
+use axum::extract::{FromRequestParts, State};
 use axum::http::{Uri, request::Parts};
 use opensovd_core::{
     App, Area, BulkDataProvider, Component, DataProvider, EntityKind, EntityPath, InvalidPath,
@@ -86,14 +86,21 @@ fn entity_path(params: Params) -> std::result::Result<EntityPath, InvalidPath> {
 impl<S: Send + Sync> FromRequestParts<S> for Entity {
     type Rejection = Error;
 
+    #[expect(
+        clippy::disallowed_types,
+        reason = "reads the params and rejects itself"
+    )]
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self> {
         let uri = super::original_uri(parts).clone();
         let start = uri
             .path()
             .len()
             .saturating_sub(super::api_path(parts).len());
-        let params = Option::<Path<Params>>::from_request_parts(parts, state).await?;
-        let path = params.map_or(Ok(EntityPath::server()), |Path(params)| entity_path(params));
+        let params =
+            Option::<axum::extract::Path<Params>>::from_request_parts(parts, state).await?;
+        let path = params.map_or(Ok(EntityPath::server()), |axum::extract::Path(params)| {
+            entity_path(params)
+        });
         let Ok(path) = path else {
             return Err(Error::ResourceNotFound(super::api_path(parts).to_owned()));
         };

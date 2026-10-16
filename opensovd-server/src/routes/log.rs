@@ -16,12 +16,11 @@
 //! - DELETE /{entity_path}/logs/config - Reset the log configuration to default
 
 use axum::{
-    Json, Router,
+    Router,
     extract::State,
     response::sse::{Event, KeepAlive, Sse},
     routing::get,
 };
-use axum_extra::extract::{Query, WithRejection};
 use futures::StreamExt;
 use http::{StatusCode, request::Parts};
 use opensovd_core::{
@@ -39,7 +38,8 @@ use opensovd_models::{
 
 use super::{
     entity::Entity,
-    error::{Error, Result},
+    error::Result,
+    extract::{Json, Query},
     versioned_uri,
 };
 use crate::schema::JsonSchema;
@@ -65,7 +65,7 @@ async fn log_resources(
     State(topology): State<Topology>,
     entity: Entity,
     parts: Parts,
-    WithRejection(Query(query), _): WithRejection<Query<LogResourcesQuery>, Error>,
+    Query(query): Query<LogResourcesQuery>,
 ) -> Result<Json<LogResources>> {
     let provider = entity.log_provider(&topology.read().await)?;
     let logs = format!("{}/{}/logs", versioned_uri(&parts), entity.path());
@@ -87,7 +87,7 @@ async fn log_resources(
 async fn log_entries(
     State(topology): State<Topology>,
     entity: Entity,
-    WithRejection(Query(query), _): WithRejection<Query<LogEntriesQuery>, Error>,
+    Query(query): Query<LogEntriesQuery>,
 ) -> Result<Json<LogEntries>> {
     validate_entries_filter(&query)?;
     let provider = entity.log_provider(&topology.read().await)?;
@@ -115,7 +115,7 @@ async fn log_entries(
 async fn log_entry_stream(
     State(topology): State<Topology>,
     entity: Entity,
-    WithRejection(Query(query), _): WithRejection<Query<LogStreamQuery>, Error>,
+    Query(query): Query<LogStreamQuery>,
 ) -> Result<
     Sse<impl futures_core::Stream<Item = std::result::Result<Event, std::convert::Infallible>>>,
 > {
@@ -182,7 +182,7 @@ fn stream_error(error: &LogError) -> GenericError {
 async fn log_configuration(
     State(topology): State<Topology>,
     entity: Entity,
-    WithRejection(Query(query), _): WithRejection<Query<LogConfigurationQuery>, Error>,
+    Query(query): Query<LogConfigurationQuery>,
 ) -> Result<Json<LogConfigurationResponse>> {
     let provider = entity.log_provider(&topology.read().await)?;
     let contexts = provider
@@ -203,7 +203,7 @@ async fn log_configuration(
 async fn log_configuration_write(
     State(topology): State<Topology>,
     entity: Entity,
-    WithRejection(Json(body), _): WithRejection<Json<LogConfigurationRequest>, Error>,
+    Json(body): Json<LogConfigurationRequest>,
 ) -> Result<StatusCode> {
     let provider = entity.log_provider(&topology.read().await)?;
     provider

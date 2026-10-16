@@ -11,14 +11,7 @@
 //! - GET /{entity_path}/data/{data_id} - Read a data resource
 //! - PUT /{entity_path}/data/{data_id} - Write a data resource
 
-use axum::{
-    Router,
-    extract::{Path, State},
-    http::StatusCode,
-    response::Json,
-    routing::get,
-};
-use axum_extra::extract::{Query, WithRejection};
+use axum::{Router, extract::State, http::StatusCode, routing::get};
 use opensovd_core::{DataFilter, DataScope, Topology};
 use opensovd_models::data::{
     DataCategories, DataCategoryInformation, DataGroups, DataGroupsQuery, DataList, DataQuery,
@@ -28,7 +21,8 @@ use serde::Deserialize;
 use serde_json::Value;
 
 use super::entity::Entity;
-use super::error::{Error, Result};
+use super::error::Result;
+use super::extract::{Json, Path, Query};
 use crate::schema::{JsonSchema, normalize};
 
 pub fn routes() -> Router<Topology> {
@@ -76,7 +70,7 @@ async fn data_categories(
 async fn data_groups(
     State(topology): State<Topology>,
     entity: Entity,
-    WithRejection(Query(query), _): WithRejection<Query<DataGroupsQuery>, Error>,
+    Query(query): Query<DataGroupsQuery>,
 ) -> Result<Json<DataGroups>> {
     let topo = topology.read().await;
     let provider = entity.data_provider(&topo)?;
@@ -148,7 +142,7 @@ fn read_response_schema(data: Value) -> Value {
 async fn data_list(
     State(topology): State<Topology>,
     entity: Entity,
-    WithRejection(Query(query), _): WithRejection<Query<DataQuery>, Error>,
+    Query(query): Query<DataQuery>,
 ) -> Result<Json<DataList>> {
     let topo = topology.read().await;
     let provider = entity.data_provider(&topo)?;
@@ -183,7 +177,7 @@ async fn data_read(
     State(topology): State<Topology>,
     entity: Entity,
     Path(DataId { data_id }): Path<DataId>,
-    WithRejection(Query(query), _): WithRejection<Query<ReadDataQuery>, Error>,
+    Query(query): Query<ReadDataQuery>,
 ) -> Result<Json<ReadResponse>> {
     let topo = topology.read().await;
     let provider = entity.data_provider(&topo)?;
@@ -208,7 +202,7 @@ async fn data_write(
     State(topology): State<Topology>,
     entity: Entity,
     Path(DataId { data_id }): Path<DataId>,
-    WithRejection(Json(body), _): WithRejection<Json<WriteRequest>, Error>,
+    Json(body): Json<WriteRequest>,
 ) -> Result<StatusCode> {
     let topo = topology.read().await;
     let provider = entity.data_provider(&topo)?;

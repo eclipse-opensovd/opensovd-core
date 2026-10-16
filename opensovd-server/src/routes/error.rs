@@ -9,11 +9,13 @@ use axum::{
     extract::path::ErrorKind,
     extract::rejection::{JsonRejection, PathRejection},
     http::{StatusCode, header},
-    response::{IntoResponse, Json, Response},
+    response::{IntoResponse, Response},
 };
 use axum_extra::{extract::QueryRejection, typed_header::TypedHeaderRejection};
 use opensovd_core::{BulkDataError, DataError, LogError};
 use opensovd_models::{ErrorCode, ErrorDetails, GenericError, JsonPointer};
+
+use super::extract::Json;
 
 /// A `Result` alias where the `Err` variant is [`Error`].
 pub type Result<T> = std::result::Result<T, Error>;
@@ -425,9 +427,10 @@ mod tests {
     #[tokio::test]
     async fn test_error_bad_query() {
         use axum::{Router, body::Body, http::Request, routing::get};
-        use axum_extra::extract::{Query, WithRejection};
         use serde::Deserialize;
         use tower::ServiceExt;
+
+        use crate::routes::extract::Query;
 
         #[derive(Deserialize)]
         struct TestQuery {
@@ -435,9 +438,7 @@ mod tests {
             flag: bool,
         }
 
-        async fn handler(
-            WithRejection(Query(_q), _): WithRejection<Query<TestQuery>, Error>,
-        ) -> &'static str {
+        async fn handler(Query(_q): Query<TestQuery>) -> &'static str {
             "ok"
         }
 
@@ -463,13 +464,10 @@ mod tests {
         body: &'static str,
     ) -> (StatusCode, serde_json::Value) {
         use axum::{Router, body::Body, http::Request, routing::put};
-        use axum_extra::extract::WithRejection;
         use opensovd_models::data::WriteRequest;
         use tower::ServiceExt;
 
-        async fn handler(
-            WithRejection(Json(_body), _): WithRejection<Json<WriteRequest>, Error>,
-        ) -> StatusCode {
+        async fn handler(Json(_body): Json<WriteRequest>) -> StatusCode {
             StatusCode::NO_CONTENT
         }
 

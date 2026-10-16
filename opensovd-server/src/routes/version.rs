@@ -6,12 +6,11 @@
 //! Provides a route outside the API version:
 //! - GET /version-info - Read the supported versions
 
-use axum::{Router, extract::State, http::request::Parts, response::Json, routing::get};
-use axum_extra::extract::{Query, WithRejection};
+use axum::{Router, extract::State, http::request::Parts, routing::get};
 use opensovd_models::version::{SovdInfo, VersionInfo, VersionInfoQuery};
 use serde::Serialize;
 
-use super::error::Error;
+use super::extract::{Json, Query};
 use crate::schema::JsonSchema;
 
 pub fn routes<V>() -> Router<Option<V>>
@@ -28,7 +27,7 @@ where
 async fn version_info<V>(
     State(vendor_info): State<Option<V>>,
     parts: Parts,
-    WithRejection(Query(query), _): WithRejection<Query<VersionInfoQuery>, Error>,
+    Query(query): Query<VersionInfoQuery>,
 ) -> Json<VersionInfo<V>>
 where
     V: Serialize + Clone + Send + Sync + 'static,
