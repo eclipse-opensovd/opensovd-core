@@ -25,6 +25,10 @@ pub enum Error {
     EntityNotFound(String),
     #[error("resource not found: {0}")]
     ResourceNotFound(String),
+    /// The request path below the API version of a route that does not serve
+    /// the method.
+    #[error("method not allowed: {0}")]
+    MethodNotAllowed(String),
     #[error(transparent)]
     Data(#[from] DataError),
     #[error(transparent)]
@@ -138,6 +142,11 @@ impl IntoResponse for Error {
                 StatusCode::NOT_FOUND,
                 "resource-not-found",
                 format!("Resource not found: {resource}"),
+            ),
+            Self::MethodNotAllowed(resource) => vendor(
+                StatusCode::METHOD_NOT_ALLOWED,
+                "method-not-allowed",
+                format!("Method not allowed: {resource}"),
             ),
             Self::Data(e) => match e {
                 DataError::NotFound(_) => provider_error(

@@ -146,9 +146,16 @@ where
 
     let router = Router::new()
         .nest(&format!("/{API_VERSION}"), v1_routes)
-        .merge(version::routes::<V>());
+        .merge(version::routes::<V>())
+        .method_not_allowed_fallback(method_not_allowed);
 
     router.with_state(state)
+}
+
+/// Answers a method the route does not serve with a `GenericError` body;
+/// axum adds the `Allow` header with the methods of the route.
+async fn method_not_allowed(parts: Parts) -> error::Error {
+    error::Error::MethodNotAllowed(api_path(&parts).to_owned())
 }
 
 /// Answers a path no route serves with a `GenericError` body.

@@ -4,7 +4,9 @@
 mod common;
 
 use common::{mock_server, send};
-use hyper::Method;
+use http_body_util::BodyExt;
+use hyper::header::ALLOW;
+use hyper::{Method, Request};
 
 /// The path below the API version, as error messages name it.
 fn api_path(path: &str) -> &str {
@@ -46,5 +48,27 @@ async fn routes_follow_the_entity_kind() {
             format!("Resource not found: {}", api_path(path)),
             "{path}"
         );
+    }
+}
+
+#[tokio::test]
+async fn wrong_methods_answer_a_json_405() {
+    let server = mock_server().await;
+
+    for (method, path, allow) in [
+        (Method::POST, "/sovd/v1/components/ecu/data", "GET,HEAD"),
+        (Method::OPTIONS, "/sovd/version-info", "GET,HEAD"),
+    ] {
+        let request = Request::builder()
+            .method(method.clone())
+            .uri(server.url(path))
+            .body(http_body_util::Empty::<bytes::Bytes>::new())
+            .unwrap();
+        let response = common::client().request(request).await.unwrap();
+        assert_eq!(response.status(), 405, "{method} {path}");
+        assert_eq!(response.headers()[ALLOW], allow, "{method} {path}");
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["vendor_code"], "method-not-allowed", "{method} {path}");
     }
 }
