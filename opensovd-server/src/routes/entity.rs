@@ -13,6 +13,7 @@ use opensovd_core::{
 };
 use serde::Deserialize;
 
+use super::discovery::encode_path;
 use super::error::{Error, Result};
 
 /// The entity the route is nested at, and the request path below the API
@@ -109,8 +110,7 @@ impl<S: Send + Sync> FromRequestParts<S> for Entity {
 }
 
 impl Entity {
-    /// The path of the entity below the API version, such as
-    /// `components/ecu`. Empty for the server.
+    /// The path of the entity the route addresses.
     pub(crate) const fn path(&self) -> &EntityPath {
         &self.path
     }
@@ -189,7 +189,7 @@ impl Entity {
 
     /// The answer when the topology does not hold the entity.
     fn entity_not_found(&self) -> Error {
-        Error::EntityNotFound(self.path.to_string())
+        Error::EntityNotFound(encode_path(&self.path))
     }
 
     /// The request path below the API version.

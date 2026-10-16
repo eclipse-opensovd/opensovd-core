@@ -6,8 +6,6 @@
 use std::fmt;
 use std::sync::{Arc, LazyLock};
 
-use percent_encoding::{AsciiSet, CONTROLS, utf8_percent_encode};
-
 /// `id` as a path segment, unless it is empty, `.` or `..`, which URL
 /// normalization removes even when percent-encoded.
 fn checked(id: &str) -> Result<Arc<str>, InvalidPath> {
@@ -16,28 +14,6 @@ fn checked(id: &str) -> Result<Arc<str>, InvalidPath> {
         id => Ok(id.into()),
     }
 }
-
-/// Characters percent-encoded in an id: all that a URI path segment does
-/// not allow, plus `:` and `@`.
-const ENCODED: &AsciiSet = &CONTROLS
-    .add(b' ')
-    .add(b'"')
-    .add(b'#')
-    .add(b'<')
-    .add(b'>')
-    .add(b'?')
-    .add(b'`')
-    .add(b'{')
-    .add(b'}')
-    .add(b'/')
-    .add(b'%')
-    .add(b'[')
-    .add(b']')
-    .add(b'\\')
-    .add(b'^')
-    .add(b'|')
-    .add(b'@')
-    .add(b':');
 
 /// The kind of an entity.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -79,7 +55,7 @@ impl EntityKind {
 /// Nesting stays within one kind, so `components/Cabin/subcomponents/Display`
 /// is a component with two ids. The server path has no ids. Cloning is a
 /// reference-count increment.
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct EntityPath {
     kind: EntityKind,
     ids: Arc<[Arc<str>]>,
@@ -92,8 +68,8 @@ static SERVER: LazyLock<EntityPath> = LazyLock::new(|| EntityPath {
 });
 
 impl EntityPath {
-    /// The server entity, the API root. Displays as the empty string. Every
-    /// call shares one path, so none allocates.
+    /// The server entity, the API root, which has no segments. Every call
+    /// shares one path, so none allocates.
     #[must_use]
     pub fn server() -> Self {
         SERVER.clone()
@@ -171,8 +147,9 @@ impl EntityPath {
     }
 
     /// The collection and id of each level from the top down, such as
-    /// `components` and `Cabin`, then `subcomponents` and `Display`.
-    fn segments(&self) -> impl Iterator<Item = (&'static str, &str)> {
+    /// `components` and `Cabin`, then `subcomponents` and `Display`. The ids
+    /// are not percent-encoded.
+    pub fn segments(&self) -> impl Iterator<Item = (&'static str, &str)> {
         let top = self.kind.collection();
         let nested = self.kind.child_collection().unwrap_or(top);
         self.ids
@@ -192,51 +169,15 @@ impl EntityPath {
     }
 }
 
-/// Percent-encoded.
-impl fmt::Display for EntityPath {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut separator = "";
-        for (collection, id) in self.segments() {
-            let id = utf8_percent_encode(id, ENCODED);
-            write!(f, "{separator}{collection}/{id}")?;
-            separator = "/";
-        }
-        Ok(())
-    }
-}
-
-/// The display form, or `server` for the server path.
-impl fmt::Debug for EntityPath {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.kind == EntityKind::Server {
-            f.write_str("server")
-        } else {
-            fmt::Display::fmt(self, f)
-        }
-    }
-}
-
 macro_rules! typed_path {
     ($(#[$doc:meta])* $ty:ident) => {
         $(#[$doc])*
-        #[derive(Clone, PartialEq, Eq, Hash)]
+        #[derive(Debug, Clone, PartialEq, Eq, Hash)]
         pub struct $ty(pub(super) EntityPath);
 
         impl From<$ty> for EntityPath {
             fn from(path: $ty) -> Self {
                 path.0
-            }
-        }
-
-        impl fmt::Display for $ty {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                fmt::Display::fmt(&self.0, f)
-            }
-        }
-
-        impl fmt::Debug for $ty {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                fmt::Debug::fmt(&self.0, f)
             }
         }
     };
@@ -301,7 +242,8 @@ impl fmt::Display for InvalidPath {
             ),
             Self::Nested(path) => write!(
                 f,
-                "`{path}` is nested already, and entities nest one level only"
+                "the {:?} {:?} is nested already, and entities nest one level only",
+                path.kind, path.ids
             ),
         }
     }
@@ -341,6 +283,10 @@ mod tests {
         path.ids.iter().map(AsRef::as_ref).collect()
     }
 
+    fn segments(path: &EntityPath) -> Vec<(&'static str, &str)> {
+        path.segments().collect()
+    }
+
     #[test]
     fn ids_must_not_be_empty_dot_or_dot_dot() {
         for bad in ["", ".", ".."] {
@@ -369,21 +315,16 @@ mod tests {
     #[test]
     fn top_level_paths_have_one_id() {
         let cases: [(EntityPath, EntityKind, &str); 4] = [
-            (comfort().into(), EntityKind::Area, "areas/Comfort"),
-            (cabin().into(), EntityKind::Component, "components/Cabin"),
-            (radio().into(), EntityKind::App, "apps/Radio"),
-            (
-                self_test().into(),
-                EntityKind::Function,
-                "functions/SelfTest",
-            ),
+            (comfort().into(), EntityKind::Area, "areas"),
+            (cabin().into(), EntityKind::Component, "components"),
+            (radio().into(), EntityKind::App, "apps"),
+            (self_test().into(), EntityKind::Function, "functions"),
         ];
-        for (path, kind, text) in cases {
+        for (path, kind, collection) in cases {
             assert_eq!(path.kind(), kind);
             assert_eq!(ids(&path), [path.id()]);
             assert_eq!(path.parent(), None);
-            assert_eq!(path.to_string(), text);
-            assert_eq!(format!("{path:?}"), text);
+            assert_eq!(segments(&path), [(collection, path.id())]);
         }
         assert_ne!(
             EntityPath::from(radio()),
@@ -406,8 +347,7 @@ mod tests {
         assert_eq!(ids(&server), Vec::<&str>::new());
         assert_eq!(server.id(), "");
         assert_eq!(server.parent(), None);
-        assert_eq!(server.to_string(), "");
-        assert_eq!(format!("{server:?}"), "server");
+        assert_eq!(segments(&server), []);
         assert!(Arc::ptr_eq(&server.ids, &EntityPath::server().ids));
     }
 
@@ -438,82 +378,20 @@ mod tests {
     }
 
     #[test]
-    fn paths_print_as_collections_and_ids() {
-        let cases: [(EntityPath, &str); 7] = [
-            (EntityPath::server(), ""),
-            (comfort().into(), "areas/Comfort"),
-            (media().into(), "areas/Comfort/subareas/Media"),
-            (cabin().into(), "components/Cabin"),
-            (display().into(), "components/Cabin/subcomponents/Display"),
-            (radio().into(), "apps/Radio"),
-            (self_test().into(), "functions/SelfTest"),
-        ];
-        for (path, text) in cases {
-            assert_eq!(path.to_string(), text);
-        }
-    }
-
-    #[test]
-    fn printing_stops_at_a_failing_writer() {
-        struct Full;
-        impl fmt::Write for Full {
-            fn write_str(&mut self, _: &str) -> fmt::Result {
-                Err(fmt::Error)
-            }
-        }
-        let display = display();
+    fn segments_name_the_collection_and_id_of_each_level() {
+        let front_left: EntityPath = cabin().child("Front Left/1").unwrap().into();
         assert_eq!(
-            fmt::write(&mut Full, format_args!("{display}")),
-            Err(fmt::Error)
+            segments(&media().into()),
+            [("areas", "Comfort"), ("subareas", "Media")]
         );
-    }
-
-    #[test]
-    fn ids_are_percent_encoded_where_a_segment_needs_it() {
-        let cases = [
-            ("Front Left", "Front%20Left"),
-            (
-                "Cabin/subcomponents/Display",
-                "Cabin%2Fsubcomponents%2FDisplay",
-            ),
-            ("100%", "100%25"),
-            ("a?b#c", "a%3Fb%23c"),
-            ("user@host:1", "user%40host%3A1"),
-            ("\"..\"", "%22..%22"),
-            ("[a]{b}<c>|^`\\", "%5Ba%5D%7Bb%7D%3Cc%3E%7C%5E%60%5C"),
-            ("\t\n", "%09%0A"),
-            ("Ölstand", "%C3%96lstand"),
-            ("sw.version-1_~!$&'()*+,;=", "sw.version-1_~!$&'()*+,;="),
-        ];
-        for (id, encoded) in cases {
-            let path: EntityPath = EntityPath::app(id).unwrap().into();
-            let text = format!("apps/{encoded}");
-            assert_eq!(path.to_string(), text, "{id:?}");
-        }
-    }
-
-    #[test]
-    fn every_ascii_character_prints_as_a_segment_character() {
-        for byte in 0u8..=0x7f {
-            let id = format!("x{}x", char::from(byte));
-            let path: EntityPath = EntityPath::component(&id).unwrap().into();
-            let text = path.to_string();
-            let segment = text.strip_prefix("components/").unwrap();
-            assert!(
-                segment
-                    .chars()
-                    .all(|c| c.is_ascii_alphanumeric() || "-._~!$&'()*+,;=%".contains(c)),
-                "{id:?} as {segment}"
-            );
-        }
-    }
-
-    #[test]
-    fn typed_paths_print_like_their_path() {
-        let display = display();
-        let path = EntityPath::from(display.clone());
-        assert_eq!(display.to_string(), path.to_string());
-        assert_eq!(format!("{display:?}"), format!("{path:?}"));
+        assert_eq!(
+            segments(&display().into()),
+            [("components", "Cabin"), ("subcomponents", "Display")]
+        );
+        assert_eq!(
+            segments(&front_left),
+            [("components", "Cabin"), ("subcomponents", "Front Left/1")]
+        );
     }
 
     #[test]
@@ -525,8 +403,8 @@ mod tests {
             ),
             (
                 InvalidPath::Nested(display().into()),
-                "`components/Cabin/subcomponents/Display` is nested already, and entities \
-                 nest one level only",
+                "the Component [\"Cabin\", \"Display\"] is nested already, and entities nest \
+                 one level only",
             ),
         ];
         for (error, message) in cases {

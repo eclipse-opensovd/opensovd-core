@@ -10,7 +10,7 @@ use opensovd_models::discovery::{
 use super::super::entity::Entity;
 use super::super::error::Result;
 use super::super::extract::{Json, Query};
-use super::encode_path_segment;
+use super::{encode_path, encode_path_segment};
 use crate::schema::JsonSchema;
 
 /// GET /areas - Discover areas.
@@ -69,7 +69,8 @@ pub(crate) async fn area_capabilities(
     // Relation links are only advertised when the relation is not empty.
     let has_members = topo.components_of_area(area_id).next().is_some()
         || topo.apps_of_area(area_id).next().is_some();
-    let contains = has_members.then(|| format!("{base}/{}/contains", entity.path()).into());
+    let contains =
+        has_members.then(|| format!("{base}/{}/contains", encode_path(entity.path())).into());
 
     Ok(Json(EntityCapabilities {
         id: area_id.to_owned(),

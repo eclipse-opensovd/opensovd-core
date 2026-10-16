@@ -10,7 +10,7 @@ use opensovd_models::discovery::{
 use super::super::entity::Entity;
 use super::super::error::Result;
 use super::super::extract::{Json, Query};
-use super::encode_path_segment;
+use super::{encode_path, encode_path_segment};
 use crate::schema::JsonSchema;
 
 /// GET /components - Discover components.
@@ -65,7 +65,7 @@ pub(crate) async fn component_capabilities(
     let translation_id = component.translation_id().map(String::from);
 
     let base = super::super::versioned_uri(&parts);
-    let own = format!("{base}/{}", entity.path());
+    let own = format!("{base}/{}", encode_path(entity.path()));
     // Relation links are only advertised when the relation is not empty.
     let hosts = topo
         .apps_of_component(component_id)

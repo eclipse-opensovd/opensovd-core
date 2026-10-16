@@ -33,7 +33,7 @@ use opensovd_models::bulkdata::{
 use serde::Deserialize;
 
 use crate::routes::{
-    discovery::encode_path_segment,
+    discovery::{encode_path, encode_path_segment},
     entity::Entity,
     error::{Result, bulk_data_error},
     extract::{Json, Path, Query, TypedHeader},
@@ -296,7 +296,7 @@ async fn bulk_data_upload(
     let location = HeaderValue::from_str(&format!(
         "{}/{}/bulk-data/{}/{}",
         versioned_uri(&parts),
-        entity.path(),
+        encode_path(entity.path()),
         encode_path_segment(&category),
         encode_path_segment(&filename),
     ))

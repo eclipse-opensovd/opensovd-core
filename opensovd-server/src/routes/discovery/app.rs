@@ -10,7 +10,7 @@ use opensovd_models::discovery::{
 use super::super::entity::Entity;
 use super::super::error::Result;
 use super::super::extract::{Json, Query};
-use super::encode_path_segment;
+use super::{encode_path, encode_path_segment};
 use crate::schema::JsonSchema;
 
 /// GET /apps - Discover apps.
@@ -66,7 +66,7 @@ pub(crate) async fn app_capabilities(
     let translation_id = app.translation_id().map(String::from);
 
     let base = super::super::versioned_uri(&parts);
-    let own = format!("{base}/{}", entity.path());
+    let own = format!("{base}/{}", encode_path(entity.path()));
     // Direct references, advertised only when the target exists.
     let located_on = topo
         .component_of_app(app_id)

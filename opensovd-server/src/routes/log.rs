@@ -37,6 +37,7 @@ use opensovd_models::{
 };
 
 use super::{
+    discovery::encode_path,
     entity::Entity,
     error::Result,
     extract::{Json, Query},
@@ -68,7 +69,11 @@ async fn log_resources(
     Query(query): Query<LogResourcesQuery>,
 ) -> Result<Json<LogResources>> {
     let provider = entity.log_provider(&topology.read().await)?;
-    let logs = format!("{}/{}/logs", versioned_uri(&parts), entity.path());
+    let logs = format!(
+        "{}/{}/logs",
+        versioned_uri(&parts),
+        encode_path(entity.path())
+    );
     let stream = provider
         .supports_streaming()
         .then(|| format!("{logs}/x-opensovd-log-streams").into());

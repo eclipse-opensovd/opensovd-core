@@ -21,7 +21,7 @@ pub(super) mod component;
 use std::collections::HashMap;
 
 use axum::{extract::State, http::request::Parts};
-use opensovd_core::Topology;
+use opensovd_core::{EntityPath, Topology};
 use opensovd_models::discovery::{EntityCapabilities, EntityCapabilitiesQuery};
 use percent_encoding::{AsciiSet, CONTROLS, utf8_percent_encode};
 use serde_json::{Map, Value};
@@ -96,14 +96,30 @@ pub(super) fn encode_path_segment(s: &str) -> String {
     utf8_percent_encode(s, PATH_SEGMENT_ENCODE_SET).to_string()
 }
 
+/// The path of an entity with percent-encoded ids, such as
+/// `components/Front%20Left`. Empty for the server.
+pub(super) fn encode_path(path: &EntityPath) -> String {
+    let mut encoded = String::new();
+    for (collection, id) in path.segments() {
+        if !encoded.is_empty() {
+            encoded.push('/');
+        }
+        encoded.push_str(collection);
+        encoded.push('/');
+        encoded.extend(utf8_percent_encode(id, PATH_SEGMENT_ENCODE_SET));
+    }
+    encoded
+}
+
 #[cfg(test)]
 mod tests {
     use axum::{body::Body, http::Request};
     use http_body_util::BodyExt;
+    use opensovd_core::EntityPath;
     use opensovd_mocks::create_mock_topology;
     use tower::ServiceExt;
 
-    use super::encode_path_segment;
+    use super::{encode_path, encode_path_segment};
 
     #[tokio::test]
     async fn listings_reject_a_malformed_query_as_json() {
@@ -130,12 +146,63 @@ mod tests {
     }
 
     #[test]
-    fn encode_path_segment_keeps_only_path_characters() {
-        assert_eq!(encode_path_segment("a^b|c\\d"), "a%5Eb%7Cc%5Cd");
-        assert_eq!(encode_path_segment("a/b c:d"), "a%2Fb%20c%3Ad");
-        assert_eq!(
-            encode_path_segment("sw.version-1_~!$&'()*+,;="),
-            "sw.version-1_~!$&'()*+,;="
-        );
+    fn segments_are_percent_encoded_where_they_need_it() {
+        let cases = [
+            ("Front Left", "Front%20Left"),
+            (
+                "Cabin/subcomponents/Display",
+                "Cabin%2Fsubcomponents%2FDisplay",
+            ),
+            ("100%", "100%25"),
+            ("a?b#c", "a%3Fb%23c"),
+            ("user@host:1", "user%40host%3A1"),
+            ("\"..\"", "%22..%22"),
+            ("[a]{b}<c>|^`\\", "%5Ba%5D%7Bb%7D%3Cc%3E%7C%5E%60%5C"),
+            ("\t\n", "%09%0A"),
+            ("Ölstand", "%C3%96lstand"),
+            ("sw.version-1_~!$&'()*+,;=", "sw.version-1_~!$&'()*+,;="),
+        ];
+        for (segment, encoded) in cases {
+            assert_eq!(encode_path_segment(segment), encoded, "{segment:?}");
+        }
+    }
+
+    #[test]
+    fn every_ascii_character_encodes_as_a_segment_character() {
+        for byte in 0u8..=0x7f {
+            let segment = encode_path_segment(&format!("x{}x", char::from(byte)));
+            assert!(
+                segment
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || "-._~!$&'()*+,;=%".contains(c)),
+                "{byte:#04x} as {segment}"
+            );
+        }
+    }
+
+    #[test]
+    fn paths_encode_as_collections_and_ids() {
+        let comfort = EntityPath::area("Comfort").unwrap();
+        let cabin = EntityPath::component("Cabin").unwrap();
+        let cases: [(EntityPath, &str); 6] = [
+            (EntityPath::server(), ""),
+            (
+                comfort.child("Media").unwrap().into(),
+                "areas/Comfort/subareas/Media",
+            ),
+            (cabin.clone().into(), "components/Cabin"),
+            (
+                cabin.child("Front Left").unwrap().into(),
+                "components/Cabin/subcomponents/Front%20Left",
+            ),
+            (EntityPath::app("a/b").unwrap().into(), "apps/a%2Fb"),
+            (
+                EntityPath::function("SelfTest").unwrap().into(),
+                "functions/SelfTest",
+            ),
+        ];
+        for (path, encoded) in cases {
+            assert_eq!(encode_path(&path), encoded, "{path:?}");
+        }
     }
 }
