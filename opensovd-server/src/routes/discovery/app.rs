@@ -1,37 +1,22 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 Contributors to the Eclipse Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use axum::{
-    Router,
-    extract::{Path, State},
-    http::request::Parts,
-    response::Json,
-    routing::get,
-};
+use axum::{extract::State, http::request::Parts, response::Json};
 use axum_extra::extract::{Query, WithRejection};
 use opensovd_core::Topology;
 use opensovd_models::discovery::{
     Entities, EntitiesQuery, EntityCapabilities, EntityCapabilitiesQuery, EntityReference,
 };
 
-use super::super::AppState;
+use super::super::entity::Entity;
 use super::super::error::{Error, Result};
 use super::encode_path_segment;
 use crate::schema::JsonSchema;
 
-pub(super) fn routes<V>() -> Router<AppState<V>>
-where
-    V: Clone + Send + Sync + 'static,
-{
-    Router::new()
-        .route("/apps", get(app_list))
-        .route("/apps/{app_id}", get(app_capabilities))
-}
-
 /// GET /apps - Discover apps.
 ///
 /// Returns the list of apps known to the SOVD server.
-pub(super) async fn app_list(
+pub(crate) async fn app_list(
     State(topology): State<Topology>,
     parts: Parts,
     WithRejection(Query(query), _): WithRejection<Query<EntitiesQuery>, Error>,
@@ -64,52 +49,48 @@ pub(super) async fn app_list(
     }))
 }
 
-/// GET `/apps/:app_id` - Query capabilities of an app.
+/// GET /apps/{app_id} - Query for capabilities of an app.
 ///
 /// Returns the capabilities of a specific app.
-pub(super) async fn app_capabilities(
+pub(crate) async fn app_capabilities(
     State(topology): State<Topology>,
-    WithRejection(Path(app_id), _): WithRejection<Path<String>, Error>,
+    entity: Entity,
     parts: Parts,
     WithRejection(Query(query), _): WithRejection<Query<EntityCapabilitiesQuery>, Error>,
 ) -> Result<Json<EntityCapabilities>> {
     let topo = topology.read().await;
-    let entity = topo
-        .get_app(&app_id)
-        .map_err(|_| Error::EntityNotFound(app_id.clone()))?;
+    let app = entity.app(&topo)?;
+    let app_id = app.id();
 
-    let variant = super::variant(entity.metadata());
-    let translation_id = entity.translation_id().map(String::from);
+    let variant = super::variant(app.metadata());
+    let translation_id = app.translation_id().map(String::from);
 
     let base = super::super::versioned_uri(&parts);
+    let own = format!("{base}/{}", entity.path());
     // Direct references, advertised only when the target exists.
     let located_on = topo
-        .component_of_app(&app_id)
+        .component_of_app(app_id)
         .ok()
         .flatten()
         .map(|c| format!("{base}/components/{}", encode_path_segment(c.id())).into());
 
     let belongs_to = topo
-        .area_of_app(&app_id)
+        .area_of_app(app_id)
         .ok()
         .flatten()
         .map(|area| format!("{base}/areas/{}", encode_path_segment(area.id())).into());
 
-    let data = entity
-        .data_provider()
-        .map(|_| format!("{base}/apps/{}/data", encode_path_segment(&app_id)).into());
+    let data = app.data_provider().map(|_| format!("{own}/data").into());
 
-    let bulk_data = entity
+    let bulk_data = app
         .bulkdata_provider()
-        .map(|_| format!("{base}/apps/{}/bulk-data", encode_path_segment(&app_id)).into());
+        .map(|_| format!("{own}/bulk-data").into());
 
-    let logs = entity
-        .log_provider()
-        .map(|_| format!("{base}/apps/{}/logs", encode_path_segment(&app_id)).into());
+    let logs = app.log_provider().map(|_| format!("{own}/logs").into());
 
     Ok(Json(EntityCapabilities {
-        id: app_id,
-        name: entity.name().to_string(),
+        id: app_id.to_owned(),
+        name: app.name().to_string(),
         translation_id,
         variant,
         located_on,

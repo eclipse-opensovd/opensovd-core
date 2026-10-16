@@ -1,51 +1,39 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 Contributors to the Eclipse Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-//! Entity discovery routes.
+//! Entity discovery: capabilities, listings and relations.
 //!
-//! Provides routes for:
-//! - `GET /` - Query capabilities of the root entity (`SOVDServer`)
-//! - `GET /components` - List all components
-//! - `GET /components/{component_id}` - Query capabilities of a component
-//! - `GET /components/{component_id}/hosts` - List apps hosted on a component
-//! - `GET /apps` - List all apps
-//! - `GET /apps/{app_id}` - Query capabilities of an app
-//! - `GET /areas` - List all areas
-//! - `GET /areas/{area_id}` - Query capabilities of an area
-//! - `GET /areas/{area_id}/contains` - List entities contained in an area
+//! Provides handlers for:
+//! - GET / - Query for capabilities of the server
+//! - GET /areas - Discover areas
+//! - GET /components - Discover components
+//! - GET /apps - Discover apps
+//! - GET /areas/{area_id} - Query for capabilities of an area
+//! - GET /areas/{area_id}/contains - Query for the entities in an area
+//! - GET /components/{component_id} - Query for capabilities of a component
+//! - GET /components/{component_id}/hosts - Query for the apps on a component
+//! - GET /apps/{app_id} - Query for capabilities of an app
 
-mod app;
-mod area;
-mod component;
+pub(super) mod app;
+pub(super) mod area;
+pub(super) mod component;
 
 use std::collections::HashMap;
 
-use axum::{Router, extract::State, http::request::Parts, response::Json, routing::get};
+use axum::{extract::State, http::request::Parts, response::Json};
 use axum_extra::extract::{Query, WithRejection};
 use opensovd_core::Topology;
 use opensovd_models::discovery::{EntityCapabilities, EntityCapabilitiesQuery};
 use percent_encoding::{AsciiSet, CONTROLS, utf8_percent_encode};
 use serde_json::{Map, Value};
 
-use super::AppState;
 use super::error::{Error, Result};
 use crate::schema::JsonSchema;
 
-pub fn routes<V>() -> Router<AppState<V>>
-where
-    V: Clone + Send + Sync + 'static,
-{
-    Router::new()
-        .route("/", get(server_capabilities))
-        .merge(component::routes())
-        .merge(app::routes())
-        .merge(area::routes())
-}
-
-/// GET / - Query for capabilities of the root entity.
+/// GET / - Query for capabilities of the server.
 ///
 /// Returns the capabilities of the vehicle or system represented by the SOVD API.
-async fn server_capabilities(
+pub(super) async fn server_capabilities(
     State(topology): State<Topology>,
     parts: Parts,
     WithRejection(Query(query), _): WithRejection<Query<EntityCapabilitiesQuery>, Error>,

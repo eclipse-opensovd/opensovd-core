@@ -1,38 +1,22 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 Contributors to the Eclipse Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use axum::{
-    Router,
-    extract::{Path, State},
-    http::request::Parts,
-    response::Json,
-    routing::get,
-};
+use axum::{extract::State, http::request::Parts, response::Json};
 use axum_extra::extract::{Query, WithRejection};
 use opensovd_core::Topology;
 use opensovd_models::discovery::{
     Entities, EntitiesQuery, EntityCapabilities, EntityCapabilitiesQuery, EntityReference,
 };
 
-use super::super::AppState;
+use super::super::entity::Entity;
 use super::super::error::{Error, Result};
 use super::encode_path_segment;
 use crate::schema::JsonSchema;
 
-pub(super) fn routes<V>() -> Router<AppState<V>>
-where
-    V: Clone + Send + Sync + 'static,
-{
-    Router::new()
-        .route("/components", get(component_list))
-        .route("/components/{component_id}", get(component_capabilities))
-        .route("/components/{component_id}/hosts", get(component_hosts))
-}
-
-/// GET /components - Discover contained components.
+/// GET /components - Discover components.
 ///
 /// Returns the list of components known to the SOVD server.
-pub(super) async fn component_list(
+pub(crate) async fn component_list(
     State(topology): State<Topology>,
     parts: Parts,
     WithRejection(Query(query), _): WithRejection<Query<EntitiesQuery>, Error>,
@@ -64,71 +48,53 @@ pub(super) async fn component_list(
     }))
 }
 
-/// GET `/components/:component_id` - Query capabilities of a component.
+/// GET /components/{component_id} - Query for capabilities of a component.
 ///
 /// Returns the capabilities of a specific component.
-pub(super) async fn component_capabilities(
+pub(crate) async fn component_capabilities(
     State(topology): State<Topology>,
-    WithRejection(Path(component_id), _): WithRejection<Path<String>, Error>,
+    entity: Entity,
     parts: Parts,
     WithRejection(Query(query), _): WithRejection<Query<EntityCapabilitiesQuery>, Error>,
 ) -> Result<Json<EntityCapabilities>> {
     let topo = topology.read().await;
-    let entity = topo
-        .get_component(&component_id)
-        .map_err(|_| Error::EntityNotFound(component_id.clone()))?;
+    let component = entity.component(&topo)?;
+    let component_id = component.id();
 
-    let variant = super::variant(entity.metadata());
-    let translation_id = entity.translation_id().map(String::from);
+    let variant = super::variant(component.metadata());
+    let translation_id = component.translation_id().map(String::from);
 
     let base = super::super::versioned_uri(&parts);
+    let own = format!("{base}/{}", entity.path());
     // Relation links are only advertised when the relation is not empty.
     let hosts = topo
-        .apps_of_component(&component_id)
+        .apps_of_component(component_id)
         .next()
         .is_some()
-        .then(|| {
-            format!(
-                "{base}/components/{}/hosts",
-                encode_path_segment(&component_id)
-            )
-            .into()
-        });
+        .then(|| format!("{own}/hosts").into());
 
     // A direct reference, advertised only when the area exists.
     let belongs_to = topo
-        .area_of_component(&component_id)
+        .area_of_component(component_id)
         .ok()
         .flatten()
         .map(|area| format!("{base}/areas/{}", encode_path_segment(area.id())).into());
 
-    let data = entity.data_provider().map(|_| {
-        format!(
-            "{base}/components/{}/data",
-            encode_path_segment(&component_id)
-        )
-        .into()
-    });
+    let data = component
+        .data_provider()
+        .map(|_| format!("{own}/data").into());
 
-    let bulk_data = entity.bulkdata_provider().map(|_| {
-        format!(
-            "{base}/components/{}/bulk-data",
-            encode_path_segment(&component_id)
-        )
-        .into()
-    });
+    let bulk_data = component
+        .bulkdata_provider()
+        .map(|_| format!("{own}/bulk-data").into());
 
-    let logs = entity.log_provider().map(|_| {
-        format!(
-            "{base}/components/{}/logs",
-            encode_path_segment(&component_id)
-        )
-        .into()
-    });
+    let logs = component
+        .log_provider()
+        .map(|_| format!("{own}/logs").into());
 
     Ok(Json(EntityCapabilities {
-        id: component_id,
-        name: entity.name().to_string(),
+        id: component_id.to_owned(),
+        name: component.name().to_string(),
         translation_id,
         variant,
         hosts,
@@ -141,21 +107,20 @@ pub(super) async fn component_capabilities(
     }))
 }
 
-/// GET `/components/:component_id/hosts` - List apps hosted on a component.
+/// GET /components/{component_id}/hosts - Query for the apps on a component.
 ///
 /// Returns the list of apps running on a specific component.
-pub(super) async fn component_hosts(
+pub(crate) async fn component_hosts(
     State(topology): State<Topology>,
-    WithRejection(Path(component_id), _): WithRejection<Path<String>, Error>,
+    entity: Entity,
     parts: Parts,
     WithRejection(Query(query), _): WithRejection<Query<EntitiesQuery>, Error>,
 ) -> Result<Json<Entities>> {
     // Verify component exists and get hosted apps atomically
     let topo = topology.read().await;
-    topo.get_component(&component_id)
-        .map_err(|_| Error::EntityNotFound(component_id.clone()))?;
+    let component_id = entity.component(&topo)?.id();
 
-    let apps = topo.apps_of_component(&component_id);
+    let apps = topo.apps_of_component(component_id);
 
     let base = super::super::versioned_uri(&parts);
     let items: Vec<EntityReference> = apps

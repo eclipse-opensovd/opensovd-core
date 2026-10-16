@@ -3,61 +3,45 @@
 
 //! HTTP route handlers for the SOVD API.
 //!
-//! This module provides all SOVD-compliant REST endpoints:
+//! The route table has two parts: one router per entity kind says what the
+//! kind serves, relative to the entity, and [`versioned`] nests each kind
+//! where it is served, such as `/components/{component_id}`. Handlers take
+//! the entity from the route.
 //!
-//! ## Discovery
-//! - GET / - Query capabilities of the root entity
-//! - GET /components - List all components
-//! - GET /components/{component_id} - Query capabilities of a component
+//! A request is checked in this order:
+//! - the route first: an unknown path answers 404 `resource-not-found`, a
+//!   method the route does not serve 405 `method-not-allowed`;
+//! - then the request's form: path params, query, headers and body (400, 415);
+//! - then the entity (404 `entity-not-found`);
+//! - then the resource (404 `resource-not-found`);
+//! - then the operation.
 //!
-//! ## Bulkdata
-//! - GET    /{entity-collection}/{entity-id}/bulk-data - List bulk-data categories
-//! - GET    /{entity-collection}/{entity-id}/bulk-data/{category} - List of BulkDataDescriptors for a specific category
-//! - POST   /{entity-collection}/{entity-id}/bulk-data/{category} - Upload bulk data to the SOVD server and create a resource for the bulk data
-//! - DELETE /{entity-collection}/{entity-id}/bulk-data/{category} - Delete all bulk data resources for a specific category
-//! - GET    /{entity-collection}/{entity-id}/bulk-data/{category}/{bulk-data-id} - Download a specific bulk data resource
-//! - DELETE /{entity-collection}/{entity-id}/bulk-data/{category}/{bulk-data-id} - Delete a specific bulk data resource
-//!
-//! ## Data
-//! - GET /components/{component_id}/data-categories - List data categories
-//! - GET /components/{component_id}/data-groups - List data groups
-//! - GET /components/{component_id}/data - List data resources
-//! - GET /components/{component_id}/data/{data_id} - Read a data value
-//! - PUT /components/{component_id}/data/{data_id} - Write a data value
-//!
-//! ## Version
-//! - GET /version-info - Get SOVD server version information
+//! - `entity`: the `Entity` extractor
+//! - `discovery`: capabilities, listings and relations
+//! - `data`, `bulk_data`, `log`: the served resource collections
+//! - `version`: `GET /version-info`, outside the versioned API
 
 mod bulk_data;
 mod data;
 mod discovery;
+mod entity;
 mod error;
 mod log;
 mod version;
 
 use axum::{
     Router,
-    extract::{FromRef, OriginalUri},
+    extract::OriginalUri,
     http::{Uri, request::Parts},
+    routing::get,
 };
+use discovery::{app, area, component};
 use http::header::HOST;
 use opensovd_core::Topology;
 pub use opensovd_models::version::{VendorInfo, VersionInfo};
 use serde::Serialize;
 
 use crate::schema::JsonSchema;
-
-#[derive(Clone)]
-pub struct AppState<V> {
-    pub vendor_info: Option<V>,
-    pub topology: Topology,
-}
-
-impl<V> FromRef<AppState<V>> for Topology {
-    fn from_ref(state: &AppState<V>) -> Topology {
-        state.topology.clone()
-    }
-}
 
 const API_VERSION: &str = "v1";
 
@@ -133,23 +117,55 @@ where
     V: Serialize + Clone + Send + Sync + 'static,
     VersionInfo<V>: JsonSchema,
 {
-    let state = AppState {
-        vendor_info,
-        topology,
-    };
-
-    let v1_routes = Router::new()
-        .merge(discovery::routes::<V>())
-        .merge(bulk_data::routes::<V>())
-        .merge(data::routes::<V>())
-        .merge(log::routes::<V>());
-
-    let router = Router::new()
-        .nest(&format!("/{API_VERSION}"), v1_routes)
+    Router::new()
+        .nest(&format!("/{API_VERSION}"), versioned().with_state(topology))
         .merge(version::routes::<V>())
-        .method_not_allowed_fallback(method_not_allowed);
+        .method_not_allowed_fallback(method_not_allowed)
+        .with_state(vendor_info)
+}
 
-    router.with_state(state)
+/// The routes below `/{API_VERSION}`: each entity kind where it is served.
+fn versioned() -> Router<Topology> {
+    Router::new()
+        .merge(server())
+        .nest("/areas/{area_id}", areas())
+        .nest("/components/{component_id}", components())
+        .nest("/apps/{app_id}", apps())
+}
+
+/// Resource collections of components and apps.
+fn collections() -> Router<Topology> {
+    Router::new()
+        .merge(data::routes())
+        .merge(bulk_data::routes())
+        .merge(log::routes())
+}
+
+fn server() -> Router<Topology> {
+    Router::new()
+        .route("/", get(discovery::server_capabilities))
+        .route("/areas", get(area::area_list))
+        .route("/components", get(component::component_list))
+        .route("/apps", get(app::app_list))
+}
+
+fn areas() -> Router<Topology> {
+    Router::new()
+        .route("/", get(area::area_capabilities))
+        .route("/contains", get(area::area_contains))
+}
+
+fn components() -> Router<Topology> {
+    Router::new()
+        .route("/", get(component::component_capabilities))
+        .route("/hosts", get(component::component_hosts))
+        .merge(collections())
+}
+
+fn apps() -> Router<Topology> {
+    Router::new()
+        .route("/", get(app::app_capabilities))
+        .merge(collections())
 }
 
 /// Answers a method the route does not serve with a `GenericError` body;
@@ -205,6 +221,10 @@ mod tests {
             ("GET", "/sovd/v1/apps/%FF/logs/config"),
             ("PUT", "/sovd/v1/apps/%FF/logs/config"),
             ("DELETE", "/sovd/v1/apps/%FF/logs/config"),
+            ("GET", "/sovd/v1/components/ecu/data/%FF"),
+            ("PUT", "/sovd/v1/apps/engine_control/data/%FF"),
+            ("GET", "/sovd/v1/components/ecu/bulk-data/%FF"),
+            ("GET", "/sovd/v1/apps/ota_manager/bulk-data/c/%FF"),
         ] {
             let request = Request::builder()
                 .method(method)

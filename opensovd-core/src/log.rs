@@ -15,13 +15,13 @@
 //! # Entity integration
 //!
 //! Attach a provider to an entity with [`crate::App::with_log_provider`] or
-//! [`crate::Component::with_log_provider`]. The server then exposes the
-//! corresponding SOVD log resources under the generic entity URI:
+//! [`crate::Component::with_log_provider`]. The server then serves the SOVD
+//! log resources relative to the entity, such as:
 //!
 //! ```text
-//! /sovd/v1/{entity-collection}/{entity-id}/logs
-//! /sovd/v1/{entity-collection}/{entity-id}/logs/entries
-//! /sovd/v1/{entity-collection}/{entity-id}/logs/config
+//! /components/{component_id}/logs
+//! /components/{component_id}/logs/entries
+//! /components/{component_id}/logs/config
 //! ```
 //!
 //! # Filtering

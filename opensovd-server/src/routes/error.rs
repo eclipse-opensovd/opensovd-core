@@ -12,7 +12,7 @@ use axum::{
     response::{IntoResponse, Json, Response},
 };
 use axum_extra::{extract::QueryRejection, typed_header::TypedHeaderRejection};
-use opensovd_core::{BulkDataError, DataError, LogError, TopologyError};
+use opensovd_core::{BulkDataError, DataError, LogError};
 use opensovd_models::{ErrorCode, ErrorDetails, GenericError, JsonPointer};
 
 /// A `Result` alias where the `Err` variant is [`Error`].
@@ -21,8 +21,11 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// Handler error that converts to HTTP responses.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    /// The path of the entity, such as `components/ecu`.
     #[error("entity not found: {0}")]
     EntityNotFound(String),
+    /// The request path below the API version, such as
+    /// `components/ecu/unknown`.
     #[error("resource not found: {0}")]
     ResourceNotFound(String),
     /// The request path below the API version of a route that does not serve
@@ -43,8 +46,6 @@ pub enum Error {
     InvalidHeader(#[from] TypedHeaderRejection),
     #[error("{0}")]
     BadBody(#[from] JsonRejection),
-    #[error(transparent)]
-    Topology(#[from] TopologyError),
 }
 
 /// A `DataError` naming the erroneous element of the request body.
@@ -202,16 +203,6 @@ impl IntoResponse for Error {
                 GenericError::new(ErrorCode::IncompleteRequest, "Bad request headers").into(),
             ),
             Self::BadBody(rejection) => body_rejection(rejection),
-            Self::Topology(e) => {
-                let status = match e {
-                    TopologyError::NotFound(_) => StatusCode::NOT_FOUND,
-                };
-                tracing::debug!(target: "srv", error = %e, "Topology error");
-                (
-                    status,
-                    GenericError::with_vendor_code("entity-not-found", e.to_string()).into(),
-                )
-            }
         };
         (status, Json(details)).into_response()
     }
@@ -256,7 +247,6 @@ fn provider_error(
 #[cfg(test)]
 mod tests {
     use http_body_util::BodyExt;
-    use opensovd_core::EntityRef;
 
     use super::*;
 
@@ -267,7 +257,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_error_entity_not_found() {
-        let error = Error::EntityNotFound("test-component".into());
+        let error = Error::EntityNotFound("components/test-component".into());
         let response = error.into_response();
 
         assert_eq!(response.status(), 404);
@@ -275,7 +265,10 @@ mod tests {
         let body = response.into_body().collect().await.unwrap().to_bytes();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["vendor_code"], "entity-not-found");
-        assert!(json["message"].as_str().unwrap().contains("test-component"));
+        assert_eq!(
+            json["message"],
+            "Entity not found: components/test-component"
+        );
     }
 
     #[tokio::test]
@@ -427,19 +420,6 @@ mod tests {
         let response = error.into_response();
 
         assert_eq!(response.status(), 404);
-    }
-
-    #[tokio::test]
-    async fn test_error_topology_not_found() {
-        let error = Error::Topology(TopologyError::NotFound(EntityRef::area("area-1")));
-        let response = error.into_response();
-
-        assert_eq!(response.status(), 404);
-
-        let json = json_body(response).await;
-        assert_eq!(json["error_code"], "vendor-specific");
-        assert_eq!(json["vendor_code"], "entity-not-found");
-        assert!(json["message"].as_str().unwrap().contains("area-1"));
     }
 
     #[tokio::test]

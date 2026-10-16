@@ -282,7 +282,7 @@ async fn test_missing_data_provider_returns_resource_not_found() {
             assert_eq!(json["vendor_code"], "resource-not-found", "{method} {path}");
             assert_eq!(
                 json["message"],
-                format!("Resource not found: {path}"),
+                format!("Resource not found: {entity}/{resource}"),
                 "{method} {path}"
             );
         }

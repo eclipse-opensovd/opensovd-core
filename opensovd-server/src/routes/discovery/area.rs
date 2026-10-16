@@ -1,38 +1,22 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 Contributors to the Eclipse Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use axum::{
-    Router,
-    extract::{Path, State},
-    http::request::Parts,
-    response::Json,
-    routing::get,
-};
+use axum::{extract::State, http::request::Parts, response::Json};
 use axum_extra::extract::{Query, WithRejection};
 use opensovd_core::Topology;
 use opensovd_models::discovery::{
     Entities, EntitiesQuery, EntityCapabilities, EntityCapabilitiesQuery, EntityReference,
 };
 
-use super::super::AppState;
+use super::super::entity::Entity;
 use super::super::error::{Error, Result};
 use super::encode_path_segment;
 use crate::schema::JsonSchema;
 
-pub(super) fn routes<V>() -> Router<AppState<V>>
-where
-    V: Clone + Send + Sync + 'static,
-{
-    Router::new()
-        .route("/areas", get(area_list))
-        .route("/areas/{area_id}", get(area_capabilities))
-        .route("/areas/{area_id}/contains", get(area_contains))
-}
-
 /// GET /areas - Discover areas.
 ///
 /// Returns the list of areas known to the SOVD server.
-pub(super) async fn area_list(
+pub(crate) async fn area_list(
     State(topology): State<Topology>,
     parts: Parts,
     WithRejection(Query(query), _): WithRejection<Query<EntitiesQuery>, Error>,
@@ -65,33 +49,31 @@ pub(super) async fn area_list(
     }))
 }
 
-/// GET `/areas/:area_id` - Query capabilities of an area.
+/// GET /areas/{area_id} - Query for capabilities of an area.
 ///
 /// Returns the capabilities of a specific area.
-pub(super) async fn area_capabilities(
+pub(crate) async fn area_capabilities(
     State(topology): State<Topology>,
-    WithRejection(Path(area_id), _): WithRejection<Path<String>, Error>,
+    entity: Entity,
     parts: Parts,
     WithRejection(Query(query), _): WithRejection<Query<EntityCapabilitiesQuery>, Error>,
 ) -> Result<Json<EntityCapabilities>> {
     let topo = topology.read().await;
-    let entity = topo
-        .get_area(&area_id)
-        .map_err(|_| Error::EntityNotFound(area_id.clone()))?;
+    let area = entity.area(&topo)?;
+    let area_id = area.id();
 
-    let variant = super::variant(entity.metadata());
-    let translation_id = entity.translation_id().map(String::from);
+    let variant = super::variant(area.metadata());
+    let translation_id = area.translation_id().map(String::from);
 
     let base = super::super::versioned_uri(&parts);
     // Relation links are only advertised when the relation is not empty.
-    let has_members = topo.components_of_area(&area_id).next().is_some()
-        || topo.apps_of_area(&area_id).next().is_some();
-    let contains = has_members
-        .then(|| format!("{base}/areas/{}/contains", encode_path_segment(&area_id)).into());
+    let has_members = topo.components_of_area(area_id).next().is_some()
+        || topo.apps_of_area(area_id).next().is_some();
+    let contains = has_members.then(|| format!("{base}/{}/contains", entity.path()).into());
 
     Ok(Json(EntityCapabilities {
-        id: area_id,
-        name: entity.name().to_string(),
+        id: area_id.to_owned(),
+        name: area.name().to_string(),
         translation_id,
         variant,
         contains,
@@ -100,25 +82,24 @@ pub(super) async fn area_capabilities(
     }))
 }
 
-/// GET `/areas/:area_id/contains` - List entities contained in an area.
+/// GET /areas/{area_id}/contains - Query for the entities in an area.
 ///
 /// Returns the list of components and apps contained in a specific area.
-pub(super) async fn area_contains(
+pub(crate) async fn area_contains(
     State(topology): State<Topology>,
-    WithRejection(Path(area_id), _): WithRejection<Path<String>, Error>,
+    entity: Entity,
     parts: Parts,
     WithRejection(Query(query), _): WithRejection<Query<EntitiesQuery>, Error>,
 ) -> Result<Json<Entities>> {
     // Verify area exists and get contained entities atomically
     let topo = topology.read().await;
-    topo.get_area(&area_id)
-        .map_err(|_| Error::EntityNotFound(area_id.clone()))?;
+    let area_id = entity.area(&topo)?.id();
 
     let base = super::super::versioned_uri(&parts);
     let mut items = Vec::new();
 
     // Add contained components
-    let components = topo.components_of_area(&area_id);
+    let components = topo.components_of_area(area_id);
     items.extend(
         components
             .filter(|e| {
@@ -139,7 +120,7 @@ pub(super) async fn area_contains(
     );
 
     // Add contained apps
-    let apps = topo.apps_of_area(&area_id);
+    let apps = topo.apps_of_area(area_id);
     items.extend(
         apps.filter(|e| {
             let tags = e.tags();

@@ -14,6 +14,67 @@ fn api_path(path: &str) -> &str {
 }
 
 #[tokio::test]
+async fn missing_entities_are_not_found() {
+    let server = mock_server().await;
+
+    for (method, path, entity) in [
+        (Method::GET, "components/nope", "components/nope"),
+        (Method::GET, "components/nope/data", "components/nope"),
+        (Method::GET, "apps/nope", "apps/nope"),
+        (Method::GET, "apps/nope/bulk-data", "apps/nope"),
+        (Method::DELETE, "apps/nope/bulk-data/logs", "apps/nope"),
+        (Method::DELETE, "apps/nope/logs/config", "apps/nope"),
+        (Method::GET, "components/nope/data/x", "components/nope"),
+        (
+            Method::GET,
+            "components/x%2Fsubcomponents%2Fy/data",
+            "components/x%2Fsubcomponents%2Fy",
+        ),
+    ] {
+        let path = format!("/sovd/v1/{path}");
+        let (status, json) = send(&server, method.clone(), &path).await;
+        assert_eq!(status, 404, "{method} {path}");
+        assert_eq!(json["vendor_code"], "entity-not-found", "{method} {path}");
+        assert_eq!(
+            json["message"],
+            format!("Entity not found: {entity}"),
+            "{method} {path}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn a_malformed_request_answers_before_the_entity() {
+    let server = mock_server().await;
+
+    let query = "include-schema=maybe";
+    for (method, path, status) in [
+        (Method::GET, format!("areas/nope?{query}"), 400),
+        (Method::GET, format!("areas/nope/contains?{query}"), 400),
+        (Method::GET, format!("components/nope?{query}"), 400),
+        (Method::GET, format!("components/nope/hosts?{query}"), 400),
+        (Method::GET, format!("components/nope/data?{query}"), 400),
+        (
+            Method::GET,
+            format!("components/ecu/bulk-data?{query}"),
+            400,
+        ),
+        (Method::GET, format!("apps/nope?{query}"), 400),
+        (Method::GET, format!("apps/nope/logs/entries?{query}"), 400),
+        // Without a JSON body.
+        (Method::PUT, "components/nope/data/x".to_owned(), 415),
+        (Method::PUT, "apps/nope/logs/config".to_owned(), 415),
+        // Without the upload headers.
+        (Method::POST, "apps/nope/bulk-data/logs".to_owned(), 400),
+    ] {
+        let path = format!("/sovd/v1/{path}");
+        let (got, json) = send(&server, method.clone(), &path).await;
+        assert_eq!(got, status, "{method} {path}");
+        assert_eq!(json["error_code"], "incomplete-request", "{method} {path}");
+    }
+}
+
+#[tokio::test]
 async fn routes_follow_the_entity_kind() {
     let server = mock_server().await;
 
@@ -28,16 +89,23 @@ async fn routes_follow_the_entity_kind() {
         "/sovd/v1/components/ecu/subcomponents/injector/unknown",
         "/sovd/v1/components/nope/unknown",
         "/sovd/v1/unknown/x/data",
+        "/sovd/v1/components//data",
         "/sovd/v1/apps//status",
+        "/sovd/v1/areas//contains",
         "/sovd/v1/functions//depends-on",
         "/sovd/v1/components//unknown",
         "/sovd/v1/components//subcomponents/injector",
         "/sovd/v1/components/ecu/subcomponents//data",
+        "/sovd/v1/components/%2E/data",
         "/sovd/v1/apps/%2E%2E/status",
         "/sovd/v1/areas/powertrain/subareas/%2E/contains",
         "/sovd/v1/components/ecu/docs",
         "/sovd/v1/components/ecu/%FF",
         "/sovd/v1/components/nope/%FF",
+        // Served collections without a provider.
+        "/sovd/v1/components/ecu/bulk-data",
+        "/sovd/v1/apps/engine_control/bulk-data",
+        "/sovd/v1/components/ecu/logs",
     ] {
         let (status, json) = send(&server, Method::GET, path).await;
         assert_eq!(status, 404, "{path}");

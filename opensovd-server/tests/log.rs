@@ -250,7 +250,7 @@ async fn unsupported_live_stream_returns_not_implemented() {
 }
 
 #[tokio::test]
-async fn component_logs_use_the_generic_entity_route() {
+async fn components_serve_logs() {
     let provider = RecordingProvider {
         entries: vec![test_entry(LogSeverity::Info, "component heartbeat")],
         seen_filter: Arc::new(Mutex::new(None)),

@@ -3,19 +3,18 @@
 
 //! Version information endpoint.
 //!
-//! Provides routes for:
-//! - GET /version-info - Get SOVD server version and vendor information
+//! Provides a route outside the API version:
+//! - GET /version-info - Read the supported versions
 
 use axum::{Router, extract::State, http::request::Parts, response::Json, routing::get};
 use axum_extra::extract::{Query, WithRejection};
 use opensovd_models::version::{SovdInfo, VersionInfo, VersionInfoQuery};
 use serde::Serialize;
 
-use super::AppState;
 use super::error::Error;
 use crate::schema::JsonSchema;
 
-pub fn routes<V>() -> Router<AppState<V>>
+pub fn routes<V>() -> Router<Option<V>>
 where
     V: Serialize + Clone + Send + Sync + 'static,
     VersionInfo<V>: JsonSchema,
@@ -23,11 +22,11 @@ where
     Router::new().route("/version-info", get(version_info::<V>))
 }
 
-/// GET /version-info - Get SOVD server version information.
+/// GET /version-info - Read the supported versions.
 ///
 /// Returns the SOVD API version, base URI, and optional vendor-specific information.
 async fn version_info<V>(
-    State(state): State<AppState<V>>,
+    State(vendor_info): State<Option<V>>,
     parts: Parts,
     WithRejection(Query(query), _): WithRejection<Query<VersionInfoQuery>, Error>,
 ) -> Json<VersionInfo<V>>
@@ -41,7 +40,7 @@ where
         sovd_info: vec![SovdInfo {
             version: super::SOVD_VERSION.into(),
             base_uri: base_uri.into(),
-            vendor_info: state.vendor_info,
+            vendor_info,
         }],
         schema: query.include_schema.then(VersionInfo::<V>::schema),
     })
@@ -51,7 +50,6 @@ where
 mod tests {
     use axum::{body::Body, http::Request};
     use http_body_util::BodyExt;
-    use opensovd_core::Topology;
     use opensovd_models::version::VendorInfo;
     use tower::ServiceExt;
 
@@ -59,11 +57,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_version_info() {
-        let state = AppState::<VendorInfo> {
-            vendor_info: None,
-            topology: Topology::default(),
-        };
-        let app = routes::<VendorInfo>().with_state(state);
+        let app = routes::<VendorInfo>().with_state(None);
 
         let request = Request::builder()
             .uri("/version-info")
@@ -84,12 +78,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_version_info_advertises_configured_base_uri() {
-        let state = AppState::<VendorInfo> {
-            vendor_info: None,
-            topology: Topology::default(),
-        };
         let app = routes::<VendorInfo>()
-            .with_state(state)
+            .with_state(None)
             .layer(axum::Extension(crate::routes::BaseUri {
                 scheme: "https".to_string(),
                 path: "/api/sovd".to_string(),
@@ -115,11 +105,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_version_info_with_schema() {
-        let state = AppState::<VendorInfo> {
-            vendor_info: None,
-            topology: Topology::default(),
-        };
-        let app = routes::<VendorInfo>().with_state(state);
+        let app = routes::<VendorInfo>().with_state(None);
 
         let request = Request::builder()
             .uri("/version-info?include-schema=true")
@@ -138,11 +124,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_version_info_invalid_query_param() {
-        let state = AppState::<VendorInfo> {
-            vendor_info: None,
-            topology: Topology::default(),
-        };
-        let app = routes::<VendorInfo>().with_state(state);
+        let app = routes::<VendorInfo>().with_state(None);
 
         let request = Request::builder()
             .uri("/version-info?include-schema=bad")
@@ -169,14 +151,11 @@ mod tests {
             build: u32,
         }
 
-        let state = AppState {
-            vendor_info: Some(CustomVendor {
-                product: "SOVD".into(),
-                build: 42,
-            }),
-            topology: Topology::default(),
-        };
-        let app = routes::<CustomVendor>().with_state(state);
+        let vendor_info = Some(CustomVendor {
+            product: "SOVD".into(),
+            build: 42,
+        });
+        let app = routes::<CustomVendor>().with_state(vendor_info);
 
         let request = Request::builder()
             .uri("/version-info?include-schema=true")
