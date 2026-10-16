@@ -41,6 +41,19 @@ async fn test_base_path_slash() {
 }
 
 #[tokio::test]
+async fn test_base_path_with_trailing_slash() {
+    let server = common::TestServer::builder()
+        .base_uri("/sovd/")
+        .build()
+        .await;
+
+    assert_eq!(
+        advertised_base_uri(&server, "/sovd/version-info").await,
+        format!("http://{}/sovd/v1", server.addr)
+    );
+}
+
+#[tokio::test]
 async fn test_base_path_with_slash() {
     let server = common::TestServer::builder()
         .base_uri("/sovd")

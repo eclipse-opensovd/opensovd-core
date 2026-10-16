@@ -115,23 +115,18 @@ mod tests {
     use opensovd_mocks::create_mock_topology;
     use tower::ServiceExt;
 
-    use super::super::AppState;
-    use super::{encode_path_segment, routes};
+    use super::encode_path_segment;
 
     #[tokio::test]
     async fn listings_reject_a_malformed_query_as_json() {
-        let state = AppState::<()> {
-            vendor_info: None,
-            topology: create_mock_topology().await,
-        };
-        let app = routes::<()>().with_state(state);
+        let app = crate::routes::test_router(create_mock_topology().await);
 
         for path in [
-            "/areas",
-            "/areas/powertrain/contains",
-            "/apps",
-            "/components",
-            "/components/ecu/hosts",
+            "/sovd/v1/areas",
+            "/sovd/v1/areas/powertrain/contains",
+            "/sovd/v1/apps",
+            "/sovd/v1/components",
+            "/sovd/v1/components/ecu/hosts",
         ] {
             let request = Request::builder()
                 .uri(format!("{path}?include-schema=maybe"))

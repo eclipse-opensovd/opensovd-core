@@ -118,12 +118,13 @@ where
         Into<std::convert::Infallible> + 'static,
     <Layer::Service as TowerService<http::Request<axum::body::Body>>>::Future: Send + 'static,
 {
-    let inner = crate::routes::router(vendor_info, topology, advertised);
+    let inner = crate::routes::router(vendor_info, topology);
     let mut router = match base {
         Some(path) => Router::new().nest(path, inner),
         None => Router::new().merge(inner),
     }
-    .fallback(crate::routes::not_found);
+    .fallback(crate::routes::not_found)
+    .layer(axum::Extension(advertised));
 
     for (path, svc) in services {
         router = router.nest_service(&path, svc);
@@ -452,9 +453,10 @@ mod tests {
     fn test_normalize_base() {
         assert_eq!(normalize_base(""), None);
         assert_eq!(normalize_base("/"), None);
+        assert_eq!(normalize_base("//"), None);
         assert_eq!(normalize_base("/sovd"), Some("/sovd".to_string()));
-        assert_eq!(normalize_base("sovd"), Some("/sovd".to_string()));
         assert_eq!(normalize_base("/sovd/"), Some("/sovd".to_string()));
+        assert_eq!(normalize_base("sovd"), Some("/sovd".to_string()));
         assert_eq!(normalize_base("sovd/"), Some("/sovd".to_string()));
     }
 

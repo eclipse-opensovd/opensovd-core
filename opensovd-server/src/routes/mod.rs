@@ -36,7 +36,7 @@ mod log;
 mod version;
 
 use axum::{
-    Extension, Router,
+    Router,
     extract::FromRef,
     http::{Uri, request::Parts},
 };
@@ -73,22 +73,18 @@ pub(crate) struct BaseUri {
     pub path: String,
 }
 
-impl Default for BaseUri {
-    fn default() -> Self {
-        Self {
-            scheme: "http".to_string(),
-            path: String::new(),
-        }
-    }
-}
-
-/// Mirrors the default gateway deployment for route tests.
+/// The API over `topology`, mounted and advertised at `/sovd` like the
+/// default gateway deployment, for route tests.
 #[cfg(test)]
-pub(crate) fn test_base_uri() -> Extension<BaseUri> {
-    Extension(BaseUri {
+pub(crate) fn test_router(topology: Topology) -> Router {
+    let base_uri = BaseUri {
         scheme: "http".to_string(),
         path: "/sovd".to_string(),
-    })
+    };
+    Router::new()
+        .nest("/sovd", router::<()>(None, topology))
+        .fallback(not_found)
+        .layer(axum::Extension(base_uri))
 }
 
 pub(crate) fn base_uri(parts: &Parts) -> String {
@@ -108,7 +104,8 @@ pub(crate) fn versioned_uri(parts: &Parts) -> String {
     format!("{}/{API_VERSION}", base_uri(parts))
 }
 
-pub fn router<V>(vendor_info: Option<V>, topology: Topology, base_uri: BaseUri) -> Router
+/// The API routes. The caller layers the [`BaseUri`] extension.
+pub fn router<V>(vendor_info: Option<V>, topology: Topology) -> Router
 where
     V: Serialize + Clone + Send + Sync + 'static,
     VersionInfo<V>: JsonSchema,
@@ -128,7 +125,7 @@ where
         .nest(&format!("/{API_VERSION}"), v1_routes)
         .merge(version::routes::<V>());
 
-    router.with_state(state).layer(Extension(base_uri))
+    router.with_state(state)
 }
 
 /// Answers a path no route serves with a `GenericError` body.
@@ -144,44 +141,40 @@ mod tests {
     use opensovd_mocks::create_mock_topology;
     use tower::ServiceExt;
 
-    use super::{BaseUri, router};
+    use super::test_router;
 
     #[tokio::test]
     async fn malformed_path_parameters_are_rejected_as_json() {
-        let base_uri = BaseUri {
-            scheme: "http".to_owned(),
-            path: String::new(),
-        };
-        let app = router::<()>(None, create_mock_topology().await, base_uri);
+        let app = test_router(create_mock_topology().await);
 
         for (method, path) in [
-            ("GET", "/v1/areas/%FF"),
-            ("GET", "/v1/areas/%FF/contains"),
-            ("GET", "/v1/apps/%FF"),
-            ("GET", "/v1/components/%FF"),
-            ("GET", "/v1/components/%FF/hosts"),
-            ("GET", "/v1/components/%FF/data-categories"),
-            ("GET", "/v1/components/%FF/data-groups"),
-            ("GET", "/v1/components/%FF/data"),
-            ("GET", "/v1/components/%FF/data/x"),
-            ("PUT", "/v1/components/%FF/data/x"),
-            ("GET", "/v1/apps/%FF/data-categories"),
-            ("GET", "/v1/apps/%FF/data-groups"),
-            ("GET", "/v1/apps/%FF/data"),
-            ("GET", "/v1/apps/%FF/data/x"),
-            ("PUT", "/v1/apps/%FF/data/x"),
-            ("GET", "/v1/components/%FF/bulk-data"),
-            ("GET", "/v1/components/%FF/bulk-data/c"),
-            ("POST", "/v1/components/%FF/bulk-data/c"),
-            ("DELETE", "/v1/components/%FF/bulk-data/c"),
-            ("GET", "/v1/components/%FF/bulk-data/c/x"),
-            ("DELETE", "/v1/components/%FF/bulk-data/c/x"),
-            ("GET", "/v1/apps/%FF/logs"),
-            ("GET", "/v1/apps/%FF/logs/entries"),
-            ("GET", "/v1/apps/%FF/logs/x-opensovd-log-streams"),
-            ("GET", "/v1/apps/%FF/logs/config"),
-            ("PUT", "/v1/apps/%FF/logs/config"),
-            ("DELETE", "/v1/apps/%FF/logs/config"),
+            ("GET", "/sovd/v1/areas/%FF"),
+            ("GET", "/sovd/v1/areas/%FF/contains"),
+            ("GET", "/sovd/v1/apps/%FF"),
+            ("GET", "/sovd/v1/components/%FF"),
+            ("GET", "/sovd/v1/components/%FF/hosts"),
+            ("GET", "/sovd/v1/components/%FF/data-categories"),
+            ("GET", "/sovd/v1/components/%FF/data-groups"),
+            ("GET", "/sovd/v1/components/%FF/data"),
+            ("GET", "/sovd/v1/components/%FF/data/x"),
+            ("PUT", "/sovd/v1/components/%FF/data/x"),
+            ("GET", "/sovd/v1/apps/%FF/data-categories"),
+            ("GET", "/sovd/v1/apps/%FF/data-groups"),
+            ("GET", "/sovd/v1/apps/%FF/data"),
+            ("GET", "/sovd/v1/apps/%FF/data/x"),
+            ("PUT", "/sovd/v1/apps/%FF/data/x"),
+            ("GET", "/sovd/v1/components/%FF/bulk-data"),
+            ("GET", "/sovd/v1/components/%FF/bulk-data/c"),
+            ("POST", "/sovd/v1/components/%FF/bulk-data/c"),
+            ("DELETE", "/sovd/v1/components/%FF/bulk-data/c"),
+            ("GET", "/sovd/v1/components/%FF/bulk-data/c/x"),
+            ("DELETE", "/sovd/v1/components/%FF/bulk-data/c/x"),
+            ("GET", "/sovd/v1/apps/%FF/logs"),
+            ("GET", "/sovd/v1/apps/%FF/logs/entries"),
+            ("GET", "/sovd/v1/apps/%FF/logs/x-opensovd-log-streams"),
+            ("GET", "/sovd/v1/apps/%FF/logs/config"),
+            ("PUT", "/sovd/v1/apps/%FF/logs/config"),
+            ("DELETE", "/sovd/v1/apps/%FF/logs/config"),
         ] {
             let request = Request::builder()
                 .method(method)
@@ -199,15 +192,11 @@ mod tests {
 
     #[tokio::test]
     async fn params_that_are_not_utf8_are_named() {
-        let base_uri = BaseUri {
-            scheme: "http".to_owned(),
-            path: String::new(),
-        };
-        let app = router::<()>(None, create_mock_topology().await, base_uri);
+        let app = test_router(create_mock_topology().await);
 
         for (path, param) in [
-            ("/v1/components/%FF", "component_id"),
-            ("/v1/components/ecu/data/%FF", "data_id"),
+            ("/sovd/v1/components/%FF", "component_id"),
+            ("/sovd/v1/components/ecu/data/%FF", "data_id"),
         ] {
             let request = Request::builder().uri(path).body(Body::empty()).unwrap();
             let response = app.clone().oneshot(request).await.unwrap();

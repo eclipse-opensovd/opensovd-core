@@ -171,20 +171,12 @@ mod tests {
     use opensovd_mocks::create_mock_topology;
     use tower::ServiceExt;
 
-    use super::*;
-
     #[tokio::test]
     async fn test_area_capabilities_powertrain() {
-        let state = AppState::<()> {
-            vendor_info: None,
-            topology: create_mock_topology().await,
-        };
-        let app = routes::<()>()
-            .with_state(state)
-            .layer(crate::routes::test_base_uri());
+        let app = crate::routes::test_router(create_mock_topology().await);
 
         let request = Request::builder()
-            .uri("/areas/powertrain")
+            .uri("/sovd/v1/areas/powertrain")
             .body(Body::empty())
             .unwrap();
 
@@ -209,16 +201,10 @@ mod tests {
             .write()
             .await
             .add_area(opensovd_core::Area::new("body", "Body Domain"));
-        let state = AppState::<()> {
-            vendor_info: None,
-            topology,
-        };
-        let app = routes::<()>()
-            .with_state(state)
-            .layer(crate::routes::test_base_uri());
+        let app = crate::routes::test_router(topology);
 
         let request = Request::builder()
-            .uri("/areas/body")
+            .uri("/sovd/v1/areas/body")
             .body(Body::empty())
             .unwrap();
 
@@ -233,7 +219,7 @@ mod tests {
 
         // Not advertised, but still served as an empty list.
         let request = Request::builder()
-            .uri("/areas/body/contains")
+            .uri("/sovd/v1/areas/body/contains")
             .body(Body::empty())
             .unwrap();
         let response = app.oneshot(request).await.unwrap();
@@ -245,16 +231,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_area_list() {
-        let state = AppState::<()> {
-            vendor_info: None,
-            topology: create_mock_topology().await,
-        };
-        let app = routes::<()>()
-            .with_state(state)
-            .layer(crate::routes::test_base_uri());
+        let app = crate::routes::test_router(create_mock_topology().await);
 
         let request = Request::builder()
-            .uri("/areas")
+            .uri("/sovd/v1/areas")
             .body(Body::empty())
             .unwrap();
 

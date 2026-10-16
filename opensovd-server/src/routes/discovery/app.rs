@@ -129,20 +129,12 @@ mod tests {
     use opensovd_mocks::create_mock_topology;
     use tower::ServiceExt;
 
-    use super::*;
-
     #[tokio::test]
     async fn test_app_capabilities_engine_control() {
-        let state = AppState::<()> {
-            vendor_info: None,
-            topology: create_mock_topology().await,
-        };
-        let app = routes::<()>()
-            .with_state(state)
-            .layer(crate::routes::test_base_uri());
+        let app = crate::routes::test_router(create_mock_topology().await);
 
         let request = Request::builder()
-            .uri("/apps/engine_control")
+            .uri("/sovd/v1/apps/engine_control")
             .body(Body::empty())
             .unwrap();
 
@@ -170,16 +162,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_app_without_area_omits_belongs_to() {
-        let state = AppState::<()> {
-            vendor_info: None,
-            topology: create_mock_topology().await,
-        };
-        let app = routes::<()>()
-            .with_state(state)
-            .layer(crate::routes::test_base_uri());
+        let app = crate::routes::test_router(create_mock_topology().await);
 
         let request = Request::builder()
-            .uri("/apps/ota_manager")
+            .uri("/sovd/v1/apps/ota_manager")
             .body(Body::empty())
             .unwrap();
         let response = app.oneshot(request).await.unwrap();
@@ -197,16 +183,10 @@ mod tests {
             topo.remove_component("ecu");
             topo.remove_area("powertrain");
         }
-        let state = AppState::<()> {
-            vendor_info: None,
-            topology,
-        };
-        let app = routes::<()>()
-            .with_state(state)
-            .layer(crate::routes::test_base_uri());
+        let app = crate::routes::test_router(topology);
 
         let request = Request::builder()
-            .uri("/apps/engine_control")
+            .uri("/sovd/v1/apps/engine_control")
             .body(Body::empty())
             .unwrap();
         let response = app.oneshot(request).await.unwrap();
@@ -219,15 +199,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_app_list() {
-        let state = AppState::<()> {
-            vendor_info: None,
-            topology: create_mock_topology().await,
-        };
-        let app = routes::<()>()
-            .with_state(state)
-            .layer(crate::routes::test_base_uri());
+        let app = crate::routes::test_router(create_mock_topology().await);
 
-        let request = Request::builder().uri("/apps").body(Body::empty()).unwrap();
+        let request = Request::builder()
+            .uri("/sovd/v1/apps")
+            .body(Body::empty())
+            .unwrap();
 
         let response = app.oneshot(request).await.unwrap();
         assert!(response.status().is_success());

@@ -189,20 +189,12 @@ mod tests {
     use opensovd_mocks::create_mock_topology;
     use tower::ServiceExt;
 
-    use super::*;
-
     #[tokio::test]
     async fn test_component_capabilities_ecu() {
-        let state = AppState::<()> {
-            vendor_info: None,
-            topology: create_mock_topology().await,
-        };
-        let app = routes::<()>()
-            .with_state(state)
-            .layer(crate::routes::test_base_uri());
+        let app = crate::routes::test_router(create_mock_topology().await);
 
         let request = Request::builder()
-            .uri("/components/ecu")
+            .uri("/sovd/v1/components/ecu")
             .body(Body::empty())
             .unwrap();
 
@@ -232,16 +224,10 @@ mod tests {
             .write()
             .await
             .add_component(opensovd_core::Component::new("spare", "Spare ECU"));
-        let state = AppState::<()> {
-            vendor_info: None,
-            topology,
-        };
-        let app = routes::<()>()
-            .with_state(state)
-            .layer(crate::routes::test_base_uri());
+        let app = crate::routes::test_router(topology);
 
         let request = Request::builder()
-            .uri("/components/spare")
+            .uri("/sovd/v1/components/spare")
             .body(Body::empty())
             .unwrap();
 
@@ -257,7 +243,7 @@ mod tests {
 
         // Not advertised, but still served as an empty list.
         let request = Request::builder()
-            .uri("/components/spare/hosts")
+            .uri("/sovd/v1/components/spare/hosts")
             .body(Body::empty())
             .unwrap();
         let response = app.clone().oneshot(request).await.unwrap();
@@ -271,16 +257,10 @@ mod tests {
     async fn test_component_capabilities_skip_removed_area() {
         let topology = create_mock_topology().await;
         topology.write().await.remove_area("powertrain");
-        let state = AppState::<()> {
-            vendor_info: None,
-            topology,
-        };
-        let app = routes::<()>()
-            .with_state(state)
-            .layer(crate::routes::test_base_uri());
+        let app = crate::routes::test_router(topology);
 
         let request = Request::builder()
-            .uri("/components/ecu")
+            .uri("/sovd/v1/components/ecu")
             .body(Body::empty())
             .unwrap();
         let response = app.oneshot(request).await.unwrap();
@@ -292,16 +272,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_component_list() {
-        let state = AppState::<()> {
-            vendor_info: None,
-            topology: create_mock_topology().await,
-        };
-        let app = routes::<()>()
-            .with_state(state)
-            .layer(crate::routes::test_base_uri());
+        let app = crate::routes::test_router(create_mock_topology().await);
 
         let request = Request::builder()
-            .uri("/components")
+            .uri("/sovd/v1/components")
             .body(Body::empty())
             .unwrap();
 
