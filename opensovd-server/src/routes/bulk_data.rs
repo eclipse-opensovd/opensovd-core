@@ -36,7 +36,7 @@ use opensovd_models::bulkdata::{
 
 use crate::routes::{
     AppState,
-    entities::encode_path_segment,
+    discovery::encode_path_segment,
     error::{Error, Result, bulk_data_error},
     versioned_uri,
 };

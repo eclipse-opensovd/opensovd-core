@@ -31,7 +31,7 @@ use opensovd_models::{
 
 use super::{
     AppState,
-    entities::encode_path_segment,
+    discovery::encode_path_segment,
     error::{Error, Result},
     versioned_uri,
 };

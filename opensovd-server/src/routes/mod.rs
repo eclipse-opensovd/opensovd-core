@@ -28,9 +28,9 @@
 //! ## Version
 //! - GET /version-info - Get SOVD server version information
 
-mod bulkdata;
+mod bulk_data;
 mod data;
-mod entities;
+mod discovery;
 mod error;
 mod log;
 mod version;
@@ -119,8 +119,8 @@ where
     };
 
     let v1_routes = Router::new()
-        .merge(entities::routes::<V>())
-        .merge(bulkdata::routes::<V>())
+        .merge(discovery::routes::<V>())
+        .merge(bulk_data::routes::<V>())
         .merge(data::routes::<V>())
         .merge(log::routes::<V>());
 
