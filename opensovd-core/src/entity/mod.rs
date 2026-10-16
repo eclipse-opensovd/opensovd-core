@@ -8,18 +8,14 @@ use std::fmt;
 pub use app::App;
 pub use area::Area;
 pub use component::Component;
+pub use path::{
+    AppPath, AreaPath, ComponentPath, EntityKind, EntityPath, FunctionPath, InvalidPath,
+};
 
 mod app;
 mod area;
 mod component;
-
-/// The kind of entity in the SOVD hierarchy.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum EntityKind {
-    Component,
-    App,
-    Area,
-}
+mod path;
 
 impl fmt::Display for EntityKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -27,6 +23,8 @@ impl fmt::Display for EntityKind {
             Self::Component => f.write_str("component"),
             Self::App => f.write_str("app"),
             Self::Area => f.write_str("area"),
+            Self::Function => f.write_str("function"),
+            Self::Server => f.write_str("server"),
         }
     }
 }
@@ -126,6 +124,8 @@ mod tests {
         assert_eq!(EntityKind::Component.to_string(), "component");
         assert_eq!(EntityKind::App.to_string(), "app");
         assert_eq!(EntityKind::Area.to_string(), "area");
+        assert_eq!(EntityKind::Function.to_string(), "function");
+        assert_eq!(EntityKind::Server.to_string(), "server");
     }
 
     #[test]

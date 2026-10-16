@@ -51,9 +51,11 @@ classDiagram
 
     class EntityKind {
         <<enumeration>>
+        Area
         Component
         App
-        Area
+        Function
+        Server
     }
 
     class EntityRef {
@@ -167,9 +169,11 @@ A write guard over the topology state. Holds a `RwLockWriteGuard` for its lifeti
 
 **Crate:** `opensovd-core`
 
-### EntityRef / EntityKind
+### EntityRef / EntityKind / EntityPath
 
-`EntityKind` is an enum with variants `Component`, `App`, and `Area`. `EntityRef` is a lightweight reference containing a `kind` and `id`. Factory methods `EntityRef::component()`, `EntityRef::app()`, and `EntityRef::area()` create refs. All entity structs hold an `EntityRef` and expose it via `entity_ref()`.
+`EntityKind` is an enum with variants `Area`, `Component`, `App`, `Function`, and `Server`. `EntityRef` is a lightweight reference containing a `kind` and `id`. Factory methods `EntityRef::component()`, `EntityRef::app()`, and `EntityRef::area()` create refs. All entity structs hold an `EntityRef` and expose it via `entity_ref()`.
+
+`EntityPath` names an entity by its kind and its ids from the top level down, and displays percent-encoded, such as `components/Cabin/subcomponents/Display`. `EntityPath::area()`, `component()`, `app()`, `function()` and `server()` build one, `child()` nests an area or a component one level, and an empty, `.` or `..` id is rejected. The server builds one for the entity a route addresses.
 
 **Crate:** `opensovd-core`
 

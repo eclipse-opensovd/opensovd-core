@@ -1586,6 +1586,7 @@ dependencies = [
  "chrono",
  "futures-core",
  "indexmap",
+ "percent-encoding",
  "serde_json",
  "thiserror 2.0.21",
  "tokio",

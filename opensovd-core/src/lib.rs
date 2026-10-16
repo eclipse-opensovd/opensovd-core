@@ -17,7 +17,10 @@ pub use data::{
     CategoryInfo, Data, DataError, DataFilter, DataProvider, DataScope, GroupInfo, Metadata,
     TagInfo,
 };
-pub use entity::{App, Area, Component, EntityKind, EntityRef};
+pub use entity::{
+    App, AppPath, Area, AreaPath, Component, ComponentPath, EntityKind, EntityPath, EntityRef,
+    FunctionPath, InvalidPath,
+};
 pub use log::{
     LogConfiguration, LogContext, LogEntry, LogError, LogFilter, LogProvider, LogResult,
     LogSeverity, LogStream,
