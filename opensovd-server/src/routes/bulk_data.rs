@@ -57,12 +57,12 @@ where
         .route(
             "/{entity-collection}/{entity-id}/bulk-data/{category}",
             get(bulk_data_descriptors)
-                .post(upload_bulk_data)
-                .delete(delete_bulk_data_category),
+                .post(bulk_data_upload)
+                .delete(bulk_data_delete_category),
         )
         .route(
             "/{entity-collection}/{entity-id}/bulk-data/{category}/{bulk-data-id}",
-            get(download_bulk_data).delete(delete_bulk_data),
+            get(bulk_data_download).delete(bulk_data_delete),
         )
         .layer(DefaultBodyLimit::max(MAX_BULKDATA_BODY_BYTES))
 }
@@ -193,7 +193,7 @@ impl Header for ContentDisposition {
     }
 }
 
-async fn upload_bulk_data(
+async fn bulk_data_upload(
     State(topology): State<Topology>,
     parts: Parts,
     WithRejection(Path((entity_collection, entity_id, category)), _): WithRejection<
@@ -315,7 +315,7 @@ async fn upload_bulk_data(
     ))
 }
 
-async fn delete_bulk_data_category(
+async fn bulk_data_delete_category(
     State(topology): State<Topology>,
     OriginalUri(uri): OriginalUri,
     WithRejection(Path((entity_collection, entity_id, category)), _): WithRejection<
@@ -346,7 +346,7 @@ async fn delete_bulk_data_category(
     Ok(Json(result))
 }
 
-async fn download_bulk_data(
+async fn bulk_data_download(
     State(topology): State<Topology>,
     OriginalUri(uri): OriginalUri,
     WithRejection(Path((entity_collection, entity_id, category, bulk_data_id)), _): WithRejection<
@@ -376,7 +376,7 @@ async fn download_bulk_data(
         .map_err(|e| BulkDataError::Internal(e.to_string()))?)
 }
 
-async fn delete_bulk_data(
+async fn bulk_data_delete(
     State(topology): State<Topology>,
     OriginalUri(uri): OriginalUri,
     WithRejection(Path((entity_collection, entity_id, category, bulk_data_id)), _): WithRejection<

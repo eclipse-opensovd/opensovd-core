@@ -36,7 +36,7 @@ where
     V: Clone + Send + Sync + 'static,
 {
     Router::new()
-        .route("/", get(root_capabilities))
+        .route("/", get(server_capabilities))
         .merge(component::routes())
         .merge(app::routes())
         .merge(area::routes())
@@ -45,7 +45,7 @@ where
 /// GET / - Query for capabilities of the root entity.
 ///
 /// Returns the capabilities of the vehicle or system represented by the SOVD API.
-async fn root_capabilities(
+async fn server_capabilities(
     State(topology): State<Topology>,
     parts: Parts,
     WithRejection(Query(query), _): WithRejection<Query<EntityCapabilitiesQuery>, Error>,

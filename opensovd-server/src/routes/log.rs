@@ -54,8 +54,8 @@ where
         .route(
             "/{entity_collection}/{entity_id}/logs/config",
             get(log_configuration)
-                .put(update_log_configuration)
-                .delete(reset_log_configuration),
+                .put(log_configuration_write)
+                .delete(log_configuration_reset),
         )
 }
 
@@ -209,7 +209,7 @@ async fn log_configuration(
     }))
 }
 
-async fn update_log_configuration(
+async fn log_configuration_write(
     State(topology): State<Topology>,
     WithRejection(Path((entity_collection, entity_id)), _): WithRejection<
         Path<(String, String)>,
@@ -224,7 +224,7 @@ async fn update_log_configuration(
     Ok(StatusCode::NO_CONTENT)
 }
 
-async fn reset_log_configuration(
+async fn log_configuration_reset(
     State(topology): State<Topology>,
     WithRejection(Path((entity_collection, entity_id)), _): WithRejection<
         Path<(String, String)>,
