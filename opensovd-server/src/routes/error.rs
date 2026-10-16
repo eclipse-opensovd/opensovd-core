@@ -82,6 +82,14 @@ fn body_rejection(rejection: &JsonRejection) -> (StatusCode, ErrorDetails) {
     }
 }
 
+/// A `vendor-specific` error with `vendor_code`.
+fn vendor(status: StatusCode, vendor_code: &str, message: String) -> (StatusCode, ErrorDetails) {
+    (
+        status,
+        GenericError::with_vendor_code(vendor_code, message).into(),
+    )
+}
+
 /// The message for a path that does not parse, naming a param that is not
 /// UTF-8.
 fn bad_path(rejection: &PathRejection) -> String {
@@ -121,21 +129,15 @@ pub(super) fn bulk_data_error(e: &BulkDataError) -> (StatusCode, GenericError) {
 impl IntoResponse for Error {
     fn into_response(self) -> Response {
         let (status, details): (_, ErrorDetails) = match &self {
-            Self::EntityNotFound(id) => (
+            Self::EntityNotFound(id) => vendor(
                 StatusCode::NOT_FOUND,
-                GenericError::with_vendor_code(
-                    "entity-not-found",
-                    format!("Entity not found: {id}"),
-                )
-                .into(),
+                "entity-not-found",
+                format!("Entity not found: {id}"),
             ),
-            Self::ResourceNotFound(resource) => (
+            Self::ResourceNotFound(resource) => vendor(
                 StatusCode::NOT_FOUND,
-                GenericError::with_vendor_code(
-                    "resource-not-found",
-                    format!("Resource not found: {resource}"),
-                )
-                .into(),
+                "resource-not-found",
+                format!("Resource not found: {resource}"),
             ),
             Self::Data(e) => match e {
                 DataError::NotFound(_) => provider_error(
@@ -269,7 +271,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_error_resource_not_found() {
-        let error = Error::ResourceNotFound("/v1/unknown".into());
+        let error = Error::ResourceNotFound("components/ecu/unknown".into());
         let response = error.into_response();
 
         assert_eq!(response.status(), 404);
@@ -277,7 +279,10 @@ mod tests {
         let body = response.into_body().collect().await.unwrap().to_bytes();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["vendor_code"], "resource-not-found");
-        assert!(json["message"].as_str().unwrap().contains("/v1/unknown"));
+        assert_eq!(
+            json["message"],
+            "Resource not found: components/ecu/unknown"
+        );
     }
 
     #[tokio::test]

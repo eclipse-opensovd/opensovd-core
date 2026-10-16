@@ -5,6 +5,8 @@
 
 use std::collections::HashMap;
 
+use http_body_util::BodyExt;
+use hyper::{Method, Request};
 use hyper_util::client::legacy::Client;
 use hyper_util::rt::TokioExecutor;
 use opensovd_core::{Component, Topology};
@@ -105,4 +107,25 @@ impl TestServerBuilder {
 
 pub fn client() -> HttpClient {
     Client::builder(TokioExecutor::new()).build_http()
+}
+
+/// A test server over the mock topology.
+pub async fn mock_server() -> TestServer {
+    TestServer::builder()
+        .topology(opensovd_mocks::create_mock_topology().await)
+        .build()
+        .await
+}
+
+/// Sends a request without a body, and returns the status and the JSON body.
+pub async fn send(server: &TestServer, method: Method, path: &str) -> (u16, serde_json::Value) {
+    let request = Request::builder()
+        .method(method)
+        .uri(server.url(path))
+        .body(http_body_util::Empty::<bytes::Bytes>::new())
+        .unwrap();
+    let response = client().request(request).await.unwrap();
+    let status = response.status().as_u16();
+    let body = response.into_body().collect().await.unwrap().to_bytes();
+    (status, serde_json::from_slice(&body).unwrap())
 }

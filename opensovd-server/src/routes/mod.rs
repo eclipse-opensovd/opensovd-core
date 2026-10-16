@@ -37,7 +37,7 @@ mod version;
 
 use axum::{
     Router,
-    extract::FromRef,
+    extract::{FromRef, OriginalUri},
     http::{Uri, request::Parts},
 };
 use http::header::HOST;
@@ -87,21 +87,44 @@ pub(crate) fn test_router(topology: Topology) -> Router {
         .layer(axum::Extension(base_uri))
 }
 
-pub(crate) fn base_uri(parts: &Parts) -> String {
-    let (scheme, path) = parts
+/// The advertised scheme and mount path: `http` and empty without a
+/// [`BaseUri`].
+fn advertised(parts: &Parts) -> (&str, &str) {
+    parts
         .extensions
         .get::<BaseUri>()
-        .map_or(("http", ""), |b| (b.scheme.as_str(), b.path.as_str()));
+        .map_or(("http", ""), |b| (b.scheme.as_str(), b.path.as_str()))
+}
+
+pub(crate) fn versioned_uri(parts: &Parts) -> String {
+    let (scheme, path) = advertised(parts);
     let host = parts
         .headers
         .get(HOST)
         .and_then(|h| h.to_str().ok())
         .unwrap_or("localhost");
-    format!("{scheme}://{host}{path}")
+    format!("{scheme}://{host}{path}/{API_VERSION}")
 }
 
-pub(crate) fn versioned_uri(parts: &Parts) -> String {
-    format!("{}/{API_VERSION}", base_uri(parts))
+/// The request URI before nesting stripped a prefix.
+pub(crate) fn original_uri(parts: &Parts) -> &Uri {
+    parts
+        .extensions
+        .get::<OriginalUri>()
+        .map_or(&parts.uri, |OriginalUri(uri)| uri)
+}
+
+/// The request path below the API version, such as `components/ecu/faults`,
+/// for error messages. A path outside the API stays whole.
+pub(crate) fn api_path(parts: &Parts) -> &str {
+    let path = original_uri(parts).path();
+    let (_, base) = advertised(parts);
+    path.strip_prefix(base)
+        .and_then(|path| path.strip_prefix('/'))
+        .and_then(|path| path.strip_prefix(API_VERSION))
+        .and_then(|path| path.strip_prefix('/'))
+        .filter(|path| !path.is_empty())
+        .unwrap_or(path)
 }
 
 /// The API routes. The caller layers the [`BaseUri`] extension.
@@ -129,8 +152,8 @@ where
 }
 
 /// Answers a path no route serves with a `GenericError` body.
-pub(crate) async fn not_found(uri: Uri) -> error::Error {
-    error::Error::ResourceNotFound(uri.path().to_string())
+pub(crate) async fn not_found(parts: Parts) -> error::Error {
+    error::Error::ResourceNotFound(api_path(&parts).to_owned())
 }
 
 #[cfg(test)]
