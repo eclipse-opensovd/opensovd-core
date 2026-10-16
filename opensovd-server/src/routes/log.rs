@@ -62,7 +62,10 @@ where
 
 async fn log_resources(
     State(topology): State<Topology>,
-    Path((entity_collection, entity_id)): Path<(String, String)>,
+    WithRejection(Path((entity_collection, entity_id)), _): WithRejection<
+        Path<(String, String)>,
+        Error,
+    >,
     WithRejection(Query(query), _): WithRejection<Query<LogResourcesQuery>, Error>,
     parts: Parts,
 ) -> Result<Json<Response<LogResources>>> {
@@ -95,7 +98,10 @@ async fn log_resources(
 
 async fn log_entries(
     State(topology): State<Topology>,
-    Path((entity_collection, entity_id)): Path<(String, String)>,
+    WithRejection(Path((entity_collection, entity_id)), _): WithRejection<
+        Path<(String, String)>,
+        Error,
+    >,
     WithRejection(Query(query), _): WithRejection<Query<LogEntriesQuery>, Error>,
 ) -> Result<Json<Response<LogEntries>>> {
     validate_entries_filter(&query)?;
@@ -120,7 +126,10 @@ async fn log_entries(
 
 async fn log_entry_stream(
     State(topology): State<Topology>,
-    Path((entity_collection, entity_id)): Path<(String, String)>,
+    WithRejection(Path((entity_collection, entity_id)), _): WithRejection<
+        Path<(String, String)>,
+        Error,
+    >,
     WithRejection(Query(query), _): WithRejection<Query<LogStreamQuery>, Error>,
 ) -> Result<
     Sse<impl futures_core::Stream<Item = std::result::Result<Event, std::convert::Infallible>>>,
@@ -184,7 +193,10 @@ fn stream_error(error: &LogError) -> GenericError {
 
 async fn log_configuration(
     State(topology): State<Topology>,
-    Path((entity_collection, entity_id)): Path<(String, String)>,
+    WithRejection(Path((entity_collection, entity_id)), _): WithRejection<
+        Path<(String, String)>,
+        Error,
+    >,
     WithRejection(Query(query), _): WithRejection<Query<LogConfigurationQuery>, Error>,
 ) -> Result<Json<Response<LogConfigurationResponse>>> {
     let provider = get_provider(&topology, &entity_collection, &entity_id).await?;
@@ -202,7 +214,10 @@ async fn log_configuration(
 
 async fn update_log_configuration(
     State(topology): State<Topology>,
-    Path((entity_collection, entity_id)): Path<(String, String)>,
+    WithRejection(Path((entity_collection, entity_id)), _): WithRejection<
+        Path<(String, String)>,
+        Error,
+    >,
     WithRejection(Json(body), _): WithRejection<Json<LogConfigurationRequest>, Error>,
 ) -> Result<StatusCode> {
     let provider = get_provider(&topology, &entity_collection, &entity_id).await?;
@@ -214,7 +229,10 @@ async fn update_log_configuration(
 
 async fn reset_log_configuration(
     State(topology): State<Topology>,
-    Path((entity_collection, entity_id)): Path<(String, String)>,
+    WithRejection(Path((entity_collection, entity_id)), _): WithRejection<
+        Path<(String, String)>,
+        Error,
+    >,
 ) -> Result<StatusCode> {
     let provider = get_provider(&topology, &entity_collection, &entity_id).await?;
     provider.reset_configuration().await?;

@@ -176,6 +176,12 @@ mod tests {
             ("DELETE", "/v1/components/%FF/bulk-data/c"),
             ("GET", "/v1/components/%FF/bulk-data/c/x"),
             ("DELETE", "/v1/components/%FF/bulk-data/c/x"),
+            ("GET", "/v1/apps/%FF/logs"),
+            ("GET", "/v1/apps/%FF/logs/entries"),
+            ("GET", "/v1/apps/%FF/logs/x-opensovd-log-streams"),
+            ("GET", "/v1/apps/%FF/logs/config"),
+            ("PUT", "/v1/apps/%FF/logs/config"),
+            ("DELETE", "/v1/apps/%FF/logs/config"),
         ] {
             let request = Request::builder()
                 .method(method)

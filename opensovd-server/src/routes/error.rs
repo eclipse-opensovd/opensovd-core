@@ -138,8 +138,9 @@ impl IntoResponse for Error {
                 .into(),
             ),
             Self::Data(e) => match e {
-                DataError::NotFound(_) => (
+                DataError::NotFound(_) => provider_error(
                     StatusCode::NOT_FOUND,
+                    e,
                     GenericError::with_vendor_code("resource-not-found", e.to_string()).into(),
                 ),
                 DataError::ReadOnly => {
@@ -158,18 +159,20 @@ impl IntoResponse for Error {
                     )
                         .into_response();
                 }
-                DataError::InvalidValue { path, message } => (
+                DataError::InvalidValue { path, message } => provider_error(
                     StatusCode::BAD_REQUEST,
+                    e,
                     data_error(format!("/data{path}"), message),
                 ),
-                DataError::Internal(message) => {
-                    (StatusCode::INTERNAL_SERVER_ERROR, internal(message).into())
-                }
+                DataError::Internal(message) => provider_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    e,
+                    internal(message).into(),
+                ),
             },
             Self::BulkData(e) => {
                 let (status, error) = bulk_data_error(e);
-                (status, error.into())
-            }
+                provider_error(status, e, error.into())
             }
             Self::BadPath(rejection) => (
                 StatusCode::BAD_REQUEST,
@@ -177,7 +180,7 @@ impl IntoResponse for Error {
             ),
             Self::Log(e) => {
                 let (status, error) = log_error(e);
-                (status, error.into())
+                provider_error(status, e, error.into())
             }
             Self::BadQuery(_) => (
                 StatusCode::BAD_REQUEST,
@@ -203,7 +206,7 @@ impl IntoResponse for Error {
     }
 }
 
-/// The status and body answering a log-provider error.
+/// The status and body answering a log-provider error before common handling.
 fn log_error(e: &LogError) -> (StatusCode, GenericError) {
     match e {
         LogError::InvalidRequest(_) => (
@@ -219,6 +222,23 @@ fn log_error(e: &LogError) -> (StatusCode, GenericError) {
             GenericError::new(ErrorCode::ErrorResponse, e.to_string()),
         ),
         LogError::Internal(message) => (StatusCode::INTERNAL_SERVER_ERROR, internal(message)),
+    }
+}
+
+/// A provider error as an `error-response`; a 500 logs the details and hides them.
+fn provider_error(
+    status: StatusCode,
+    error: &impl std::fmt::Display,
+    details: ErrorDetails,
+) -> (StatusCode, ErrorDetails) {
+    if status == StatusCode::INTERNAL_SERVER_ERROR {
+        tracing::error!(target: "srv", error = %error, "Internal error");
+        (
+            status,
+            GenericError::new(ErrorCode::SovdServerFailure, "An internal error occurred").into(),
+        )
+    } else {
+        (status, details)
     }
 }
 

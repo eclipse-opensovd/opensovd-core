@@ -300,7 +300,7 @@ async fn invalid_time_range_is_rejected_before_snapshot_provider() {
     .await;
 
     assert_eq!(status, hyper::StatusCode::BAD_REQUEST);
-    assert_eq!(body["error_code"], "error-response");
+    assert_eq!(body["error_code"], "incomplete-request");
     assert!(seen_filter.lock().unwrap().is_none());
 }
 
@@ -319,7 +319,7 @@ async fn invalid_time_range_is_rejected_before_stream_provider() {
     .await;
 
     assert_eq!(status, hyper::StatusCode::BAD_REQUEST);
-    assert_eq!(body["error_code"], "error-response");
+    assert_eq!(body["error_code"], "incomplete-request");
     assert!(seen_filter.lock().unwrap().is_none());
 }
 
