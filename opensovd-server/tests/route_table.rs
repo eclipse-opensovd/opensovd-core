@@ -14,21 +14,159 @@ fn api_path(path: &str) -> &str {
 }
 
 #[tokio::test]
+async fn routes_not_served_yet_answer_resource_not_found() {
+    let server = mock_server().await;
+
+    for (method, path) in [
+        (Method::POST, "/sovd/v1/token"),
+        (Method::GET, "/sovd/v1/faults"),
+        (Method::GET, "/sovd/v1/functions"),
+        (Method::GET, "/sovd/v1/functions/selftest"),
+        (Method::GET, "/sovd/v1/functions/selftest/depends-on"),
+        (Method::GET, "/sovd/v1/depends-on"),
+        (Method::GET, "/sovd/v1/data"),
+        (Method::GET, "/sovd/v1/data/voltage"),
+        (Method::GET, "/sovd/v1/bulk-data/logs"),
+        (Method::GET, "/sovd/v1/bulk-data"),
+        (Method::GET, "/sovd/v1/logs/entries"),
+        (Method::DELETE, "/sovd/v1/bulk-data/logs/trace.bin"),
+        (Method::GET, "/sovd/v1/areas/powertrain/subareas"),
+        (Method::GET, "/sovd/v1/areas/powertrain/subareas/engine"),
+        (
+            Method::GET,
+            "/sovd/v1/areas/powertrain/subareas/engine/contains",
+        ),
+        (
+            Method::GET,
+            "/sovd/v1/components/ecu/subcomponents/injector",
+        ),
+        (
+            Method::GET,
+            "/sovd/v1/components/ecu/subcomponents/injector/hosts",
+        ),
+        (
+            Method::GET,
+            "/sovd/v1/components/ecu/subcomponents/injector/depends-on",
+        ),
+        (
+            Method::GET,
+            "/sovd/v1/components/ecu/subcomponents/injector/data",
+        ),
+        (
+            Method::GET,
+            "/sovd/v1/components/ecu/subcomponents/injector/data/rpm",
+        ),
+        (
+            Method::GET,
+            "/sovd/v1/components/ecu/subcomponents/injector/bulk-data",
+        ),
+        (
+            Method::GET,
+            "/sovd/v1/components/ecu/subcomponents/injector/logs",
+        ),
+        (
+            Method::GET,
+            "/sovd/v1/components/ecu/subcomponents/injector/faults",
+        ),
+        (
+            Method::PUT,
+            "/sovd/v1/components/ecu/subcomponents/injector/status/restart",
+        ),
+        (Method::GET, "/sovd/v1/components/ecu/subcomponents"),
+        (Method::GET, "/sovd/v1/components/ecu/depends-on"),
+        (Method::GET, "/sovd/v1/components/ecu/faults"),
+        (Method::DELETE, "/sovd/v1/components/ecu/faults/P0300"),
+        (Method::PUT, "/sovd/v1/components/ecu/status/restart"),
+        (Method::GET, "/sovd/v1/apps/engine_control/depends-on"),
+        (
+            Method::POST,
+            "/sovd/v1/apps/engine_control/operations/calibrate/executions",
+        ),
+        (Method::GET, "/sovd/v1/apps/engine_control/updates"),
+        (Method::GET, "/sovd/v1/updates"),
+    ] {
+        let (status, json) = send(&server, method.clone(), path).await;
+        assert_eq!(status, 404, "{method} {path}");
+        assert_eq!(json["vendor_code"], "resource-not-found", "{method} {path}");
+        assert_eq!(
+            json["message"],
+            format!("Resource not found: {}", api_path(path)),
+            "{method} {path}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn a_function_routes_only_capabilities_and_depends_on() {
+    let server = mock_server().await;
+
+    for (method, path) in [
+        (Method::GET, "/sovd/v1/functions/selftest/status"),
+        (Method::PUT, "/sovd/v1/functions/selftest/status/restart"),
+        (Method::GET, "/sovd/v1/functions/selftest/data"),
+        (Method::GET, "/sovd/v1/functions/selftest/x"),
+    ] {
+        let (status, json) = send(&server, method, path).await;
+        assert_eq!(status, 404, "{path}");
+        assert_eq!(json["vendor_code"], "resource-not-found", "{path}");
+    }
+}
+
+#[tokio::test]
 async fn missing_entities_are_not_found() {
     let server = mock_server().await;
 
+    let injector = "components/nope/subcomponents/injector";
     for (method, path, entity) in [
         (Method::GET, "components/nope", "components/nope"),
         (Method::GET, "components/nope/data", "components/nope"),
+        (Method::GET, "components/nope/faults", "components/nope"),
+        (
+            Method::GET,
+            "components/nope/subcomponents",
+            "components/nope",
+        ),
         (Method::GET, "apps/nope", "apps/nope"),
         (Method::GET, "apps/nope/bulk-data", "apps/nope"),
         (Method::DELETE, "apps/nope/bulk-data/logs", "apps/nope"),
         (Method::DELETE, "apps/nope/logs/config", "apps/nope"),
         (Method::GET, "components/nope/data/x", "components/nope"),
+        (Method::GET, "apps/nope/status", "apps/nope"),
+        (Method::GET, "areas/nope/subareas", "areas/nope"),
         (
             Method::GET,
             "components/x%2Fsubcomponents%2Fy/data",
             "components/x%2Fsubcomponents%2Fy",
+        ),
+        (
+            Method::GET,
+            "areas/nope/subareas/engine",
+            "areas/nope/subareas/engine",
+        ),
+        (
+            Method::GET,
+            "areas/nope/subareas/engine/contains",
+            "areas/nope/subareas/engine",
+        ),
+        (
+            Method::GET,
+            "components/nope/subcomponents/injector",
+            injector,
+        ),
+        (
+            Method::GET,
+            "components/nope/subcomponents/injector/data",
+            injector,
+        ),
+        (
+            Method::GET,
+            "components/nope/subcomponents/injector/bulk-data",
+            injector,
+        ),
+        (
+            Method::PUT,
+            "components/nope/subcomponents/injector/status/restart",
+            injector,
         ),
     ] {
         let path = format!("/sovd/v1/{path}");
@@ -61,6 +199,11 @@ async fn a_malformed_request_answers_before_the_entity() {
         ),
         (Method::GET, format!("apps/nope?{query}"), 400),
         (Method::GET, format!("apps/nope/logs/entries?{query}"), 400),
+        (
+            Method::GET,
+            format!("components/ecu/subcomponents/injector?{query}"),
+            400,
+        ),
         // Without a JSON body.
         (Method::PUT, "components/nope/data/x".to_owned(), 415),
         (Method::PUT, "apps/nope/logs/config".to_owned(), 415),
@@ -87,6 +230,8 @@ async fn routes_follow_the_entity_kind() {
         "/sovd/v1/apps/engine_control/hosts",
         "/sovd/v1/apps/engine_control/subcomponents",
         "/sovd/v1/components/ecu/subcomponents/injector/unknown",
+        "/sovd/v1/areas/powertrain/subareas/engine/subareas",
+        "/sovd/v1/components/ecu/subcomponents/injector/subcomponents",
         "/sovd/v1/components/nope/unknown",
         "/sovd/v1/unknown/x/data",
         "/sovd/v1/components//data",
@@ -124,6 +269,16 @@ async fn wrong_methods_answer_a_json_405() {
     let server = mock_server().await;
 
     for (method, path, allow) in [
+        (
+            Method::POST,
+            "/sovd/v1/components/ecu/faults/P0300",
+            "GET,HEAD,DELETE",
+        ),
+        (
+            Method::PATCH,
+            "/sovd/v1/components/ecu/faults",
+            "GET,HEAD,DELETE",
+        ),
         (Method::POST, "/sovd/v1/components/ecu/data", "GET,HEAD"),
         (Method::OPTIONS, "/sovd/version-info", "GET,HEAD"),
     ] {

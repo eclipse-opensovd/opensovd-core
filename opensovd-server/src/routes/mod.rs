@@ -4,9 +4,12 @@
 //! HTTP route handlers for the SOVD API.
 //!
 //! The route table has two parts: one router per entity kind says what the
-//! kind serves, relative to the entity, and [`versioned`] nests each kind
-//! where it is served, such as `/components/{component_id}`. Handlers take
-//! the entity from the route.
+//! kind serves, relative to the entity, and [`versioned`] nests each kind at
+//! every level it is served on, such as `/components/{component_id}` and
+//! `/components/{component_id}/subcomponents/{subcomponent_id}`, where the
+//! sub-entity listing is left out. Handlers take the entity from the route,
+//! so one handler serves all levels. Routes that are not served yet answer
+//! `resource-not-found` for an existing entity.
 //!
 //! A request is checked in this order:
 //! - the route first: an unknown path answers 404 `resource-not-found`, a
@@ -16,9 +19,10 @@
 //! - then the resource (404 `resource-not-found`);
 //! - then the operation.
 //!
-//! - `entity`: the `Entity` extractor
+//! - `entity`: the `Entity` extractor and the stub answer
 //! - `discovery`: capabilities, listings and relations
 //! - `data`, `bulk_data`, `log`: the served resource collections
+//! - `stubs`: the routers of collections that are not served yet
 //! - `version`: `GET /version-info`, outside the versioned API
 
 mod bulk_data;
@@ -27,6 +31,7 @@ mod discovery;
 mod entity;
 mod error;
 mod log;
+mod stubs;
 mod version;
 
 use axum::{
@@ -36,6 +41,7 @@ use axum::{
     routing::get,
 };
 use discovery::{app, area, component};
+use entity::stub;
 use http::header::HOST;
 use opensovd_core::Topology;
 pub use opensovd_models::version::{VendorInfo, VersionInfo};
@@ -124,21 +130,40 @@ where
         .with_state(vendor_info)
 }
 
-/// The routes below `/{API_VERSION}`: each entity kind where it is served.
+/// The routes below `/{API_VERSION}`: each entity kind at every level it is
+/// served on, one level below the top-level areas and components.
 fn versioned() -> Router<Topology> {
     Router::new()
         .merge(server())
         .nest("/areas/{area_id}", areas())
+        .nest("/areas/{area_id}/subareas/{subarea_id}", subareas())
         .nest("/components/{component_id}", components())
+        .nest(
+            "/components/{component_id}/subcomponents/{subcomponent_id}",
+            subcomponents(),
+        )
         .nest("/apps/{app_id}", apps())
+        .nest("/functions/{function_id}", functions())
 }
 
-/// Resource collections of components and apps.
+/// Resource collections of the server, components and apps.
 fn collections() -> Router<Topology> {
     Router::new()
         .merge(data::routes())
         .merge(bulk_data::routes())
         .merge(log::routes())
+        .merge(stubs::clear_data())
+        .merge(stubs::communication_logs())
+        .merge(stubs::configurations())
+        .merge(stubs::cyclic_subscriptions())
+        .merge(stubs::data_lists())
+        .merge(stubs::faults())
+        .merge(stubs::locks())
+        .merge(stubs::modes())
+        .merge(stubs::operations())
+        .merge(stubs::scripts())
+        .merge(stubs::triggers())
+        .merge(stubs::updates())
 }
 
 fn server() -> Router<Topology> {
@@ -147,25 +172,52 @@ fn server() -> Router<Topology> {
         .route("/areas", get(area::area_list))
         .route("/components", get(component::component_list))
         .route("/apps", get(app::app_list))
+        .route("/functions", get(stub))
+        .route("/depends-on", get(stub))
+        .merge(stubs::auth())
+        .merge(collections())
 }
 
 fn areas() -> Router<Topology> {
+    subareas().route("/subareas", get(stub))
+}
+
+/// What a subarea serves: what an area serves but subareas, as entities
+/// nest one level only.
+fn subareas() -> Router<Topology> {
     Router::new()
         .route("/", get(area::area_capabilities))
         .route("/contains", get(area::area_contains))
 }
 
 fn components() -> Router<Topology> {
+    subcomponents().route("/subcomponents", get(stub))
+}
+
+/// What a subcomponent serves: what a component serves but subcomponents.
+fn subcomponents() -> Router<Topology> {
     Router::new()
         .route("/", get(component::component_capabilities))
         .route("/hosts", get(component::component_hosts))
+        .route("/depends-on", get(stub))
         .merge(collections())
+        .merge(stubs::status())
 }
 
 fn apps() -> Router<Topology> {
     Router::new()
         .route("/", get(app::app_capabilities))
+        .route("/depends-on", get(stub))
         .merge(collections())
+        .merge(stubs::status())
+}
+
+/// What a function serves: capabilities and depends-on. The topology holds
+/// no functions, so both answer `resource-not-found` for any id.
+fn functions() -> Router<Topology> {
+    Router::new()
+        .route("/", get(stub))
+        .route("/depends-on", get(stub))
 }
 
 /// Answers a method the route does not serve with a `GenericError` body;
@@ -225,6 +277,14 @@ mod tests {
             ("PUT", "/sovd/v1/apps/engine_control/data/%FF"),
             ("GET", "/sovd/v1/components/ecu/bulk-data/%FF"),
             ("GET", "/sovd/v1/apps/ota_manager/bulk-data/c/%FF"),
+            ("GET", "/sovd/v1/components/%FF/faults"),
+            ("PUT", "/sovd/v1/apps/%FF/status/restart"),
+            ("GET", "/sovd/v1/areas/%FF/subareas"),
+            ("GET", "/sovd/v1/components/ecu/faults/%FF"),
+            ("GET", "/sovd/v1/components/ecu/subcomponents/%FF"),
+            ("GET", "/sovd/v1/components/ecu/subcomponents/%FF/data"),
+            ("GET", "/sovd/v1/areas/powertrain/subareas/%FF/contains"),
+            ("GET", "/sovd/v1/functions/%FF"),
         ] {
             let request = Request::builder()
                 .method(method)

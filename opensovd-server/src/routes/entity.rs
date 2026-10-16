@@ -5,11 +5,11 @@
 
 use std::sync::Arc;
 
-use axum::extract::{FromRequestParts, Path};
+use axum::extract::{FromRequestParts, Path, State};
 use axum::http::{Uri, request::Parts};
 use opensovd_core::{
     App, Area, BulkDataProvider, Component, DataProvider, EntityKind, EntityPath, InvalidPath,
-    LogProvider, TopologyReadGuard,
+    LogProvider, Topology, TopologyReadGuard,
 };
 use serde::Deserialize;
 
@@ -23,6 +23,20 @@ pub(crate) struct Entity {
     uri: Uri,
     /// Where the path below the API version starts in `uri`.
     start: usize,
+}
+
+/// Whether the entity exists. A nested entity is not served yet, so only its
+/// parent is checked, and the topology holds no functions to check.
+fn exists(path: &EntityPath, topo: &TopologyReadGuard<'_>) -> bool {
+    if let Some(parent) = path.parent() {
+        return exists(&parent, topo);
+    }
+    match path.kind() {
+        EntityKind::Server | EntityKind::Function => true,
+        EntityKind::Area => topo.get_area(path.id()).is_ok(),
+        EntityKind::Component => topo.get_component(path.id()).is_ok(),
+        EntityKind::App => topo.get_app(path.id()).is_ok(),
+    }
 }
 
 /// The route params that name the entity. The server's routes name none.
@@ -100,10 +114,11 @@ impl Entity {
     }
 
     /// The area the route names: `entity-not-found` if it does not exist.
+    /// The routes of a subarea are not served yet.
     pub(crate) fn area<'t>(&self, topo: &'t TopologyReadGuard<'_>) -> Result<&'t Area> {
         match self.top_level(EntityKind::Area) {
             Some(id) => topo.get_area(id).map_err(|_| self.entity_not_found()),
-            None => Err(self.not_found()),
+            None => Err(self.unserved(topo)),
         }
     }
 
@@ -111,7 +126,7 @@ impl Entity {
     pub(crate) fn component<'t>(&self, topo: &'t TopologyReadGuard<'_>) -> Result<&'t Component> {
         match self.top_level(EntityKind::Component) {
             Some(id) => topo.get_component(id).map_err(|_| self.entity_not_found()),
-            None => Err(self.not_found()),
+            None => Err(self.unserved(topo)),
         }
     }
 
@@ -119,7 +134,7 @@ impl Entity {
     pub(crate) fn app<'t>(&self, topo: &'t TopologyReadGuard<'_>) -> Result<&'t App> {
         match self.top_level(EntityKind::App) {
             Some(id) => topo.get_app(id).map_err(|_| self.entity_not_found()),
-            None => Err(self.not_found()),
+            None => Err(self.unserved(topo)),
         }
     }
 
@@ -150,7 +165,7 @@ impl Entity {
 
     /// The provider `component` or `app` returns for the entity:
     /// `entity-not-found` if it does not exist, `resource-not-found` if it
-    /// has none.
+    /// has none. The server and nested entities serve no providers yet.
     fn provider<'t, P>(
         &self,
         topo: &'t TopologyReadGuard<'_>,
@@ -160,7 +175,7 @@ impl Entity {
         let provider = match self.path.kind() {
             EntityKind::Component => component(self.component(topo)?),
             EntityKind::App => app(self.app(topo)?),
-            _ => return Err(self.not_found()),
+            _ => return Err(self.unserved(topo)),
         };
         provider.ok_or_else(|| self.not_found())
     }
@@ -178,6 +193,22 @@ impl Entity {
     fn not_found(&self) -> Error {
         Error::ResourceNotFound(self.resource().to_owned())
     }
+
+    /// The answer of a route that is not served yet: `entity-not-found` if
+    /// the entity does not exist, `resource-not-found` otherwise.
+    fn unserved(&self, topo: &TopologyReadGuard<'_>) -> Error {
+        if exists(&self.path, topo) {
+            self.not_found()
+        } else {
+            self.entity_not_found()
+        }
+    }
+}
+
+/// Answers a route that is not served yet: `entity-not-found` if the entity
+/// does not exist, `resource-not-found` otherwise.
+pub(crate) async fn stub(State(topology): State<Topology>, entity: Entity) -> Error {
+    entity.unserved(&topology.read().await)
 }
 
 #[cfg(test)]

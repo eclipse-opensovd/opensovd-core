@@ -290,6 +290,69 @@ async fn test_missing_data_provider_returns_resource_not_found() {
 }
 
 #[tokio::test]
+#[should_panic(expected = "Insertion failed due to conflict")]
+async fn test_service_on_an_api_route_panics() {
+    let svc = tower::service_fn(|_req: Request<opensovd_server::Body>| async {
+        Ok::<_, std::convert::Infallible>(http::Response::new(
+            http_body_util::Empty::<bytes::Bytes>::new(),
+        ))
+    });
+    let server = Server::builder()
+        .listener(tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap())
+        .base_uri("/sovd")
+        .unwrap()
+        .service("/sovd/v1/components", svc)
+        .shutdown(std::future::ready(()))
+        .build()
+        .unwrap();
+    let _ = server.serve().await;
+}
+
+#[tokio::test]
+async fn test_service_below_the_api() {
+    let svc = tower::service_fn(|_req: Request<opensovd_server::Body>| async {
+        Ok::<_, std::convert::Infallible>(http::Response::new(http_body_util::Full::new(
+            bytes::Bytes::from("from service"),
+        )))
+    });
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
+
+    let server = Server::builder()
+        .listener(listener)
+        .base_uri("/sovd")
+        .unwrap()
+        .service("/sovd/v1/ui", svc)
+        .shutdown(async {
+            shutdown_rx.await.ok();
+        })
+        .build()
+        .unwrap();
+
+    tokio::spawn(async move { server.serve().await.unwrap() });
+
+    let client = common::client();
+    for (path, from_service) in [
+        ("/sovd/v1/ui", true),
+        ("/sovd/v1/ui/index.html", true),
+        ("/sovd/v1/components", false),
+    ] {
+        let request = Request::builder()
+            .uri(format!("http://{addr}{path}"))
+            .body(http_body_util::Empty::<bytes::Bytes>::new())
+            .unwrap();
+        let response = client.request(request).await.unwrap();
+        assert!(response.status().is_success(), "{path}");
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        assert_eq!(&body[..] == b"from service", from_service, "{path}");
+    }
+
+    let _ = shutdown_tx.send(());
+}
+
+#[tokio::test]
 async fn test_service() {
     let svc = tower::service_fn(|_req: Request<opensovd_server::Body>| async {
         Ok::<_, std::convert::Infallible>(http::Response::new(http_body_util::Full::new(

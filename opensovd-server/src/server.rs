@@ -286,7 +286,10 @@ impl<Vendor, Layer> ServerBuilder<Vendor, Layer> {
         self
     }
 
-    /// Register a tower service at the given path.
+    /// Register a tower service at the given absolute path. A service at a
+    /// path the API routes, such as `{base}/v1/components`, makes
+    /// [`Server::serve`] panic. A service below an entity, such as
+    /// `{base}/v1/components/ecu/docs`, answers that path instead of the API.
     pub fn service<S, ResBody>(mut self, path: &str, svc: S) -> Self
     where
         S: TowerService<
