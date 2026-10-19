@@ -379,7 +379,10 @@ async fn configure_topology<Vendor, Layer>(
     };
 
     #[cfg(not(feature = "mock"))]
-    let topology = Topology::default();
+    let topology = {
+        let _ = cli;
+        Topology::default()
+    };
 
     builder.topology(topology)
 }

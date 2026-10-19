@@ -40,3 +40,22 @@ mise install
 uv sync
 prek install
 ```
+
+## Option 3: Bazel bootstrap
+
+The repository also includes a Bazel entrypoint backed by `rules_rust` and `crate_universe`. This keeps the Rust workspace native in Bazel instead of shelling out to Cargo for package builds.
+
+Use Bazel 8.6.0 directly or via Bazelisk so the workspace follows the pinned version in `.bazelversion`.
+
+```bash
+# Build the gateway through Bazel
+bazel build //:opensovd-gateway
+```
+
+The Bazel integration builds the gateway and its transitive internal dependencies. Cargo remains the authoritative test workflow.
+
+When dependency versions change, refresh the generated crate-universe lock metadata with:
+
+```bash
+CARGO_BAZEL_REPIN=1 bazel sync --only=crate_index
+```
