@@ -5,6 +5,8 @@
 //!
 //! Defines error types that convert to SOVD-compliant HTTP error responses.
 
+use std::collections::HashMap;
+
 use axum::{
     extract::path::ErrorKind,
     extract::rejection::{JsonRejection, PathRejection},
@@ -12,8 +14,9 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use axum_extra::{extract::QueryRejection, typed_header::TypedHeaderRejection};
-use opensovd_core::{BulkDataError, DataError, LogError};
+use opensovd_core::{BulkDataError, DataError, LogError, UpdateError};
 use opensovd_models::{ErrorCode, ErrorDetails, GenericError, JsonPointer};
+use serde_json::json;
 
 use super::extract::Json;
 
@@ -40,6 +43,8 @@ pub enum Error {
     BulkData(#[from] BulkDataError),
     #[error(transparent)]
     Log(#[from] LogError),
+    #[error(transparent)]
+    Update(#[from] UpdateError),
     #[error("{0}")]
     BadPath(#[from] PathRejection),
     #[error("{0}")]
@@ -133,6 +138,70 @@ pub(super) fn bulk_data_error(e: &BulkDataError) -> (StatusCode, GenericError) {
     }
 }
 
+/// Provides a suitable HTTP response with a status code and error details for
+/// an `UpdateError`.
+fn update_error(e: &UpdateError) -> (StatusCode, ErrorDetails) {
+    match e {
+        UpdateError::ResponseFailed(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            GenericError::new(ErrorCode::ErrorResponse, e).into(),
+        ),
+        UpdateError::AutomatedUpdateNotSupported => (
+            StatusCode::CONFLICT,
+            GenericError::new(ErrorCode::UpdateAutomatedNotSupported, e.to_string()).into(),
+        ),
+        UpdateError::UpdateExecutionInProgress(id) => (
+            StatusCode::CONFLICT,
+            GenericError {
+                error_code: ErrorCode::UpdateExecutionInProgress,
+                message: e.to_string(),
+                parameters: Some(HashMap::from([("id".to_string(), json!(id))])),
+                vendor_code: None,
+                translation_id: None,
+            }
+            .into(),
+        ),
+        UpdateError::UpdateProcessInProgress(id) => (
+            StatusCode::CONFLICT,
+            GenericError {
+                error_code: ErrorCode::UpdateProcessInProgress,
+                message: e.to_string(),
+                parameters: Some(HashMap::from([("id".to_string(), json!(id))])),
+                vendor_code: None,
+                translation_id: None,
+            }
+            .into(),
+        ),
+        UpdateError::UpdatePreparationInProgress(id) => (
+            StatusCode::CONFLICT,
+            GenericError {
+                error_code: ErrorCode::UpdatePreparationInProgress,
+                message: e.to_string(),
+                parameters: Some(HashMap::from([("id".to_string(), json!(id))])),
+                vendor_code: None,
+                translation_id: None,
+            }
+            .into(),
+        ),
+        UpdateError::UpdateProviderNotConfigured | UpdateError::IncompatibleModel => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            GenericError::new(ErrorCode::SovdServerMisconfigured, e.to_string()).into(),
+        ),
+        UpdateError::ProviderError(msg) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            GenericError::new(ErrorCode::ErrorResponse, msg).into(),
+        ),
+        UpdateError::UpdateIdConflict(_id) => {
+            vendor(StatusCode::CONFLICT, "update-id-exists", e.to_string())
+        }
+        UpdateError::UpdateNotFound(id) => vendor(
+            StatusCode::NOT_FOUND,
+            "entity-not-found",
+            format!("Entity not found: {id}"),
+        ),
+    }
+}
+
 impl IntoResponse for Error {
     fn into_response(self) -> Response {
         let (status, details): (_, ErrorDetails) = match &self {
@@ -205,6 +274,7 @@ impl IntoResponse for Error {
                 GenericError::new(ErrorCode::IncompleteRequest, "Bad request headers").into(),
             ),
             Self::BadBody(rejection) => body_rejection(rejection),
+            Self::Update(e) => update_error(e),
         };
         (status, Json(details)).into_response()
     }

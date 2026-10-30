@@ -6,13 +6,19 @@
 use std::collections::HashMap;
 
 use opensovd_core::{App, Area, Component, Topology};
-use opensovd_models::data::DataCategory;
+use opensovd_models::{
+    data::DataCategory,
+    updates::{UpdateDetail, UpdateStatus},
+};
 use opensovd_providers::data::{Constant, DataProviderBuilder};
 
 mod bulkdata;
+mod updates;
+
 pub use bulkdata::InMemoryBulkDataProvider;
 mod log;
 pub use log::InMemoryLogProvider;
+pub use updates::{MockFeedback, MockUpdate, MockUpdateProvider};
 
 /// Creates a mock topology with sample ECU, gateway, and app entities.
 ///
@@ -224,6 +230,9 @@ pub async fn create_mock_topology() -> Topology {
         .with_data_provider(ota_provider)
         .with_bulkdata_provider(
             InMemoryBulkDataProvider::default().with_permanent_entry("logs", "cannot_delete"),
+        )
+        .with_update_provider::<MockUpdate, UpdateDetail, MockFeedback, UpdateStatus>(
+            MockUpdateProvider { failing: false },
         );
     // Note: NO with_area_id() - tests optional belongs-to
 
@@ -243,6 +252,10 @@ pub async fn create_mock_topology() -> Topology {
         t.add_app(ota_manager);
         t.add_area(powertrain);
         t.add_area(network);
+        // also add a second update provider to the server root that always fails
+        t.add_update_provider::<MockUpdate, UpdateDetail, MockFeedback, UpdateStatus>(
+            MockUpdateProvider { failing: true },
+        );
     }
     topology
 }

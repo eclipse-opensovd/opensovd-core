@@ -12,6 +12,11 @@ use indexmap::IndexSet;
 use indexmap::map::Values;
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard, broadcast};
 
+use crate::FromModel;
+use crate::ToModel;
+use crate::UpdateDescriptor;
+use crate::UpdateProvider;
+use crate::Updates;
 use crate::entity::{App, Area, Component, EntityRef};
 
 /// Events emitted when the topology changes.
@@ -52,6 +57,8 @@ pub struct TopologyState {
     components_by_area: HashMap<String, IndexSet<String>>,
     /// Area ID -> set of app IDs in that area
     apps_by_area: HashMap<String, IndexSet<String>>,
+    /// UpdateProvider at root level
+    update_provider: Option<Updates>,
 }
 
 impl TopologyState {
@@ -63,6 +70,7 @@ impl TopologyState {
             apps_by_component: HashMap::new(),
             components_by_area: HashMap::new(),
             apps_by_area: HashMap::new(),
+            update_provider: None,
         }
     }
 
@@ -131,6 +139,34 @@ impl TopologyState {
         self.components_by_area.remove(id);
         self.apps_by_area.remove(id);
         Some(removed)
+    }
+
+    /// Adds an update provider at the topology root.
+    pub fn add_update_provider<
+        UpdateImpl: UpdateDescriptor + FromModel<UpdateModel> + 'static,
+        UpdateModel: 'static,
+        FeedbackImpl: ToModel<FeedbackModel> + 'static,
+        FeedbackModel: 'static,
+    >(
+        &mut self,
+        provider: impl UpdateProvider,
+    ) {
+        self.update_provider = Some(Updates::new::<
+            UpdateImpl,
+            UpdateModel,
+            FeedbackImpl,
+            FeedbackModel,
+        >(provider));
+    }
+
+    /// Gets the update provider at the topology root, if any.
+    #[must_use]
+    pub fn get_updates(&self) -> Option<Updates> {
+        self.update_provider.clone()
+    }
+
+    pub fn remove_update_provider(&mut self) {
+        self.update_provider = None;
     }
 
     /// Gets a component by ID.
@@ -322,6 +358,20 @@ impl TopologyWriteGuard<'_> {
         self.pending.push(TopologyEvent::Added(entity_ref));
     }
 
+    /// Adds an update provider to the topology root.
+    pub fn add_update_provider<
+        UpdateImpl: UpdateDescriptor + FromModel<UpdateModel> + 'static,
+        UpdateModel: 'static,
+        FeedbackImpl: ToModel<FeedbackModel> + 'static,
+        FeedbackModel: 'static,
+    >(
+        &mut self,
+        provider: impl UpdateProvider,
+    ) {
+        self.state
+            .add_update_provider::<UpdateImpl, UpdateModel, FeedbackImpl, FeedbackModel>(provider);
+    }
+
     /// Removes a component by ID. Missing IDs are silently skipped.
     pub fn remove_component(&mut self, id: &str) {
         if self.state.remove_component(id).is_some() {
@@ -344,6 +394,11 @@ impl TopologyWriteGuard<'_> {
             self.pending
                 .push(TopologyEvent::Removed(EntityRef::area(id)));
         }
+    }
+
+    /// Removes the update provider from the topology root.
+    pub fn remove_update_provider(&mut self) {
+        self.state.remove_update_provider();
     }
 }
 

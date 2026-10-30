@@ -8,6 +8,7 @@ mod data;
 mod entity;
 mod log;
 mod topology;
+mod updates;
 
 pub use bulkdata::{
     BulkData, BulkDataError, BulkDataMetadata, BulkDataProvider, CategoryFilter,
@@ -26,3 +27,7 @@ pub use log::{
     LogSeverity, LogStream,
 };
 pub use topology::{Topology, TopologyError, TopologyEvent, TopologyReadGuard, TopologyWriteGuard};
+pub use updates::{
+    FromModel, Phase, Status, ToModel, UpdateDescriptor, UpdateError, UpdateFeedback,
+    UpdateProvider, Updates,
+};

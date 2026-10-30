@@ -34,6 +34,7 @@ mod error;
 pub(crate) mod extract;
 mod log;
 mod stubs;
+mod updates;
 mod version;
 
 use axum::{
@@ -154,6 +155,7 @@ fn collections() -> Router<Topology> {
         .merge(data::routes())
         .merge(bulk_data::routes())
         .merge(log::routes())
+        .merge(updates::routes())
         .merge(stubs::clear_data())
         .merge(stubs::communication_logs())
         .merge(stubs::configurations())
@@ -165,7 +167,6 @@ fn collections() -> Router<Topology> {
         .merge(stubs::operations())
         .merge(stubs::scripts())
         .merge(stubs::triggers())
-        .merge(stubs::updates())
 }
 
 fn server() -> Router<Topology> {
