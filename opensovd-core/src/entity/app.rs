@@ -11,6 +11,7 @@ use crate::bulkdata::BulkDataProvider;
 use crate::data::DataProvider;
 use crate::entity::EntityRef;
 use crate::log::LogProvider;
+use crate::{FromModel, ToModel, UpdateDescriptor, UpdateProvider, Updates};
 
 pub struct App {
     entity_ref: EntityRef,
@@ -23,6 +24,7 @@ pub struct App {
     data_provider: Option<Box<dyn DataProvider>>,
     bulkdata_provider: Option<Arc<dyn BulkDataProvider>>,
     log_provider: Option<Arc<dyn LogProvider>>,
+    update_provider: Option<Updates>,
 }
 
 impl fmt::Debug for App {
@@ -41,6 +43,10 @@ impl fmt::Debug for App {
                 &self.bulkdata_provider.as_ref().map(|_| "..."),
             )
             .field("log_provider", &self.log_provider.as_ref().map(|_| "..."))
+            .field(
+                "update_provider",
+                &self.update_provider.as_ref().map(|_| "..."),
+            )
             .finish()
     }
 }
@@ -59,6 +65,7 @@ impl App {
             data_provider: None,
             bulkdata_provider: None,
             log_provider: None,
+            update_provider: None,
         }
     }
 
@@ -95,6 +102,25 @@ impl App {
     #[must_use]
     pub fn with_log_provider(mut self, provider: impl LogProvider) -> Self {
         self.log_provider = Some(Arc::new(provider));
+        self
+    }
+
+    #[must_use]
+    pub fn with_update_provider<
+        UpdateImpl: UpdateDescriptor + FromModel<UpdateModel> + 'static,
+        UpdateModel: 'static,
+        FeedbackImpl: ToModel<FeedbackModel> + 'static,
+        FeedbackModel: 'static,
+    >(
+        mut self,
+        provider: impl UpdateProvider,
+    ) -> Self {
+        self.update_provider = Some(Updates::new::<
+            UpdateImpl,
+            UpdateModel,
+            FeedbackImpl,
+            FeedbackModel,
+        >(provider));
         self
     }
 
@@ -159,6 +185,11 @@ impl App {
     #[must_use]
     pub fn log_provider(&self) -> Option<Arc<dyn LogProvider>> {
         self.log_provider.clone()
+    }
+
+    #[must_use]
+    pub fn updates(&self) -> Option<Updates> {
+        self.update_provider.clone()
     }
 
     #[must_use]

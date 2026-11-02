@@ -29,9 +29,11 @@ classDiagram
         +add_component(component)
         +add_app(app)
         +add_area(area)
+        +add_update_provider(update_provider)
         +remove_component(id)
         +remove_app(id)
         +remove_area(id)
+        +remove_update_provider()
     }
 
     class TopologyReadGuard {
@@ -47,6 +49,7 @@ classDiagram
         +component_of_app(app_id) Result~Option~Component~~
         +area_of_component(component_id) Result~Option~Area~~
         +area_of_app(app_id) Result~Option~Area~~
+        +get_updates() Option~Updates~
     }
 
     class EntityKind {
@@ -76,6 +79,9 @@ classDiagram
         -tags: Vec~String~
         -translation_id: Option~String~
         -data_provider: Option~Arc~DataProvider~~
+        -bulkdata_provider: Option~Arc~BulkDataProvider~~
+        -log_provider: Option~Arc~LogProvider~~
+        -update_provider: Option~Updates~
     }
 
     class App {
@@ -87,6 +93,9 @@ classDiagram
         -tags: Vec~String~
         -translation_id: Option~String~
         -data_provider: Option~Arc~DataProvider~~
+        -bulkdata_provider: Option~Arc~BulkDataProvider~~
+        -log_provider: Option~Arc~LogProvider~~
+        -update_provider: Option~Updates~
     }
 
     class Area {
@@ -95,7 +104,6 @@ classDiagram
         -metadata: HashMap~String, String~
         -tags: Vec~String~
         -translation_id: Option~String~
-        -data_provider: Option~Arc~DataProvider~~
     }
 
     class Auth {
@@ -296,3 +304,16 @@ A request is checked in this order:
 ### Version Route
 
 `GET /version-info` returns the SOVD specification version, base URI, and optional vendor-specific information. This route does not access the topology.
+
+### Updates
+
+The UpdateProvider trait is purposefully minimal and contains only 3 methods to
+trigger the *prepare* step, the *execute* step, or an *automated* update. The
+provider should not be concerned with managing the complete Update lifecycle,
+i.e. update creation, listing updates, deleting updates. This is done in the
+`Updates` abstraction that wraps the `UpdateProvider`. `Updates` keeps its state
+(updates available on the server)
+in the topology and is type agnostic with regard to the actual type that
+implements the `UpdateDescriptor` trait. Helper traits `FromModel` and `ToModel`
+are used to serialize and deserialize this concrete update type into the model
+structs used in the router.

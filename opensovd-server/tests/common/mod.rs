@@ -5,6 +5,7 @@
 
 use std::collections::HashMap;
 
+use http_body::Body;
 use http_body_util::BodyExt;
 use hyper::{Method, Request};
 use hyper_util::client::legacy::Client;
@@ -27,8 +28,7 @@ impl TestEntity {
     }
 }
 
-pub type HttpClient =
-    Client<hyper_util::client::legacy::connect::HttpConnector, http_body_util::Empty<bytes::Bytes>>;
+pub type HttpClient<B> = Client<hyper_util::client::legacy::connect::HttpConnector, B>;
 
 pub struct TestServer {
     pub addr: std::net::SocketAddr,
@@ -105,8 +105,12 @@ impl TestServerBuilder {
     }
 }
 
-pub fn client() -> HttpClient {
-    Client::builder(TokioExecutor::new()).build_http()
+pub fn client<B>() -> HttpClient<B>
+where
+    B: Body + Send,
+    B::Data: Send,
+{
+    Client::builder(TokioExecutor::new()).build_http::<B>()
 }
 
 /// A test server over the mock topology.

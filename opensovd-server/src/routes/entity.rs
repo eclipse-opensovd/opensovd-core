@@ -9,7 +9,7 @@ use axum::extract::{FromRequestParts, State};
 use axum::http::{Uri, request::Parts};
 use opensovd_core::{
     App, Area, BulkDataProvider, Component, DataProvider, EntityKind, EntityPath, InvalidPath,
-    LogProvider, Topology, TopologyReadGuard,
+    LogProvider, Topology, TopologyReadGuard, Updates,
 };
 use serde::Deserialize;
 
@@ -168,6 +168,14 @@ impl Entity {
         topo: &TopologyReadGuard<'_>,
     ) -> Result<Arc<dyn LogProvider>> {
         self.provider(topo, Component::log_provider, App::log_provider)
+    }
+
+    /// The updates provider of a component or app, see [`Entity::provider`].
+    pub(crate) fn updates_provider(&self, topo: &TopologyReadGuard<'_>) -> Result<Updates> {
+        if self.path.kind() == EntityKind::Server {
+            return topo.get_updates().ok_or_else(|| self.not_found());
+        }
+        self.provider(topo, Component::updates, App::updates)
     }
 
     /// The provider `component` or `app` returns for the entity:

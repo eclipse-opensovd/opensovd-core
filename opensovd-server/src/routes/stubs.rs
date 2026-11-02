@@ -118,13 +118,3 @@ pub(super) fn triggers() -> Router<Topology> {
         .route("/triggers", get(stub).post(stub))
         .route("/triggers/{trigger_id}", get(stub).put(stub).delete(stub))
 }
-
-pub(super) fn updates() -> Router<Topology> {
-    Router::new()
-        .route("/updates", get(stub).post(stub))
-        .route("/updates/{update_package_id}", get(stub).delete(stub))
-        .route("/updates/{update_package_id}/automated", put(stub))
-        .route("/updates/{update_package_id}/prepare", put(stub))
-        .route("/updates/{update_package_id}/execute", put(stub))
-        .route("/updates/{update_package_id}/status", get(stub))
-}

@@ -54,6 +54,7 @@ jsonschema = { workspace = true }
 libc = { workspace = true }
 opensovd-mocks = { workspace = true }
 opensovd-providers = { workspace = true }
+rstest = { workspace = true, features = ["async-timeout"] }
 schemars = { workspace = true, features = ["derive"] }
 tokio = { workspace = true, features = ["rt", "macros", "sync", "time"] }
 tower = { workspace = true, features = ["util"] }

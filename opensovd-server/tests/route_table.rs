@@ -82,8 +82,6 @@ async fn routes_not_served_yet_answer_resource_not_found() {
             Method::POST,
             "/sovd/v1/apps/engine_control/operations/calibrate/executions",
         ),
-        (Method::GET, "/sovd/v1/apps/engine_control/updates"),
-        (Method::GET, "/sovd/v1/updates"),
     ] {
         let (status, json) = send(&server, method.clone(), path).await;
         assert_eq!(status, 404, "{method} {path}");

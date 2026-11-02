@@ -1,0 +1,12 @@
+{
+  "id": "firmware-v1",
+  "update_name": "Firmware v1",
+  "size": 101,
+  "targets": [
+    {
+      "entity": "firmware",
+      "file": "bulk-data://updates/firmware-v1",
+      "file_signature": "sha256:..."
+    }
+  ]
+}
