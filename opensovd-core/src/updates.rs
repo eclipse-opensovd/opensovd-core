@@ -305,17 +305,18 @@ impl Updates {
         error: impl FnOnce(String) -> UpdateError,
     ) -> Result<(), UpdateError> {
         let mut inner = self.inner.write().await;
-        if let Some(active) = &inner.active
-            && let Some((_, rx)) = inner.feedback.get(active)
+        if let Some(active) = inner.active.clone()
+            && let Some((_, rx)) = inner.feedback.get(&active)
         {
-            if let Some(feedback) = rx.borrow().as_ref()
-                && matches!(feedback.status(), Status::Completed | Status::Failed(_))
-            {
-                // A terminal feedback status means the update no longer owns
-                // the active slot.
-            } else {
-                return Err(error(active.clone()));
+            let terminal = rx.borrow().as_ref().is_some_and(|feedback| {
+                matches!(feedback.status(), Status::Completed | Status::Failed(_))
+            });
+            if !terminal {
+                return Err(error(active));
             }
+        }
+        if let Some((tx, _)) = inner.feedback.get(update_package_id) {
+            drop(tx.send_replace(None));
         }
         inner.active = Some(update_package_id.to_string());
         Ok(())
@@ -458,6 +459,7 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     use super::*;
+    use tokio::sync::Notify;
 
     #[derive(Debug, Clone)]
     struct TestUpdate {
@@ -516,11 +518,14 @@ mod tests {
     enum TestProviderBehavior {
         FailFirstStart,
         ReportFailure,
+        FailThenDelayRetry,
     }
 
     struct TestProvider {
         behavior: TestProviderBehavior,
         starts: AtomicUsize,
+        retry_started: Arc<Notify>,
+        continue_retry: Arc<Notify>,
     }
 
     impl TestProvider {
@@ -530,11 +535,40 @@ mod tests {
                 return Err(UpdateError::ProviderError("start failed".to_string()));
             }
 
+            if matches!(self.behavior, TestProviderBehavior::FailThenDelayRetry) {
+                if start_number == 0 {
+                    return feedback
+                        .send(Some(Arc::new(TestFeedback {
+                            phase,
+                            status: Status::Failed(UpdateError::ProviderError(
+                                "update failed".to_string(),
+                            )),
+                        })))
+                        .map_err(|_| {
+                            UpdateError::ProviderError("feedback receiver closed".to_string())
+                        });
+                }
+
+                let feedback = feedback.clone();
+                let retry_started = Arc::clone(&self.retry_started);
+                let continue_retry = Arc::clone(&self.continue_retry);
+                tokio::spawn(async move {
+                    retry_started.notify_one();
+                    continue_retry.notified().await;
+                    let _ = feedback.send(Some(Arc::new(TestFeedback {
+                        phase,
+                        status: Status::InProgress,
+                    })));
+                });
+                return Ok(());
+            }
+
             let status = match self.behavior {
                 TestProviderBehavior::FailFirstStart => Status::Completed,
                 TestProviderBehavior::ReportFailure => {
                     Status::Failed(UpdateError::ProviderError("update failed".to_string()))
                 }
+                TestProviderBehavior::FailThenDelayRetry => Status::Pending,
             };
             feedback
                 .send(Some(Arc::new(TestFeedback { phase, status })))
@@ -569,10 +603,17 @@ mod tests {
     }
 
     async fn updates_with(behavior: TestProviderBehavior) -> Updates {
-        let updates = Updates::new::<TestUpdate, TestUpdate, TestFeedback, _>(TestProvider {
+        updates_with_provider(TestProvider {
             behavior,
             starts: AtomicUsize::new(0),
-        });
+            retry_started: Arc::new(Notify::new()),
+            continue_retry: Arc::new(Notify::new()),
+        })
+        .await
+    }
+
+    async fn updates_with_provider(provider: TestProvider) -> Updates {
+        let updates = Updates::new::<TestUpdate, TestUpdate, TestFeedback, _>(provider);
         assert!(
             updates
                 .push(&TestUpdate {
@@ -592,6 +633,19 @@ mod tests {
         updates
     }
 
+    async fn updates_with_delayed_retry() -> (Updates, Arc<Notify>, Arc<Notify>) {
+        let retry_started = Arc::new(Notify::new());
+        let continue_retry = Arc::new(Notify::new());
+        let updates = updates_with_provider(TestProvider {
+            behavior: TestProviderBehavior::FailThenDelayRetry,
+            starts: AtomicUsize::new(0),
+            retry_started: Arc::clone(&retry_started),
+            continue_retry: Arc::clone(&continue_retry),
+        })
+        .await;
+        (updates, retry_started, continue_retry)
+    }
+
     #[tokio::test]
     async fn releases_active_slot_when_provider_fails_to_start() {
         let updates = updates_with(TestProviderBehavior::FailFirstStart).await;
@@ -609,5 +663,21 @@ mod tests {
 
         assert!(updates.execute("first").await.is_ok());
         assert!(updates.execute("second").await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn retrying_failed_update_keeps_competing_updates_blocked() {
+        let (updates, retry_started, continue_retry) = updates_with_delayed_retry().await;
+
+        assert!(updates.execute("first").await.is_ok());
+        assert!(updates.execute("first").await.is_ok());
+        retry_started.notified().await;
+
+        assert!(matches!(
+            updates.execute("second").await,
+            Err(UpdateError::UpdateExecutionInProgress(id)) if id == "first"
+        ));
+
+        continue_retry.notify_one();
     }
 }
