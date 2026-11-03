@@ -457,6 +457,7 @@ pub trait UpdateProvider: Send + Sync + 'static {
 #[cfg(test)]
 mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
+    
     use tokio::sync::Notify;
 
     use super::*;
