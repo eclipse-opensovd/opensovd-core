@@ -214,20 +214,12 @@ impl Updates {
     /// Returns an error if the update cannot be found, if the update provider
     /// is not configured, or if it conflicts another active update.
     pub async fn execute(&self, update_package_id: &str) -> Result<(), UpdateError> {
-        let update = self
-            .find(update_package_id)
-            .await
-            .ok_or_else(|| UpdateError::UpdateNotFound(update_package_id.to_string()))?;
-
-        let feedback = self.feedback_sender(update_package_id).await;
-        self.check_and_set_active(update_package_id, UpdateError::UpdateExecutionInProgress)
-            .await?;
-
-        self.provider()
-            .await
-            .ok_or(UpdateError::UpdateProviderNotConfigured)?
-            .execute(&*update, feedback)?;
-        Ok(())
+        self.start_update(
+            update_package_id,
+            UpdateError::UpdateExecutionInProgress,
+            |provider, update, feedback| provider.execute(update, feedback),
+        )
+        .await
     }
 
     /// Prepares the update for the given update package ID.
@@ -236,20 +228,12 @@ impl Updates {
     /// Returns an error if the update cannot be found or if the update provider
     /// is not configured.
     pub async fn prepare(&self, update_package_id: &str) -> Result<(), UpdateError> {
-        let update = self
-            .find(update_package_id)
-            .await
-            .ok_or_else(|| UpdateError::UpdateNotFound(update_package_id.to_string()))?;
-
-        let feedback = self.feedback_sender(update_package_id).await;
-        self.check_and_set_active(update_package_id, UpdateError::UpdatePreparationInProgress)
-            .await?;
-
-        self.provider()
-            .await
-            .ok_or(UpdateError::UpdateProviderNotConfigured)?
-            .prepare(&*update, feedback)?;
-        Ok(())
+        self.start_update(
+            update_package_id,
+            UpdateError::UpdatePreparationInProgress,
+            |provider, update, feedback| provider.prepare(update, feedback),
+        )
+        .await
     }
 
     /// Performs the automated update for the given update package ID.
@@ -268,15 +252,49 @@ impl Updates {
             return Err(UpdateError::AutomatedUpdateNotSupported);
         }
 
+        self.start_update(
+            update_package_id,
+            UpdateError::UpdateProcessInProgress,
+            |provider, update, feedback| provider.automated(update, feedback),
+        )
+        .await
+    }
+
+    async fn start_update(
+        &self,
+        update_package_id: &str,
+        conflict: impl FnOnce(String) -> UpdateError,
+        start: impl FnOnce(
+            &dyn UpdateProvider,
+            &dyn UpdateDescriptor,
+            FeedbackSender,
+        ) -> Result<(), UpdateError>,
+    ) -> Result<(), UpdateError> {
+        let update = self
+            .find(update_package_id)
+            .await
+            .ok_or_else(|| UpdateError::UpdateNotFound(update_package_id.to_string()))?;
+        let provider = self
+            .provider()
+            .await
+            .ok_or(UpdateError::UpdateProviderNotConfigured)?;
         let feedback = self.feedback_sender(update_package_id).await;
-        self.check_and_set_active(update_package_id, UpdateError::UpdateProcessInProgress)
+        self.check_and_set_active(update_package_id, conflict)
             .await?;
 
-        self.provider()
-            .await
-            .ok_or(UpdateError::UpdateProviderNotConfigured)?
-            .automated(&*update, feedback)?;
+        if let Err(error) = start(provider.as_ref(), update.as_ref(), feedback) {
+            self.release_active(update_package_id).await;
+            return Err(error);
+        }
+
         Ok(())
+    }
+
+    async fn release_active(&self, update_package_id: &str) {
+        let mut inner = self.inner.write().await;
+        if inner.active.as_deref() == Some(update_package_id) {
+            inner.active = None;
+        }
     }
 
     /// Checks if an update is currently active and sets the given update as active if not.
@@ -291,11 +309,10 @@ impl Updates {
             && let Some((_, rx)) = inner.feedback.get(active)
         {
             if let Some(feedback) = rx.borrow().as_ref()
-                && feedback.status() == Status::Completed
+                && matches!(feedback.status(), Status::Completed | Status::Failed(_))
             {
-                // if the feedback status is completed, it means the update is
-                // no longer in progress, so we can continue and set a new
-                // active update.
+                // A terminal feedback status means the update no longer owns
+                // the active slot.
             } else {
                 return Err(error(active.clone()));
             }
@@ -434,4 +451,162 @@ pub trait UpdateProvider: Send + Sync + 'static {
         _update: &dyn UpdateDescriptor,
         _feedback: watch::Sender<Option<Arc<dyn UpdateFeedback>>>,
     ) -> Result<(), UpdateError>;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    #[derive(Debug, Clone)]
+    struct TestUpdate {
+        id: String,
+    }
+
+    impl FromModel<TestUpdate> for TestUpdate {
+        fn from_model(update: &TestUpdate) -> Self {
+            update.clone()
+        }
+    }
+
+    impl UpdateDescriptor for TestUpdate {
+        fn as_any(&self) -> &dyn Any {
+            self
+        }
+
+        fn id(&self) -> String {
+            self.id.clone()
+        }
+
+        fn update_name(&self) -> String {
+            self.id.clone()
+        }
+
+        fn size(&self) -> u64 {
+            0
+        }
+    }
+
+    #[derive(Debug)]
+    struct TestFeedback {
+        phase: Phase,
+        status: Status,
+    }
+
+    impl UpdateFeedback for TestFeedback {
+        fn as_any(&self) -> &dyn Any {
+            self
+        }
+
+        fn phase(&self) -> Phase {
+            self.phase.clone()
+        }
+
+        fn status(&self) -> Status {
+            self.status.clone()
+        }
+    }
+
+    impl ToModel<()> for TestFeedback {
+        fn to_model(&self) {}
+    }
+
+    #[derive(Clone, Copy)]
+    enum TestProviderBehavior {
+        FailFirstStart,
+        ReportFailure,
+    }
+
+    struct TestProvider {
+        behavior: TestProviderBehavior,
+        starts: AtomicUsize,
+    }
+
+    impl TestProvider {
+        fn start(&self, phase: Phase, feedback: &FeedbackSender) -> Result<(), UpdateError> {
+            let start_number = self.starts.fetch_add(1, Ordering::SeqCst);
+            if matches!(self.behavior, TestProviderBehavior::FailFirstStart) && start_number == 0 {
+                return Err(UpdateError::ProviderError("start failed".to_string()));
+            }
+
+            let status = match self.behavior {
+                TestProviderBehavior::FailFirstStart => Status::Completed,
+                TestProviderBehavior::ReportFailure => {
+                    Status::Failed(UpdateError::ProviderError("update failed".to_string()))
+                }
+            };
+            feedback
+                .send(Some(Arc::new(TestFeedback { phase, status })))
+                .map_err(|_| UpdateError::ProviderError("feedback receiver closed".to_string()))
+        }
+    }
+
+    impl UpdateProvider for TestProvider {
+        fn prepare(
+            &self,
+            _update: &dyn UpdateDescriptor,
+            feedback: FeedbackSender,
+        ) -> Result<(), UpdateError> {
+            self.start(Phase::Prepare, &feedback)
+        }
+
+        fn execute(
+            &self,
+            _update: &dyn UpdateDescriptor,
+            feedback: FeedbackSender,
+        ) -> Result<(), UpdateError> {
+            self.start(Phase::Execute, &feedback)
+        }
+
+        fn automated(
+            &self,
+            _update: &dyn UpdateDescriptor,
+            feedback: FeedbackSender,
+        ) -> Result<(), UpdateError> {
+            self.start(Phase::Prepare, &feedback)
+        }
+    }
+
+    async fn updates_with(behavior: TestProviderBehavior) -> Updates {
+        let updates = Updates::new::<TestUpdate, TestUpdate, TestFeedback, _>(TestProvider {
+            behavior,
+            starts: AtomicUsize::new(0),
+        });
+        assert!(
+            updates
+                .push(&TestUpdate {
+                    id: "first".to_string(),
+                })
+                .await
+                .is_ok()
+        );
+        assert!(
+            updates
+                .push(&TestUpdate {
+                    id: "second".to_string(),
+                })
+                .await
+                .is_ok()
+        );
+        updates
+    }
+
+    #[tokio::test]
+    async fn releases_active_slot_when_provider_fails_to_start() {
+        let updates = updates_with(TestProviderBehavior::FailFirstStart).await;
+
+        assert!(matches!(
+            updates.execute("first").await,
+            Err(UpdateError::ProviderError(_))
+        ));
+        assert!(updates.execute("second").await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn releases_active_slot_after_failed_feedback() {
+        let updates = updates_with(TestProviderBehavior::ReportFailure).await;
+
+        assert!(updates.execute("first").await.is_ok());
+        assert!(updates.execute("second").await.is_ok());
+    }
 }
