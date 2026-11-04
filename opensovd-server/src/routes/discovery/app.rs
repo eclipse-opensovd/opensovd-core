@@ -82,6 +82,8 @@ pub(crate) async fn app_capabilities(
 
     let data = app.data_provider().map(|_| format!("{own}/data").into());
 
+    let updates = app.updates().map(|_| format!("{own}/updates").into());
+
     let bulk_data = app
         .bulkdata_provider()
         .map(|_| format!("{own}/bulk-data").into());
@@ -96,6 +98,7 @@ pub(crate) async fn app_capabilities(
         located_on,
         belongs_to,
         data,
+        updates,
         bulk_data,
         logs,
         schema: query.include_schema.then(EntityCapabilities::schema),
@@ -109,6 +112,29 @@ mod tests {
     use http_body_util::BodyExt;
     use opensovd_mocks::create_mock_topology;
     use tower::ServiceExt;
+
+    /// Each link of the capabilities of `path` the server serves.
+    async fn assert_links_are_served(path: &str, links: &[&str]) {
+        let app = crate::routes::test_router(create_mock_topology().await);
+        let request = Request::builder().uri(path).body(Body::empty()).unwrap();
+        let response = app.clone().oneshot(request).await.unwrap();
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+        for link in links {
+            let href = json[link].as_str().expect(link);
+            let target = href.strip_prefix("http://localhost").unwrap_or(href);
+            let request = Request::builder().uri(target).body(Body::empty()).unwrap();
+            let response = app.clone().oneshot(request).await.unwrap();
+            assert_eq!(response.status(), 200, "{link}: {href}");
+        }
+    }
+
+    #[tokio::test]
+    async fn the_capabilities_list_what_is_served() {
+        assert_links_are_served("/sovd/v1/apps/ota_manager", &["updates"]).await;
+        assert_links_are_served("/sovd/v1", &["updates"]).await;
+    }
 
     #[tokio::test]
     async fn test_app_capabilities_engine_control() {
