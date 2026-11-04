@@ -64,6 +64,17 @@ type Model2Update =
 type Feedback2Model =
     Arc<dyn Fn(&dyn UpdateFeedback) -> Result<Arc<dyn Any>, UpdateError> + Send + Sync>;
 
+struct ActiveUpdate {
+    id: String,
+    attempt: Arc<()>,
+    phase: Phase,
+}
+
+pub enum UpdateFeedbackState<Model> {
+    Pending(Phase),
+    Feedback(Arc<Model>),
+}
+
 struct UpdatesInner {
     provider: Option<Arc<dyn UpdateProvider>>,
     available: Vec<Arc<dyn UpdateDescriptor>>,
@@ -72,7 +83,7 @@ struct UpdatesInner {
     // before an update is executed, it is set to the ID of that update.
     // check_and_set_active is used to check if the active update is still in
     // progress, and to set a new active update if none is active.
-    active: Option<String>,
+    active: Option<ActiveUpdate>,
     // model2update stores the method UpdateModel -> UpdateImpl from the
     // UpdateDescriptor trait as a workaround since the actual UpdateImpl type
     // implementing it is erased from Updates.
@@ -140,11 +151,30 @@ impl Updates {
         Ok(id)
     }
 
-    pub async fn remove(&self, update_package_id: &str) {
+    #[must_use]
+    pub async fn remove(&self, update_package_id: &str) -> bool {
         let mut inner = self.inner.write().await;
+        if inner
+            .active
+            .as_ref()
+            .is_some_and(|active| active.id == update_package_id)
+        {
+            let terminal = inner
+                .feedback
+                .get(update_package_id)
+                .is_some_and(|(_, rx)| {
+                    rx.borrow().as_ref().is_some_and(|feedback| {
+                        matches!(feedback.status(), Status::Completed | Status::Failed(_))
+                    })
+                });
+            if !terminal {
+                return false;
+            }
+            inner.active = None;
+        }
         inner.available.retain(|u| u.id() != update_package_id);
-        // also remove the feedback channel if it exists
         inner.feedback.remove(update_package_id);
+        true
     }
 
     #[must_use]
@@ -161,22 +191,6 @@ impl Updates {
             .iter()
             .find(|u| u.id() == update_package_id)
             .cloned()
-    }
-
-    async fn feedback_sender(
-        &self,
-        update_package_id: &str,
-    ) -> watch::Sender<Option<Arc<dyn UpdateFeedback>>> {
-        let mut inner = self.inner.write().await;
-        if let Some((tx, _rx)) = inner.feedback.get(update_package_id) {
-            tx.clone()
-        } else {
-            let (tx, rx) = watch::channel(None);
-            inner
-                .feedback
-                .insert(update_package_id.to_string(), (tx.clone(), rx));
-            tx
-        }
     }
 
     #[must_use]
@@ -204,6 +218,26 @@ impl Updates {
     }
 
     #[must_use]
+    pub async fn feedback_state<FeedbackModel: Any + Clone>(
+        &self,
+        update_package_id: &str,
+    ) -> Option<UpdateFeedbackState<FeedbackModel>> {
+        let inner = self.inner.read().await;
+        if let Some((_, receiver)) = inner.feedback.get(update_package_id)
+            && let Some(feedback) = receiver.borrow().as_ref()
+            && let Ok(model) = (inner.feedback2model)(feedback.as_ref())
+            && let Some(model) = model.downcast_ref::<FeedbackModel>()
+        {
+            return Some(UpdateFeedbackState::Feedback(Arc::new(model.clone())));
+        }
+        inner
+            .active
+            .as_ref()
+            .filter(|active| active.id == update_package_id)
+            .map(|active| UpdateFeedbackState::Pending(active.phase.clone()))
+    }
+
+    #[must_use]
     async fn provider(&self) -> Option<Arc<dyn UpdateProvider>> {
         self.inner.read().await.provider.clone()
     }
@@ -216,6 +250,7 @@ impl Updates {
     pub async fn execute(&self, update_package_id: &str) -> Result<(), UpdateError> {
         self.start_update(
             update_package_id,
+            Phase::Execute,
             UpdateError::UpdateExecutionInProgress,
             |provider, update, feedback| provider.execute(update, feedback),
         )
@@ -230,6 +265,7 @@ impl Updates {
     pub async fn prepare(&self, update_package_id: &str) -> Result<(), UpdateError> {
         self.start_update(
             update_package_id,
+            Phase::Prepare,
             UpdateError::UpdatePreparationInProgress,
             |provider, update, feedback| provider.prepare(update, feedback),
         )
@@ -254,6 +290,7 @@ impl Updates {
 
         self.start_update(
             update_package_id,
+            Phase::Prepare,
             UpdateError::UpdateProcessInProgress,
             |provider, update, feedback| provider.automated(update, feedback),
         )
@@ -263,6 +300,7 @@ impl Updates {
     async fn start_update(
         &self,
         update_package_id: &str,
+        phase: Phase,
         conflict: impl FnOnce(String) -> UpdateError,
         start: impl FnOnce(
             &dyn UpdateProvider,
@@ -278,21 +316,25 @@ impl Updates {
             .provider()
             .await
             .ok_or(UpdateError::UpdateProviderNotConfigured)?;
-        let feedback = self.feedback_sender(update_package_id).await;
-        self.check_and_set_active(update_package_id, conflict)
+        let (attempt, feedback) = self
+            .check_and_set_active(update_package_id, phase, conflict)
             .await?;
 
         if let Err(error) = start(provider.as_ref(), update.as_ref(), feedback) {
-            self.release_active(update_package_id).await;
+            self.release_active(&attempt).await;
             return Err(error);
         }
 
         Ok(())
     }
 
-    async fn release_active(&self, update_package_id: &str) {
+    async fn release_active(&self, attempt: &Arc<()>) {
         let mut inner = self.inner.write().await;
-        if inner.active.as_deref() == Some(update_package_id) {
+        if inner
+            .active
+            .as_ref()
+            .is_some_and(|active| Arc::ptr_eq(&active.attempt, attempt))
+        {
             inner.active = None;
         }
     }
@@ -302,24 +344,38 @@ impl Updates {
     async fn check_and_set_active(
         &self,
         update_package_id: &str,
+        phase: Phase,
         error: impl FnOnce(String) -> UpdateError,
-    ) -> Result<(), UpdateError> {
+    ) -> Result<(Arc<()>, FeedbackSender), UpdateError> {
         let mut inner = self.inner.write().await;
-        if let Some(active) = inner.active.clone()
-            && let Some((_, rx)) = inner.feedback.get(&active)
+        if !inner
+            .available
+            .iter()
+            .any(|update| update.id() == update_package_id)
         {
-            let terminal = rx.borrow().as_ref().is_some_and(|feedback| {
-                matches!(feedback.status(), Status::Completed | Status::Failed(_))
+            return Err(UpdateError::UpdateNotFound(update_package_id.to_string()));
+        }
+        if let Some(active) = &inner.active {
+            let terminal = inner.feedback.get(&active.id).is_some_and(|(_, rx)| {
+                rx.borrow().as_ref().is_some_and(|feedback| {
+                    matches!(feedback.status(), Status::Completed | Status::Failed(_))
+                })
             });
             if !terminal {
-                return Err(error(active));
+                return Err(error(active.id.clone()));
             }
         }
-        if let Some((tx, _)) = inner.feedback.get(update_package_id) {
-            drop(tx.send_replace(None));
-        }
-        inner.active = Some(update_package_id.to_string());
-        Ok(())
+        let (feedback, receiver) = watch::channel(None);
+        inner
+            .feedback
+            .insert(update_package_id.to_string(), (feedback.clone(), receiver));
+        let attempt = Arc::new(());
+        inner.active = Some(ActiveUpdate {
+            id: update_package_id.to_string(),
+            attempt: Arc::clone(&attempt),
+            phase,
+        });
+        Ok((attempt, feedback))
     }
 }
 
@@ -456,7 +512,10 @@ pub trait UpdateProvider: Send + Sync + 'static {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::{
+        Mutex,
+        atomic::{AtomicUsize, Ordering},
+    };
 
     use tokio::sync::Notify;
 
@@ -613,7 +672,7 @@ mod tests {
         .await
     }
 
-    async fn updates_with_provider(provider: TestProvider) -> Updates {
+    async fn updates_with_provider(provider: impl UpdateProvider) -> Updates {
         let updates = Updates::new::<TestUpdate, TestUpdate, TestFeedback, _>(provider);
         assert!(
             updates
@@ -675,10 +734,193 @@ mod tests {
         retry_started.notified().await;
 
         assert!(matches!(
+            updates.feedback_state::<()>("first").await,
+            Some(UpdateFeedbackState::Pending(Phase::Execute))
+        ));
+
+        assert!(matches!(
             updates.execute("second").await,
             Err(UpdateError::UpdateExecutionInProgress(id)) if id == "first"
         ));
 
+        assert!(!updates.remove("first").await);
+        assert!(updates.find("first").await.is_some());
+
         continue_retry.notify_one();
+    }
+
+    struct StaleFeedbackProvider {
+        starts: AtomicUsize,
+        old_sender: Arc<Mutex<Option<FeedbackSender>>>,
+    }
+
+    impl UpdateProvider for StaleFeedbackProvider {
+        fn prepare(
+            &self,
+            update: &dyn UpdateDescriptor,
+            feedback: FeedbackSender,
+        ) -> Result<(), UpdateError> {
+            self.execute(update, feedback)
+        }
+
+        fn execute(
+            &self,
+            _update: &dyn UpdateDescriptor,
+            feedback: FeedbackSender,
+        ) -> Result<(), UpdateError> {
+            if self.starts.fetch_add(1, Ordering::SeqCst) == 0 {
+                *self
+                    .old_sender
+                    .lock()
+                    .map_err(|error| UpdateError::ProviderError(error.to_string()))? =
+                    Some(feedback.clone());
+                feedback
+                    .send(Some(Arc::new(TestFeedback {
+                        phase: Phase::Execute,
+                        status: Status::Failed(UpdateError::ProviderError(
+                            "first failed".to_string(),
+                        )),
+                    })))
+                    .map_err(|_| {
+                        UpdateError::ProviderError("feedback receiver closed".to_string())
+                    })?;
+            }
+            Ok(())
+        }
+
+        fn automated(
+            &self,
+            update: &dyn UpdateDescriptor,
+            feedback: FeedbackSender,
+        ) -> Result<(), UpdateError> {
+            self.execute(update, feedback)
+        }
+    }
+
+    #[tokio::test]
+    async fn stale_feedback_cannot_release_retry() {
+        let old_sender = Arc::new(Mutex::new(None));
+        let updates = updates_with_provider(StaleFeedbackProvider {
+            starts: AtomicUsize::new(0),
+            old_sender: Arc::clone(&old_sender),
+        })
+        .await;
+
+        assert!(updates.execute("first").await.is_ok());
+        assert!(updates.execute("first").await.is_ok());
+        let old_sender = old_sender.lock().ok().and_then(|mut sender| sender.take());
+        assert!(old_sender.is_some_and(|sender| {
+            sender
+                .send(Some(Arc::new(TestFeedback {
+                    phase: Phase::Execute,
+                    status: Status::Completed,
+                })))
+                .is_err()
+        }));
+        assert!(matches!(
+            updates.feedback_state::<()>("first").await,
+            Some(UpdateFeedbackState::Pending(Phase::Execute))
+        ));
+        assert!(matches!(
+            updates.execute("second").await,
+            Err(UpdateError::UpdateExecutionInProgress(id)) if id == "first"
+        ));
+    }
+
+    #[tokio::test]
+    async fn cannot_reserve_removed_update() {
+        let updates = updates_with(TestProviderBehavior::ReportFailure).await;
+
+        assert!(updates.remove("first").await);
+        assert!(matches!(
+            updates.check_and_set_active("first", Phase::Prepare, UpdateError::UpdatePreparationInProgress).await,
+            Err(UpdateError::UpdateNotFound(id)) if id == "first"
+        ));
+    }
+
+    struct RetryRaceProvider {
+        starts: AtomicUsize,
+        first_started: Arc<Notify>,
+        finish_first: Mutex<std::sync::mpsc::Receiver<()>>,
+    }
+
+    impl UpdateProvider for RetryRaceProvider {
+        fn prepare(
+            &self,
+            update: &dyn UpdateDescriptor,
+            feedback: FeedbackSender,
+        ) -> Result<(), UpdateError> {
+            self.execute(update, feedback)
+        }
+
+        fn execute(
+            &self,
+            _update: &dyn UpdateDescriptor,
+            feedback: FeedbackSender,
+        ) -> Result<(), UpdateError> {
+            if self.starts.fetch_add(1, Ordering::SeqCst) == 0 {
+                feedback
+                    .send(Some(Arc::new(TestFeedback {
+                        phase: Phase::Execute,
+                        status: Status::Failed(UpdateError::ProviderError(
+                            "first failed".to_string(),
+                        )),
+                    })))
+                    .map_err(|_| {
+                        UpdateError::ProviderError("feedback receiver closed".to_string())
+                    })?;
+                self.first_started.notify_one();
+                self.finish_first
+                    .lock()
+                    .map_err(|error| UpdateError::ProviderError(error.to_string()))?
+                    .recv()
+                    .map_err(|error| UpdateError::ProviderError(error.to_string()))?;
+                return Err(UpdateError::ProviderError("first failed".to_string()));
+            }
+            Ok(())
+        }
+
+        fn automated(
+            &self,
+            update: &dyn UpdateDescriptor,
+            feedback: FeedbackSender,
+        ) -> Result<(), UpdateError> {
+            self.execute(update, feedback)
+        }
+    }
+
+    #[tokio::test]
+    async fn old_attempt_cleanup_does_not_release_retry() {
+        let first_started = Arc::new(Notify::new());
+        let (finish_first, first_can_finish) = std::sync::mpsc::channel();
+        let retry_updates = updates_with_provider(RetryRaceProvider {
+            starts: AtomicUsize::new(0),
+            first_started: Arc::clone(&first_started),
+            finish_first: Mutex::new(first_can_finish),
+        })
+        .await;
+
+        let first_updates = retry_updates.clone();
+        let first_call = tokio::task::spawn_blocking(move || {
+            tokio::runtime::Builder::new_current_thread()
+                .build()
+                .map(|runtime| runtime.block_on(first_updates.execute("first")))
+        });
+        first_started.notified().await;
+
+        assert!(retry_updates.execute("first").await.is_ok());
+        assert!(matches!(
+            retry_updates.feedback_state::<()>("first").await,
+            Some(UpdateFeedbackState::Pending(Phase::Execute))
+        ));
+        assert!(finish_first.send(()).is_ok());
+        assert!(matches!(
+            first_call.await,
+            Ok(Ok(Err(UpdateError::ProviderError(_))))
+        ));
+        assert!(matches!(
+            retry_updates.execute("second").await,
+            Err(UpdateError::UpdateExecutionInProgress(id)) if id == "first"
+        ));
     }
 }

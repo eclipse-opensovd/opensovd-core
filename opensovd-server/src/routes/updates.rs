@@ -1,8 +1,6 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 Contributors to the Eclipse Foundation
 // SPDX-License-Identifier: Apache-2.0
 
-use std::{ops::Deref, sync::Arc};
-
 use axum::{
     Router,
     extract::State,
@@ -11,7 +9,7 @@ use axum::{
     routing::{get, put},
 };
 use http::{HeaderValue, request::Parts};
-use opensovd_core::{Topology, UpdateError};
+use opensovd_core::{Phase, Topology, UpdateError, UpdateFeedbackState};
 use opensovd_models::updates::{
     AvailableUpdatesResponse, Status, UpdateDetail, UpdateDetailQuery, UpdateDetailResponse,
     UpdateOrigins, UpdatePackageId, UpdatePackagePath, UpdateQuery, UpdateStatus,
@@ -169,16 +167,10 @@ async fn delete_update_package(
 ) -> Result<StatusCode> {
     let topo = topology.read().await;
     let updates = entity.updates_provider(&topo)?;
-    // if the update's status is InProgress, we cannot delete it
-    if updates
-        .feedback(&update_package_id)
-        .await
-        .is_some_and(|feedback: Arc<UpdateStatus>| feedback.status == Status::InProgress)
-    {
+    if !updates.remove(&update_package_id).await {
         return Ok(StatusCode::METHOD_NOT_ALLOWED);
     }
 
-    updates.remove(&update_package_id).await;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -190,11 +182,26 @@ async fn update_package_status(
     let topo = topology.read().await;
     let updates = entity.updates_provider(&topo)?;
     updates
-        .feedback(&update_package_id)
+        .feedback_state::<UpdateStatus>(&update_package_id)
         .await
-        .map(|feedback: Arc<UpdateStatus>| {
+        .map(|feedback| {
+            let data = match feedback {
+                UpdateFeedbackState::Pending(phase) => UpdateStatus {
+                    phase: match phase {
+                        Phase::Prepare => opensovd_models::updates::Phase::Prepare,
+                        Phase::Execute => opensovd_models::updates::Phase::Execute,
+                    },
+                    status: Status::Pending,
+                    progress: None,
+                    subprogress: None,
+                    step: None,
+                    step_translation_id: None,
+                    error: None,
+                },
+                UpdateFeedbackState::Feedback(feedback) => feedback.as_ref().clone(),
+            };
             Json(UpdateStatusResponse {
-                data: feedback.deref().clone(),
+                data,
                 schema: Some(UpdateStatus::schema()),
             })
         })
