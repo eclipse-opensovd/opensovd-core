@@ -316,25 +316,41 @@ impl Updates {
             .provider()
             .await
             .ok_or(UpdateError::UpdateProviderNotConfigured)?;
-        let (attempt, feedback) = self
+        let (attempt, feedback, previous_feedback) = self
             .check_and_set_active(update_package_id, phase, conflict)
             .await?;
 
         if let Err(error) = start(provider.as_ref(), update.as_ref(), feedback) {
-            self.release_active(&attempt).await;
+            self.release_active(&attempt, previous_feedback).await;
             return Err(error);
         }
 
         Ok(())
     }
 
-    async fn release_active(&self, attempt: &Arc<()>) {
+    async fn release_active(
+        &self,
+        attempt: &Arc<()>,
+        previous_feedback: Option<Arc<dyn UpdateFeedback>>,
+    ) {
         let mut inner = self.inner.write().await;
         if inner
             .active
             .as_ref()
             .is_some_and(|active| Arc::ptr_eq(&active.attempt, attempt))
         {
+            if let Some(previous_feedback) = previous_feedback {
+                let id = inner.active.as_ref().map(|active| active.id.clone());
+                if let Some(id) = id
+                    && inner
+                        .feedback
+                        .get(&id)
+                        .is_some_and(|(_, receiver)| receiver.borrow().is_none())
+                {
+                    let (sender, receiver) = watch::channel(Some(previous_feedback));
+                    inner.feedback.insert(id, (sender, receiver));
+                }
+            }
             inner.active = None;
         }
     }
@@ -346,7 +362,7 @@ impl Updates {
         update_package_id: &str,
         phase: Phase,
         error: impl FnOnce(String) -> UpdateError,
-    ) -> Result<(Arc<()>, FeedbackSender), UpdateError> {
+    ) -> Result<(Arc<()>, FeedbackSender, Option<Arc<dyn UpdateFeedback>>), UpdateError> {
         let mut inner = self.inner.write().await;
         if !inner
             .available
@@ -365,6 +381,15 @@ impl Updates {
                 return Err(error(active.id.clone()));
             }
         }
+        let previous_feedback = inner
+            .feedback
+            .get(update_package_id)
+            .and_then(|(_, receiver)| {
+                receiver.borrow().as_ref().and_then(|feedback| {
+                    matches!(feedback.status(), Status::Completed | Status::Failed(_))
+                        .then(|| Arc::clone(feedback))
+                })
+            });
         let (feedback, receiver) = watch::channel(None);
         inner
             .feedback
@@ -375,7 +400,7 @@ impl Updates {
             attempt: Arc::clone(&attempt),
             phase,
         });
-        Ok((attempt, feedback))
+        Ok((attempt, feedback, previous_feedback))
     }
 }
 
@@ -579,6 +604,7 @@ mod tests {
         FailFirstStart,
         ReportFailure,
         FailThenDelayRetry,
+        FailSecondStart { completed: bool },
     }
 
     struct TestProvider {
@@ -593,6 +619,11 @@ mod tests {
             let start_number = self.starts.fetch_add(1, Ordering::SeqCst);
             if matches!(self.behavior, TestProviderBehavior::FailFirstStart) && start_number == 0 {
                 return Err(UpdateError::ProviderError("start failed".to_string()));
+            }
+            if matches!(self.behavior, TestProviderBehavior::FailSecondStart { .. })
+                && start_number == 1
+            {
+                return Err(UpdateError::ProviderError("retry failed".to_string()));
             }
 
             if matches!(self.behavior, TestProviderBehavior::FailThenDelayRetry) {
@@ -624,11 +655,15 @@ mod tests {
             }
 
             let status = match self.behavior {
-                TestProviderBehavior::FailFirstStart => Status::Completed,
+                TestProviderBehavior::FailFirstStart
+                | TestProviderBehavior::FailSecondStart { completed: true } => Status::Completed,
                 TestProviderBehavior::ReportFailure => {
                     Status::Failed(UpdateError::ProviderError("update failed".to_string()))
                 }
                 TestProviderBehavior::FailThenDelayRetry => Status::Pending,
+                TestProviderBehavior::FailSecondStart { completed: false } => {
+                    Status::Failed(UpdateError::ProviderError("first failed".to_string()))
+                }
             };
             feedback
                 .send(Some(Arc::new(TestFeedback { phase, status })))
@@ -715,6 +750,36 @@ mod tests {
             Err(UpdateError::ProviderError(_))
         ));
         assert!(updates.execute("second").await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn failed_retry_preserves_previous_terminal_feedback() {
+        for completed in [false, true] {
+            let updates = updates_with(TestProviderBehavior::FailSecondStart { completed }).await;
+            assert!(updates.execute("first").await.is_ok());
+            let previous_status = {
+                let inner = updates.inner.read().await;
+                inner.feedback.get("first").and_then(|(_, receiver)| {
+                    receiver.borrow().as_ref().map(|feedback| feedback.status())
+                })
+            };
+            assert!(matches!(
+                updates.execute("first").await,
+                Err(UpdateError::ProviderError(_))
+            ));
+            assert!(matches!(
+                updates.feedback_state::<()>("first").await,
+                Some(UpdateFeedbackState::Feedback(_))
+            ));
+            let restored_status = {
+                let inner = updates.inner.read().await;
+                inner.feedback.get("first").and_then(|(_, receiver)| {
+                    receiver.borrow().as_ref().map(|feedback| feedback.status())
+                })
+            };
+            assert_eq!(restored_status, previous_status);
+            assert!(updates.execute("second").await.is_ok());
+        }
     }
 
     #[tokio::test]
