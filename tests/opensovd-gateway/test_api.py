@@ -270,3 +270,58 @@ def test_root_capabilities_areas_link(client):
     assert response.status_code == 200
     root = response.json()
     assert "areas" in root
+
+
+def links_of(body):
+    """Return the hrefs a response links to: capability links and collection items."""
+    links = [
+        v for k, v in body.items() if k != "schema" and isinstance(v, str) and v.startswith("http")
+    ]
+    links += [item["href"] for item in body.get("items", []) if "href" in item]
+    return links
+
+
+def test_capabilities_link_everything_served(client):
+    """Follow every link from the root; each is served and updates are never left unlisted."""
+    root = "/v1"
+    seen: set[str] = set()
+    capabilities: dict[str, dict] = {}
+    pending = [root]
+    while pending:
+        url = pending.pop()
+        if url in seen:
+            continue
+        seen.add(url)
+        response = client.get(url)
+        assert response.status_code == 200, url
+        body = response.json()
+        capabilities[url] = body
+        pending.extend(links_of(body))
+
+    # The mock topology has update providers on the server and on the ota_manager app;
+    # both must be listed, and the walk must have reached them.
+    ota_manager = next(
+        (b for u, b in capabilities.items() if u.endswith("/apps/ota_manager")), None
+    )
+    assert ota_manager is not None, "walk did not reach the ota_manager app"
+    assert "updates" in capabilities[root], "server serves updates but does not list them"
+    assert "updates" in ota_manager, "ota_manager serves updates but does not list them"
+
+    # ISO 17978-3 Table 53: id and name are mandatory on every entity, empty on the root.
+    for url, body in capabilities.items():
+        if "id" in body or url == root:
+            assert "id" in body, f"{url}: id is mandatory"
+            assert "name" in body, f"{url}: name is mandatory"
+
+    # ISO 17978-3 Table 53 C4: the root lists each non-empty entity collection.
+    # Functions are not served yet.
+    for collection in ("areas", "components", "apps"):
+        response = client.get(f"{root}/{collection}")
+        assert response.status_code == 200, collection
+        assert (collection in capabilities[root]) == bool(response.json()["items"]), collection
+
+    # The walk only finds listed links, so probe each entity for an unlisted updates collection.
+    for url, body in capabilities.items():
+        if ("id" in body and "items" not in body and "data" not in body) or url == root:
+            served = client.get(f"{url}/updates").status_code == 200
+            assert served == ("updates" in body), f"{url}: served={served}"
