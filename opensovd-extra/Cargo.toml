@@ -15,14 +15,22 @@ categories.workspace = true
 [features]
 unit = ["dep:serde"]
 auth = ["dep:aws-lc-rs", "dep:jsonwebtoken", "dep:regorus", "dep:serde_json", "dep:http", "dep:tracing", "dep:opensovd-server"]
+federation = ["dep:axum", "dep:bytes", "dep:futures", "dep:http", "dep:http-body", "dep:http-body-util", "dep:opensovd-models", "dep:opensovd-server", "dep:percent-encoding", "dep:serde", "dep:serde_json", "dep:thiserror", "dep:tokio", "dep:tower", "dep:tracing", "dep:uuid"]
 tls = ["dep:rustls", "dep:thiserror"]
 trace = ["dep:axum", "dep:http", "dep:tower", "dep:tower-http", "dep:tracing"]
 mdns = ["dep:mdns-sd", "dep:if-addrs", "dep:rustix", "dep:thiserror", "dep:tokio", "dep:tracing"]
 
 [dependencies]
+opensovd-models = { workspace = true, optional = true }
 opensovd-server = { workspace = true, optional = true }
-axum = { workspace = true, optional = true, features = ["matched-path"] }
+axum = { workspace = true, optional = true, features = ["json", "matched-path"] }
 aws-lc-rs = { workspace = true, optional = true }
+bytes = { workspace = true, optional = true }
+futures = { workspace = true, optional = true }
+http-body = { workspace = true, optional = true }
+http-body-util = { workspace = true, optional = true }
+percent-encoding = { workspace = true, optional = true }
+uuid = { workspace = true, optional = true, features = ["v4"] }
 jsonwebtoken = { workspace = true, optional = true }
 regorus = { workspace = true, optional = true }
 serde = { workspace = true, optional = true, features = ["derive", "std"] }
@@ -42,7 +50,7 @@ rustix = { workspace = true, optional = true, features = ["std", "system"] }
 
 [dev-dependencies]
 serde_json = { workspace = true, features = ["std"] }
-tokio = { workspace = true, features = ["io-util", "macros", "net", "rt"] }
+tokio = { workspace = true, features = ["io-util", "macros", "net", "rt", "sync", "time"] }
 bytes = { workspace = true }
 http-body = { workspace = true }
 http-body-util = { workspace = true }
@@ -54,10 +62,27 @@ aws-lc-rs = { workspace = true }
 base64 = { workspace = true }
 tempfile = { workspace = true }
 rcgen = { workspace = true }
+hyper = { workspace = true, features = ["client", "http1"] }
+hyper-util = { workspace = true, features = ["client-legacy", "http1", "tokio"] }
+opensovd-core = { workspace = true }
+opensovd-mocks = { workspace = true }
+rstest = { workspace = true, features = ["async-timeout"] }
 
 [[test]]
 name = "auth_trace"
 required-features = ["auth", "trace"]
+
+[[test]]
+name = "forward"
+required-features = ["federation"]
+
+[[test]]
+name = "upstreams"
+required-features = ["federation"]
+
+[[test]]
+name = "vehicle_locks"
+required-features = ["federation"]
 
 [lints]
 workspace = true
