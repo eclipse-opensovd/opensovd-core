@@ -25,20 +25,23 @@ runs:
     - name: Prepare platforms
       id: prepare
       shell: bash
+      env:
+        BINARY: ${{ inputs.binary }}
+        DIST_PATH: ${{ inputs.dist-path }}
       run: |
         shopt -s nullglob
         PLATFORMS=""
-        for src in ${{ inputs.dist-path }}/image-${{ inputs.binary }}-*; do
+        for src in "${DIST_PATH}/image-${BINARY}-"*; do
           [ -d "$src" ] || continue
           target=$(basename "$src")
-          target=${target#image-${{ inputs.binary }}-}
+          target=${target#image-"${BINARY}"-}
           case "$target" in
             x86_64-*-linux-*)  arch=amd64 ;;
             aarch64-*-linux-*) arch=arm64 ;;
             *) continue ;;
           esac
-          ln -sfn "image-${{ inputs.binary }}-${target}" "${{ inputs.dist-path }}/${arch}"
-          chmod +x "${{ inputs.dist-path }}/${arch}/${{ inputs.binary }}"
+          ln -sfn "image-${BINARY}-${target}" "${DIST_PATH}/${arch}"
+          chmod +x "${DIST_PATH}/${arch}/${BINARY}"
           [ -n "$PLATFORMS" ] && PLATFORMS="$PLATFORMS,"
           PLATFORMS="${PLATFORMS}linux/${arch}"
         done
@@ -55,9 +58,11 @@ runs:
     - name: Extract metadata from Cargo.toml
       id: cargo
       shell: bash
+      env:
+        BINARY: ${{ inputs.binary }}
       run: |
         PKG=$(cargo metadata --format-version 1 --no-deps \
-          | jq --arg name "${{ inputs.binary }}" '.packages[] | select(.name == $name)')
+          | jq --arg name "$BINARY" '.packages[] | select(.name == $name)')
         echo "version=$(jq -r '.version' <<<"$PKG")"           >> "$GITHUB_OUTPUT"
         echo "description=$(jq -r '.description' <<<"$PKG")"   >> "$GITHUB_OUTPUT"
         echo "license=$(jq -r '.license' <<<"$PKG")"           >> "$GITHUB_OUTPUT"

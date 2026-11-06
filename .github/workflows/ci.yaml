@@ -381,6 +381,9 @@ jobs:
       contents: write
       attestations: write
       id-token: write
+    env:
+      RELEASE: ${{ needs.prepare.outputs.release }}
+      CHANNEL: ${{ needs.prepare.outputs.channel }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -395,8 +398,7 @@ jobs:
 
       # Each artifact opensovd-<binary>-<triple> holds one binary.
       - run: |
-          VERSION="${{ needs.prepare.outputs.release }}"
-          if [[ "${{ needs.prepare.outputs.channel }}" != "stable" ]]; then
+          if [[ "$CHANNEL" != "stable" ]]; then
             git cliff --unreleased -o CHANGELOG.md
           else
             git cliff --current -o CHANGELOG.md
@@ -409,10 +411,10 @@ jobs:
             binary=${file%.exe}
             target=${dir#artifacts/"${binary}"-}
             if [[ "$target" == *windows* ]]; then
-              zip "artifacts/release/${binary}-${VERSION}-${target}.zip" "$dir/${file}"
+              zip "artifacts/release/${binary}-${RELEASE}-${target}.zip" "$dir/${file}"
             else
               chmod +x "$dir/${file}"
-              tar -czf "artifacts/release/${binary}-${VERSION}-${target}.tar.gz" -C "$dir" "${file}"
+              tar -czf "artifacts/release/${binary}-${RELEASE}-${target}.tar.gz" -C "$dir" "${file}"
             fi
           done
           cd artifacts/release
@@ -429,13 +431,13 @@ jobs:
         if: needs.prepare.outputs.channel != 'stable'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release delete "${{ needs.prepare.outputs.release }}" --yes --cleanup-tag || true
+        run: gh release delete "$RELEASE" --yes --cleanup-tag || true
 
       - env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${{ needs.prepare.outputs.release }}" \
-            --title "${{ needs.prepare.outputs.release }}" \
+          gh release create "$RELEASE" \
+            --title "$RELEASE" \
             --notes-file CHANGELOG.md \
             ${{ needs.prepare.outputs.channel != 'stable' && '--prerelease' || '' }} \
             artifacts/release/*
