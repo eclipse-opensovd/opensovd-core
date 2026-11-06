@@ -27,11 +27,15 @@ mdns = ["opensovd-extra/mdns", "dep:socket2"]
 
 [dependencies]
 anyhow = { workspace = true }
+bytes = { workspace = true }
+http-body-util = { workspace = true }
+hyper-util = { workspace = true, features = ["client-legacy", "http1", "tokio"] }
 libcli = { workspace = true }
 opensovd-server = { workspace = true }
 opensovd-core = { workspace = true }
-opensovd-extra = { workspace = true, features = ["auth", "trace"] }
+opensovd-extra = { workspace = true, features = ["auth", "federation", "trace"] }
 opensovd-mocks = { workspace = true, optional = true }
+opensovd-models = { workspace = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true, features = ["std"] }
@@ -45,6 +49,10 @@ socket2 = { workspace = true, optional = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 sd-notify = { workspace = true }
+
+[dev-dependencies]
+hyper = { workspace = true, features = ["http1", "server"] }
+tokio = { workspace = true, features = ["macros"] }
 
 [build-dependencies]
 libcli-build = { workspace = true }

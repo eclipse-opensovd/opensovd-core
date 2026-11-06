@@ -4,11 +4,14 @@
 //! Command-line interface definitions.
 
 use std::path::PathBuf;
+use std::time::Duration;
 
+use anyhow::Context;
 #[cfg(feature = "tls")]
 use clap::ValueEnum;
 use clap::builder::NonEmptyStringValueParser;
 use clap::{Args, CommandFactory, FromArgMatches, Parser};
+use http::Uri;
 
 pub const ABOUT: &str = "OpenSOVD Gateway Server";
 const DEFAULT_URL: &str = "http://localhost:7690/sovd";
@@ -73,6 +76,9 @@ pub struct Cli {
     #[command(flatten)]
     pub mdns: MdnsArgs,
 
+    #[command(flatten)]
+    pub upstream: UpstreamArgs,
+
     /// Enable mock entities for testing and development.
     #[arg(help_heading = "Options")]
     #[cfg(feature = "mock")]
@@ -83,6 +89,161 @@ pub struct Cli {
     /// Format: PATH:DIRECTORY (e.g., "/ui:./webui/dist")
     #[arg(long, help_heading = "Options")]
     pub serve_dir: Option<String>,
+}
+
+#[derive(Args)]
+#[command(next_help_heading = "Upstream Options")]
+pub struct UpstreamArgs {
+    /// Base URL of an upstream SOVD server's API, such as the classic
+    /// diagnostic adapter at http://localhost:20002/vehicle/v15. Repeat it,
+    /// or separate URLs by commas, for several upstreams.
+    ///
+    /// Requests the gateway does not serve itself go to the upstream, and its
+    /// responses are returned with their references to it pointing at the
+    /// gateway:
+    /// entities the gateway does not hold,
+    /// functions, custom collections, and locks. The path
+    /// below the gateway's API version is appended to this URL. Unset or empty,
+    /// the gateway answers everything itself.
+    ///
+    /// All upstreams serve their entities, and if several have an id, the first
+    /// of them in the given order answers for it. A vehicle lock is acquired
+    /// on all upstreams. Everything else goes to the first upstream.
+    #[arg(
+        long = "upstream-url",
+        value_name = "URL",
+        env = "SOVD_UPSTREAM_URL",
+        value_delimiter = ','
+    )]
+    pub upstream_url: Vec<String>,
+
+    /// The --upstream-url that takes `/authorize`, if that upstream issues
+    /// tokens. Unset or empty, the gateway answers it, and clients get tokens
+    /// from the provider that issues them.
+    #[arg(
+        long = "upstream-authorize-url",
+        value_name = "URL",
+        env = "SOVD_UPSTREAM_AUTHORIZE_URL"
+    )]
+    pub authorize_url: Option<String>,
+
+    /// Timeout for connecting to the upstream.
+    #[arg(
+        long = "upstream-connect-timeout",
+        value_name = "SECONDS",
+        env = "SOVD_UPSTREAM_CONNECT_TIMEOUT",
+        default_value_t = 5
+    )]
+    pub upstream_connect_timeout: u64,
+
+    /// Timeout for what the gateway asks an upstream to find out what it has:
+    /// `/`, `/components` and `/apps`, which it combines with its own, and,
+    /// with several upstreams, which of them has an entity. Without an answer
+    /// in time it goes on with the others. Other requests have no timeout, as
+    /// flashing and operations may run long.
+    #[arg(
+        long = "upstream-discovery-timeout",
+        value_name = "SECONDS",
+        env = "SOVD_UPSTREAM_DISCOVERY_TIMEOUT",
+        default_value_t = 5
+    )]
+    pub upstream_discovery_timeout: u64,
+}
+
+/// The upstreams of validated [`UpstreamArgs`].
+pub struct UpstreamConfig {
+    /// The upstreams, in the order of `--upstream-url`, which decides between
+    /// equal entity ids and makes the first take what has a single answer.
+    pub upstreams: Vec<UpstreamUrl>,
+    /// How long to wait for a connection to an upstream.
+    pub connect_timeout: Duration,
+    /// How long an upstream gets to answer what the gateway asks to find out
+    /// what it has.
+    pub discovery_timeout: Duration,
+}
+
+/// An upstream of an [`UpstreamConfig`].
+pub struct UpstreamUrl {
+    /// Base URL of the upstream's API, `http://` with a host and no query.
+    pub url: Uri,
+    /// Whether this upstream takes `/authorize`, as named by
+    /// `--upstream-authorize-url`.
+    pub authorize: bool,
+}
+
+impl UpstreamArgs {
+    /// The validated upstreams.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error naming the option whose value is invalid.
+    pub fn config(&self) -> anyhow::Result<UpstreamConfig> {
+        let authorize = authorize_url(self.authorize_url.as_deref())?;
+        let upstreams = upstream_urls(&self.upstream_url)?
+            .into_iter()
+            .map(|url| UpstreamUrl {
+                authorize: authorize.as_ref().is_some_and(|name| same_url(&url, name)),
+                url,
+            })
+            .collect::<Vec<_>>();
+        if let Some(name) = &authorize {
+            anyhow::ensure!(
+                upstreams.iter().any(|upstream| upstream.authorize),
+                "--upstream-authorize-url {name} is not an --upstream-url"
+            );
+        }
+        Ok(UpstreamConfig {
+            upstreams,
+            connect_timeout: Duration::from_secs(self.upstream_connect_timeout),
+            discovery_timeout: Duration::from_secs(self.upstream_discovery_timeout),
+        })
+    }
+}
+
+/// The URLs of `--upstream-url`, if there are upstreams. Empty values mean
+/// none, as a deployment may set `SOVD_UPSTREAM_URL` to an empty string to
+/// leave it out.
+fn upstream_urls(urls: &[String]) -> anyhow::Result<Vec<Uri>> {
+    urls.iter()
+        .filter(|url| !url.is_empty())
+        .map(|url| upstream_url(url))
+        .collect()
+}
+
+fn upstream_url(url: &str) -> anyhow::Result<Uri> {
+    let uri: Uri = url
+        .parse()
+        .with_context(|| format!("invalid --upstream-url {url}"))?;
+    anyhow::ensure!(
+        uri.scheme_str() == Some("http"),
+        "--upstream-url must be an http:// URL, got {url}"
+    );
+    anyhow::ensure!(
+        uri.query().is_none(),
+        "--upstream-url must not have a query"
+    );
+    anyhow::ensure!(
+        uri.authority().is_some(),
+        "--upstream-url must include host:port, got {url}"
+    );
+    Ok(uri)
+}
+
+/// The value of `--upstream-authorize-url`. An empty value means none, as for
+/// `--upstream-url`.
+fn authorize_url(url: Option<&str>) -> anyhow::Result<Option<Uri>> {
+    url.filter(|url| !url.is_empty())
+        .map(|url| {
+            url.parse()
+                .with_context(|| format!("invalid --upstream-authorize-url {url}"))
+        })
+        .transpose()
+}
+
+/// Whether `a` and `b` are the same URL, whether they end in a `/`.
+fn same_url(a: &Uri, b: &Uri) -> bool {
+    let text = |uri: &Uri| uri.to_string().trim_end_matches('/').to_owned();
+    text(a) == text(b)
 }
 
 #[derive(Args)]
@@ -334,4 +495,56 @@ pub struct AuthArgs {
         requires = "policy"
     )]
     pub policy_data: Vec<PathBuf>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn urls(urls: &[&str]) -> anyhow::Result<Vec<Uri>> {
+        let urls: Vec<_> = urls.iter().map(ToString::to_string).collect();
+        upstream_urls(&urls)
+    }
+
+    #[test]
+    fn unset_or_empty_urls_mean_no_upstream() {
+        assert_eq!(urls(&[]).unwrap(), Vec::<Uri>::new());
+        assert_eq!(urls(&[""]).unwrap(), Vec::<Uri>::new());
+        assert_eq!(urls(&["http://a:1", "", "http://b:2"]).unwrap().len(), 2);
+        assert!(urls(&["http://["]).is_err());
+    }
+
+    #[test]
+    fn only_http_urls_with_a_host_are_accepted() {
+        for url in [
+            "https://cda:20002/vehicle/v15",
+            "/vehicle/v15",
+            "http://cda/v?x=1",
+        ] {
+            assert!(upstream_url(url).is_err(), "{url}");
+        }
+    }
+
+    #[test]
+    fn the_upstream_of_authorize_has_to_be_an_upstream() {
+        let args = |authorize: Option<&str>| UpstreamArgs {
+            upstream_url: vec!["http://a:1/x".to_owned(), "http://b:1/x".to_owned()],
+            authorize_url: authorize.map(str::to_owned),
+            upstream_connect_timeout: 5,
+            upstream_discovery_timeout: 5,
+        };
+        let authorized = |authorize: Option<&str>| -> Vec<bool> {
+            let config = args(authorize).config().unwrap();
+            config.upstreams.iter().map(|u| u.authorize).collect()
+        };
+
+        assert_eq!(authorized(None), [false, false]);
+        assert_eq!(authorized(Some("")), [false, false]);
+        assert_eq!(authorized(Some("http://b:1/x/")), [false, true]);
+        let error = args(Some("http://c:1/x")).config().err().unwrap();
+        assert_eq!(
+            error.to_string(),
+            "--upstream-authorize-url http://c:1/x is not an --upstream-url"
+        );
+    }
 }
