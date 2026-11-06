@@ -14,6 +14,6 @@ runs:
         test -n "$version"
         echo "version=$version" >> "$GITHUB_OUTPUT"
 
-    - uses: jdx/mise-action@v5
+    - uses: jdx/mise-action@f5be966e4a917d54244728e6a5fdcd1d93a35e6c # v5.2.6
       with:
         version: ${{ steps.version.outputs.version }}
