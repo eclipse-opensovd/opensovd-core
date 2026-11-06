@@ -95,6 +95,37 @@ impl TestServer {
         }
     }
 
+    /// A server with auth as a layer, as an application adds it to run something
+    /// after it.
+    async fn with_auth_as_layer() -> Self {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let (shutdown_tx, shutdown_rx) = oneshot::channel();
+        let policy = Policy::default();
+        let auth = Auth::new(ExtractBearer, policy.clone());
+
+        let server = Server::builder()
+            .listener(listener)
+            .base_uri("/sovd")
+            .unwrap()
+            .shutdown(async {
+                shutdown_rx.await.ok();
+            })
+            .layer(auth.into_layer(Some("/sovd")))
+            .build()
+            .unwrap();
+
+        tokio::spawn(async move {
+            server.serve().await.unwrap();
+        });
+
+        Self {
+            addr,
+            policy,
+            shutdown: Some(shutdown_tx),
+        }
+    }
+
     async fn get(&self, path: &str, token: Option<&str>) -> hyper::Response<hyper::body::Incoming> {
         let mut request = Request::builder().uri(format!("http://{}{}", self.addr, path));
         if let Some(token) = token {
@@ -193,6 +224,24 @@ async fn test_auth_policy_sees_route_template_and_params() {
         access["params"],
         serde_json::json!({"component_id": "ecu", "data_id": "speed"})
     );
+    assert_eq!(access["principal"]["subject"], "admin@example.com");
+}
+
+#[tokio::test]
+async fn test_auth_as_a_layer_checks_like_the_auth_of_the_builder() {
+    let server = TestServer::with_auth_as_layer().await;
+    let response = server.get("/sovd/v1/components", None).await;
+    assert_eq!(response.status(), hyper::StatusCode::UNAUTHORIZED);
+
+    server
+        .get("/sovd/v1/components/ec%75/data/speed", Some("admin-token"))
+        .await;
+    let access = server.last_access();
+    assert_eq!(
+        access["route"],
+        "/v1/components/{component_id}/data/{data_id}"
+    );
+    assert_eq!(access["params"]["component_id"], "ecu");
     assert_eq!(access["principal"]["subject"], "admin@example.com");
 }
 
