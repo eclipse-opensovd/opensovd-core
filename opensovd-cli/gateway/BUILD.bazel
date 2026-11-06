@@ -19,8 +19,11 @@ workspace_rust_binary(
     srcs = glob(["src/**/*.rs"]),
     crate_deps = [
         "anyhow",
+        "bytes",
         "clap",
         "http",
+        "http-body-util",
+        "hyper-util",
         "schemars",
         "sd-notify",
         "serde",
@@ -47,6 +50,7 @@ workspace_rust_binary(
         "//opensovd-core:opensovd_core",
         "//opensovd-extra:opensovd_extra",
         "//opensovd-mocks:opensovd_mocks",
+        "//opensovd-models:opensovd_models",
         "//opensovd-server:opensovd_server",
     ],
 )

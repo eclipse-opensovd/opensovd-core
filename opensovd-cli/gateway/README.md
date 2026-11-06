@@ -36,6 +36,9 @@ opensovd-gateway --mock
 
 # Announce via mDNS on the diagnostic port
 opensovd-gateway --url http://0.0.0.0:7690/sovd --mdns ABC123456789 --mdns-interface eth1
+
+# Forward what the gateway does not serve to a classic diagnostic adapter (CDA)
+opensovd-gateway --mock --upstream-url http://localhost:20002/vehicle/v15
 ```
 
 Mock data comes from the shared `opensovd-mocks` crate used across examples and tests.
@@ -80,6 +83,41 @@ Announces the gateway as `_sovd._tcp` with the `identification` and `accessurl` 
 | `--mdns-host`      | Host label published as `HOST.local` (default: derived from the identification) |
 | `--mdns-interface` | Announce only on these interfaces (comma-separated)           |
 
+### Upstream Options
+
+The upstream is optional: without `--upstream-url`, or with an empty `SOVD_UPSTREAM_URL`, the gateway answers every request itself. With it, requests the gateway does not serve itself go to an upstream SOVD server, such as a [classic diagnostic adapter](https://github.com/eclipse-opensovd/classic-diagnostic-adapter) (CDA), after auth. The path below the gateway's API version, without a trailing slash, and the query, are appended to the URL: `/sovd/v1/components/flxc1000/faults?x=1` goes to `http://localhost:20002/vehicle/v15/components/flxc1000/faults?x=1`. Method, headers (but hop-by-hop ones) and body pass unchanged, and the upstream's response is not returned verbatim: its status and headers are kept, but its references to itself are replaced.
+URLs of the upstream's API and its path, in `Location` and in the text of JSON bodies, including error messages, refer to the gateway, so clients discover the upstream's resources through the gateway and its auth. This also applies to diagnostic data in JSON that holds such a text.
+
+`GET /components` and `GET /apps` list the upstream's entities next to the gateway's, whose entity wins when both have an id. If the upstream is unreachable or does not answer the list in time, the gateway lists its own entities.
+
+`GET /` adds the links of the upstream's own root, pointing at the gateway, which keeps what it advertises itself. An upstream without a root adds nothing. The server-level resource collections, such as `/data` and `/faults`, go to the upstream, as the gateway holds none but `/updates` with an update provider.
+
+| Request below `{base}/v1`                                          | Answered by |
+|--------------------------------------------------------------------|-------------|
+| `/components/{id}/**`, `/apps/{id}/**` with an `id` the gateway does not hold | upstream |
+| `/functions`, `/functions/**`                                      | upstream |
+| `/locks`, `/locks/{lock_id}` (vehicle level)                       | gateway, on all upstreams |
+| `/authorize`                                                       | gateway, or the upstream of `--upstream-authorize-url` |
+| `/x-*`, `/x-*/**` (custom collections)                             | upstream |
+| Everything else, including all paths below held entities           | gateway     |
+
+Without `--upstream-authorize-url`, which names one of the `--upstream-url`s, the gateway answers `/authorize` with 404, as clients get tokens from their issuer. The upstreams and their routes are logged at startup, at debug level. An unreachable upstream answers **502** with the `upstream-unreachable` vendor code. If no upstream has an entity and one of them does not answer in time, the gateway answers **504** with the `upstream-timeout` vendor code. With `--auth-policy`, a forwarded request on a path the gateway does not route has no `route` in the policy input.
+
+A vehicle lock applies to everything the gateway serves from its upstreams, so it holds on all of them. `POST /locks` acquires a lock from each upstream, in the configured order, and answers with one id of the gateway. If an upstream refuses, including one without locks, or cannot be reached, the locks acquired so far are released and its answer is the answer. Every answer about a lock is the gateway's: its id and URL, and an upstream's error with its status, code and `parameters`, with the gateway's message, or with the `upstream-error` vendor code if it is no SOVD error.
+`GET`, `PUT` and `DELETE` go to all parts of the lock, and upstreams decide who owns one, by the client's token. If a part is gone, the lock is over: the other parts are released and the gateway answers **409** with `lock-broken`.
+`break_lock` goes to all upstreams, and a part an upstream broke but keeps visible, as a CDA does, stays part of the lock: `GET` shows it, `PUT` answers the upstream's `lock-broken`, and the client's `DELETE` clears all parts. Known limitation: if an upstream refuses after another one broke its part, that part stays broken, as a CDA decides on `break_lock` as it acquires and cannot restore a lock it broke. Upstreams with the same lock policy decide alike. The gateway enforces no locks itself: upstreams protect what they serve, while what the gateway answers itself, its held entities and `/updates`, stays open to other clients during a vehicle lock.
+
+The gateway remembers in memory which locks of the upstreams make up a lock, but no tokens. After a restart it does not know its locks anymore and answers 404 for them, while the locks of the upstreams expire by themselves. `GET /locks` lists what the upstreams list to the client: a lock of the gateway once, with its id, and every other lock of an upstream, such as one acquired from it directly or before a restart, as that upstream lists it, with an id only that upstream knows. `POST /locks` fails on such a lock. Entities the gateway serves itself are not locked yet.
+
+With several upstreams, by repeating `--upstream-url` or separating the URLs by commas, all of them serve their entities and list them, the first one that has an id answers for it, and everything else in the table goes to the first upstream. Entities may come and go at runtime. The gateway passes the client's token on unchanged and stores none, so every upstream has to accept the same token and see the same `sub`, as locks are owned by it. How an upstream validates the token is up to its implementor. The locks of an entity stay with the entity.
+
+| Option                  | Description                                                                 |
+|-------------------------|-----------------------------------------------------------------------------|
+| `--upstream-url`             | Base URL of an upstream API, `http://` only, repeatable or comma-separated (`SOVD_UPSTREAM_URL`, comma-separated only) |
+| `--upstream-authorize-url`   | The `--upstream-url` that takes `/authorize` (`SOVD_UPSTREAM_AUTHORIZE_URL`)                     |
+| `--upstream-connect-timeout` | Seconds to wait for a connection to the upstream, default 5 (`SOVD_UPSTREAM_CONNECT_TIMEOUT`) |
+| `--upstream-discovery-timeout` | Seconds an upstream gets to answer `/`, `/components` and `/apps`, and the look for the owner of an entity, default 5 (`SOVD_UPSTREAM_DISCOVERY_TIMEOUT`). Other requests have no timeout |
+
 ### Auth Options
 
 Tokens are verified with the JSON Web Key Set from `--auth-jwks` and must name their key with `kid`; with `--auth-audience`, their `aud` must name one of the audiences. Only RSA keys of 2048 to 8192 bits, P-256, P-384 and Ed25519 keys are used, others are skipped with a warning; a symmetric or private key, two usable keys with the same `kid` or no usable key stops the gateway. Without `--auth-policy`, every valid token is allowed. The policy decides with `data.sovd.authz.allow` on `method` (HEAD reported as GET), `route` (the matched template relative to the mount path, e.g. `/v1/components/{component_id}`), decoded `params` and, for authenticated callers, `principal` (`subject`, `roles`, `scopes`, `claims`). See [the example policy](../../examples/server/auth/sovd_authz.rego).
@@ -91,6 +129,8 @@ Tokens are verified with the JSON Web Key Set from `--auth-jwks` and must name t
 | `--auth-audience`    | Accepted `aud` claim, repeatable or comma-separated (`SOVD_AUTH_AUDIENCE`)          |
 | `--auth-policy`      | Rego policy file, repeatable; requires `--auth-jwks` (`SOVD_AUTH_POLICY`)           |
 | `--auth-policy-data` | JSON data file for the policy, repeatable (`SOVD_AUTH_POLICY_DATA`)                 |
+
+With gateway auth, whoever issues tokens has to be covered by `--auth-jwks`, `--auth-issuer` and `--auth-audience`, and `/authorize` is checked like any other request. The default security plugin of the CDA issues HS256 tokens without `kid`, which never pass.
 
 ## Contributing
 
