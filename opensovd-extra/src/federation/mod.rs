@@ -13,8 +13,9 @@
 //! answered as without an upstream.
 //!
 //! Upstreams share [`ForwardRoute::Entities`], where the upstream that has the
-//! entity answers. Every other route has one upstream, as there is one answer.
-//! Functional locks stay with the upstream of the function.
+//! entity answers, and [`ForwardRoute::Locks`], where a lock holds on all of
+//! them. Every other route has one upstream, as there is one
+//! answer. Functional locks stay with the upstream of the function.
 //!
 //! The upstream receives the request with its URI relative to the API version,
 //! such as `/components/ecu/faults?status=x`, and with the method, headers and
@@ -60,6 +61,10 @@ use serde::de::DeserializeOwned;
 use serde_json::{Map, Value};
 use tower::util::BoxCloneSyncService;
 use tower::{Layer, Service as TowerService, ServiceExt};
+
+use self::locks::VehicleLocks;
+
+mod locks;
 
 /// The log target of forwarding.
 const TARGET: &str = "forwarding";
@@ -115,17 +120,21 @@ const AREAS: &str = "areas";
 /// The collection of functions.
 const FUNCTIONS: &str = "functions";
 
+/// The collection of vehicle locks.
+const LOCKS: &str = "locks";
+
 /// The collection of updates.
 const UPDATES: &str = "updates";
 
 /// The resources of the `SOVDServer` that are not plain
 /// [`COLLECTIONS`], and how each is handled. This is the one place that names
 /// them: [`classify`] and what `/` advertises follow from it.
-const RESOURCES: [(&str, Rule); 5] = [
+const RESOURCES: [(&str, Rule); 6] = [
     (COMPONENTS, Rule::Entities),
     (APPS, Rule::Entities),
     (AREAS, Rule::Areas),
     (FUNCTIONS, Rule::Route(ForwardRoute::Functions)),
+    (LOCKS, Rule::Route(ForwardRoute::Locks)),
     (UPDATES, Rule::Updates),
 ];
 
@@ -172,7 +181,7 @@ pub struct ServerUri(pub String);
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum ForwardRoute {
-    // Only `Entities` can have several upstreams; see `Federation::new`.
+    // Only `Entities` and `Locks` can have several upstreams; see `Federation::new`.
     /// Requests below `/components/{id}` and `/apps/{id}` with an `id` the
     /// topology does not hold, and below `/areas` if it holds no area. The
     /// upstream's entities are also listed by `/components` and `/apps`.
@@ -189,17 +198,24 @@ pub enum ForwardRoute {
     /// names start with `x-` (ISO 17978-3 5.4.5), such as `/x-acme-reports`.
     /// Those of an entity go with the entity.
     CustomCollections,
+    /// The server-level `/locks` and `/locks/{lock_id}`.
+    ///
+    /// A lock here applies to all entities, so upstreams share this route and
+    /// a lock holds on all of them; see [`Upstream::routes`]. Without an upstream
+    /// the stubs answer. The locks of entities go with their entity.
+    Locks,
     /// The server-level `/authorize`. Without an upstream the stub answers.
     Authorize,
 }
 
 impl ForwardRoute {
     /// Every route, what the server forwards by default.
-    pub const ALL: [Self; 5] = [
+    pub const ALL: [Self; 6] = [
         Self::Entities,
         Self::Functions,
         Self::Collections,
         Self::CustomCollections,
+        Self::Locks,
         Self::Authorize,
     ];
 }
@@ -390,6 +406,8 @@ pub struct Federation {
     /// `components/ecu`. It saves asking again, and is no source of truth: an
     /// entry that turns out wrong is dropped.
     owners: RwLock<HashMap<String, Upstream>>,
+    /// The locks of the server.
+    vehicle_locks: VehicleLocks,
 }
 
 /// Where a request goes.
@@ -402,6 +420,8 @@ enum Destination {
     Owner(Upstream, String),
     /// Nowhere, this is the answer.
     Answer(Response),
+    /// To the vehicle locks.
+    Locks,
 }
 
 /// More than one upstream for a route that has one answer.
@@ -412,15 +432,15 @@ pub struct SharedForwardRoute(pub ForwardRoute);
 impl Federation {
     /// A federation of `upstreams` next to a server that holds `topology`.
     ///
-    /// Every route but [`ForwardRoute::Entities`], which upstreams share, has
-    /// one upstream, as there is one answer.
+    /// Every route but [`ForwardRoute::Entities`] and [`ForwardRoute::Locks`],
+    /// which upstreams share, has one upstream, as there is one answer.
     ///
     /// # Errors
     ///
     /// Returns the route that has more.
     pub fn new(upstreams: Vec<Upstream>, topology: Topology) -> Result<Self, SharedForwardRoute> {
         let contested = ForwardRoute::ALL.into_iter().find(|route| {
-            *route != ForwardRoute::Entities
+            !matches!(route, ForwardRoute::Entities | ForwardRoute::Locks)
                 && upstreams.iter().filter(|u| u.includes(*route)).count() > 1
         });
         match contested {
@@ -431,6 +451,7 @@ impl Federation {
                 scheme: "http".to_owned(),
                 base: String::new(),
                 owners: RwLock::default(),
+                vehicle_locks: VehicleLocks::default(),
             }),
         }
     }
@@ -473,6 +494,11 @@ impl Federation {
     fn entity_upstreams(&self) -> impl Iterator<Item = &Upstream> {
         self.upstreams()
             .filter(|upstream| upstream.includes(ForwardRoute::Entities))
+    }
+
+    fn lock_upstreams(&self) -> impl Iterator<Item = &Upstream> {
+        self.upstreams()
+            .filter(|upstream| upstream.includes(ForwardRoute::Locks))
     }
 
     fn owners(&self) -> RwLockReadGuard<'_, HashMap<String, Upstream>> {
@@ -542,6 +568,13 @@ impl Federation {
                 .map_or(Destination::Routes, |u| Destination::Upstream(u.clone()))
         };
         match rule {
+            Rule::Route(ForwardRoute::Locks) => {
+                if self.lock_upstreams().next().is_some() {
+                    Destination::Locks
+                } else {
+                    Destination::Routes
+                }
+            }
             Rule::Route(route) => to_owner(route),
             Rule::Areas if entities && topology.read().await.areas().len() == 0 => {
                 to_owner(ForwardRoute::Entities)
@@ -637,6 +670,7 @@ impl Federation {
                 response
             }
             Destination::Answer(response) => response,
+            Destination::Locks => locks::handle(self, request, routes).await,
         }
     }
 
@@ -732,14 +766,14 @@ impl Federation {
     /// The names of what the upstreams advertise to the request of `parts` for
     /// the capabilities of the server, and a client reaches through the server.
     /// The entities of upstreams are only known by asking, so `/components`
-    /// and `/apps` are always among them.
+    /// and `/apps` are always among them, and `/locks` is the federation's own.
     async fn upstream_capabilities(&self, parts: &Parts) -> Vec<String> {
         let capabilities = self
             .upstreams()
             .map(|upstream| upstream.capabilities(parts));
         let mut names: Vec<_> = join_all(capabilities).await.into_iter().flatten().collect();
         for (name, rule) in RESOURCES {
-            let own = matches!(rule, Rule::Entities);
+            let own = matches!(rule, Rule::Entities | Rule::Route(ForwardRoute::Locks));
             if own && rule.route().is_some_and(|route| self.includes(route)) {
                 names.push(name.to_owned());
             }
@@ -799,6 +833,9 @@ fn classify(path: &str) -> Option<(Rule, Option<&str>)> {
             (Rule::Entities, Some(below)) => {
                 let id = below.split('/').next().filter(|id| !id.is_empty())?;
                 Some((Rule::Entity(name), Some(id)))
+            }
+            (Rule::Route(ForwardRoute::Locks), Some(id)) if id.is_empty() || id.contains('/') => {
+                None
             }
             _ => Some((rule, None)),
         };
@@ -1007,7 +1044,7 @@ mod tests {
 
     #[test]
     fn classifies_the_paths_it_decides_on() {
-        use ForwardRoute::{Authorize, Collections, CustomCollections};
+        use ForwardRoute::{Authorize, Collections, CustomCollections, Locks};
 
         let rule = |path| classify(path).and_then(|(rule, id)| Some((rule.route()?, id)));
         let entity = |path| matches!(classify(path), Some((Rule::Entity(COMPONENTS), _)));
@@ -1028,6 +1065,12 @@ mod tests {
         assert!(!entity("/components"));
         assert_eq!(rule("/components/"), None);
         assert_eq!(rule("/components//data"), None);
+
+        assert_eq!(rule("/locks"), Some((Locks, None)));
+        assert_eq!(rule("/locks/id"), Some((Locks, None)));
+        assert_eq!(rule("/locks/"), None);
+        assert_eq!(rule("/locks/id/"), None);
+        assert_eq!(rule("/locks/id/x"), None);
 
         assert_eq!(rule("/data"), Some((Collections, None)));
         assert_eq!(rule("/data/"), Some((Collections, None)));

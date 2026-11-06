@@ -15,7 +15,7 @@ categories.workspace = true
 [features]
 unit = ["dep:serde"]
 auth = ["dep:aws-lc-rs", "dep:jsonwebtoken", "dep:regorus", "dep:serde_json", "dep:http", "dep:tracing", "dep:opensovd-server"]
-federation = ["dep:axum", "dep:bytes", "dep:futures", "dep:http", "dep:http-body", "dep:http-body-util", "dep:opensovd-models", "dep:opensovd-server", "dep:percent-encoding", "dep:serde", "dep:serde_json", "dep:thiserror", "dep:tokio", "dep:tower", "dep:tracing"]
+federation = ["dep:axum", "dep:bytes", "dep:futures", "dep:http", "dep:http-body", "dep:http-body-util", "dep:opensovd-models", "dep:opensovd-server", "dep:percent-encoding", "dep:serde", "dep:serde_json", "dep:thiserror", "dep:tokio", "dep:tower", "dep:tracing", "dep:uuid"]
 tls = ["dep:rustls", "dep:thiserror"]
 trace = ["dep:axum", "dep:http", "dep:tower", "dep:tower-http", "dep:tracing"]
 mdns = ["dep:mdns-sd", "dep:if-addrs", "dep:rustix", "dep:thiserror", "dep:tokio", "dep:tracing"]
@@ -30,6 +30,7 @@ futures = { workspace = true, optional = true }
 http-body = { workspace = true, optional = true }
 http-body-util = { workspace = true, optional = true }
 percent-encoding = { workspace = true, optional = true }
+uuid = { workspace = true, optional = true, features = ["v4"] }
 jsonwebtoken = { workspace = true, optional = true }
 regorus = { workspace = true, optional = true }
 serde = { workspace = true, optional = true, features = ["derive", "std"] }
@@ -77,6 +78,10 @@ required-features = ["federation"]
 
 [[test]]
 name = "upstreams"
+required-features = ["federation"]
+
+[[test]]
+name = "vehicle_locks"
 required-features = ["federation"]
 
 [lints]
