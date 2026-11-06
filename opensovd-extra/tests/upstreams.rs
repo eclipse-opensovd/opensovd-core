@@ -677,15 +677,13 @@ fn a_route_can_only_have_one_upstream() {
 }
 
 #[test]
-fn upstreams_share_entities() {
+fn upstreams_share_entities_and_locks() {
     let a = Backend::new("a", &[]);
     let b = Backend::new("b", &[]);
+    let shared = [ForwardRoute::Entities, ForwardRoute::Locks];
 
     let built = Federation::new(
-        vec![
-            a.upstream().routes([ForwardRoute::Entities]),
-            b.upstream().routes([ForwardRoute::Entities]),
-        ],
+        vec![a.upstream().routes(shared), b.upstream().routes(shared)],
         Topology::default(),
     );
 

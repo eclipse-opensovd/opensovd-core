@@ -10,6 +10,7 @@ workspace_rust_library(
     crate_deps = [
         "axum",
         "aws-lc-rs",
+        "base64",
         "bytes",
         "futures",
         "http",
