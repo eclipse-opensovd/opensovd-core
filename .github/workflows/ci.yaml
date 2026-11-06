@@ -34,7 +34,7 @@ jobs:
       channel: ${{ steps.check.outputs.channel }}
       sha: ${{ steps.check.outputs.sha }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: github.event_name == 'schedule' || startsWith(github.ref, 'refs/tags/v')
         with:
           fetch-depth: 0
@@ -85,7 +85,7 @@ jobs:
     permissions:
       pull-requests: read
     steps:
-      - uses: amannn/action-semantic-pull-request@v6
+      - uses: amannn/action-semantic-pull-request@2252a14e810aa9b85c2d560bd7070c802206ecf6 # v6.1.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -115,9 +115,9 @@ jobs:
           - {triple: aarch64-apple-darwin, os: macos-15, tests: [unit]}
     runs-on: ${{ matrix.target.os }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/mise
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           key: ${{ matrix.binary }}${{ matrix.target.coverage && '-coverage' || '' }}
           workspaces: ${{ matrix.target.coverage && '. -> target/coverage' || '. -> target' }}
@@ -151,28 +151,28 @@ jobs:
         run: mise run container ${{ matrix.binary }}
 
       - if: ${{ !matrix.target.coverage }}
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: opensovd-${{ matrix.binary }}-${{ matrix.target.triple }}
           path: target/${{ matrix.target.triple }}/release-small/opensovd-${{ matrix.binary }}${{ runner.os == 'Windows' && '.exe' || '' }}
 
       # The coverage job merges these into one report for all binaries.
       - if: matrix.target.coverage
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: coverage-data-${{ matrix.binary }}-${{ matrix.target.triple }}
           path: target/coverage-data/${{ matrix.binary }}-${{ matrix.target.triple }}.tar.gz
 
       # The docker job builds each binary's multi-arch image from these.
       - if: matrix.target.container && needs.prepare.outputs.release != 'none'
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: image-opensovd-${{ matrix.binary }}-${{ matrix.target.triple }}
           path: target/${{ matrix.target.triple }}/release-small/opensovd-${{ matrix.binary }}
 
       # Every stage writes its report under target/reports/<binary>/<triple>/<stage>.
       - if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: reports-${{ matrix.binary }}-${{ matrix.target.triple }}${{ matrix.target.coverage && '-coverage' || '' }}
           path: target/reports/
@@ -190,9 +190,9 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/mise
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: coverage-data-*
           path: target/coverage-data
@@ -200,7 +200,7 @@ jobs:
 
       - run: mise run coverage --merge
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: reports-all-x86_64-unknown-linux-gnu-coverage
           path: target/reports/
@@ -216,7 +216,7 @@ jobs:
     permissions:
       pull-requests: write
     steps:
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: reports-*-coverage
           path: reports
@@ -248,7 +248,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/mise
       - run: mise run licenses
 
@@ -259,7 +259,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/mise
       - run: mise run advisories
 
@@ -270,15 +270,15 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
       - uses: ./.github/actions/mise
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           cache-on-failure: true
       # Cache prek hooks
-      - uses: actions/cache@v6
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/prek
           key: prek-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
@@ -306,7 +306,7 @@ jobs:
       pages: write
       id-token: write
     steps:
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: reports-*
           path: site
@@ -326,11 +326,11 @@ jobs:
           done
           echo "<!doctype html><meta charset=\"utf-8\"><title>OpenSOVD reports</title><ul>${items}</ul>" > index.html
 
-      - uses: actions/configure-pages@v6
-      - uses: actions/upload-pages-artifact@v5
+      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: site
-      - uses: actions/deploy-pages@v5
+      - uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
 
   docker:
     needs: [prepare, build]
@@ -349,8 +349,8 @@ jobs:
       matrix:
         binary: [gateway, mcp]
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/download-artifact@v8
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           path: dist
           pattern: image-opensovd-${{ matrix.binary }}-*
@@ -370,12 +370,12 @@ jobs:
       attestations: write
       id-token: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
       - uses: ./.github/actions/mise
 
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           path: artifacts
           pattern: opensovd-*
@@ -407,7 +407,7 @@ jobs:
             sha512sum "$file" > "$file.sha512"
           done
 
-      - uses: actions/attest-build-provenance@v4
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         if: github.repository_owner == 'eclipse-opensovd'
         with:
           subject-path: 'artifacts/release/*'
