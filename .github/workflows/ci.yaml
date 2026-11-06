@@ -120,7 +120,8 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/mise
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - if: needs.prepare.outputs.channel == 'dev'
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3 # zizmor: ignore[cache-poisoning]
         with:
           key: ${{ matrix.binary }}${{ matrix.target.coverage && '-coverage' || '' }}
           workspaces: ${{ matrix.target.coverage && '. -> target/coverage' || '. -> target' }}
@@ -284,11 +285,11 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - uses: ./.github/actions/mise
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3 # zizmor: ignore[cache-poisoning]
         with:
           cache-on-failure: true
       # Cache prek hooks
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0 # zizmor: ignore[cache-poisoning]
         with:
           path: ~/.cache/prek
           key: prek-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
