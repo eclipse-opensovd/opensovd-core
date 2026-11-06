@@ -18,6 +18,8 @@ updates:
           - patch
     commit-message:
       prefix: "chore(deps)"
+    cooldown:
+      default-days: 7
 
   - package-ecosystem: uv
     directory: /
@@ -32,6 +34,8 @@ updates:
           - patch
     commit-message:
       prefix: "chore(deps)"
+    cooldown:
+      default-days: 7
 
   - package-ecosystem: cargo
     directory: /
@@ -46,6 +50,8 @@ updates:
           - patch
     commit-message:
       prefix: "chore(deps)"
+    cooldown:
+      default-days: 7
 
   - package-ecosystem: docker
     directories:
@@ -62,6 +68,8 @@ updates:
           - patch
     commit-message:
       prefix: "chore(deps)"
+    cooldown:
+      default-days: 7
 
   - package-ecosystem: pre-commit
     directory: /
@@ -76,3 +84,5 @@ updates:
           - patch
     commit-message:
       prefix: "chore(deps)"
+    cooldown:
+      default-days: 7
