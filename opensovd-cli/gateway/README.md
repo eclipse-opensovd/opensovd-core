@@ -131,6 +131,38 @@ Tokens are verified with the JSON Web Key Set from `--auth-jwks` and must name t
 
 With gateway auth, whoever issues tokens has to be covered by `--auth-jwks`, `--auth-issuer` and `--auth-audience`, and `/authorize` is checked like any other request. The default security plugin of the CDA issues HS256 tokens without `kid`, which never pass.
 
+### Development Tokens
+
+Without an identity provider, `scripts/dev-token.sh` signs tokens for a stack of gateway and CDAs. It creates the key on first use, and the JWKS next to it, which goes to `--auth-jwks` and to every upstream that verifies tokens:
+
+```bash
+TOKEN=$(scripts/dev-token.sh keys dev-stack tester)
+opensovd-gateway --upstream-url http://localhost:20002/vehicle/v15 \
+  --auth-jwks keys/dev-jwks.json --auth-issuer dev-stack
+curl -H "Authorization: Bearer $TOKEN" http://localhost:7690/sovd/v1/components
+```
+
+Anyone with the key can sign any token, so this is for development and testing only. To move to a real provider, point `--auth-jwks` and `--auth-issuer` at the provider.
+
+The gateway passes the token on unchanged, so what a CDA does with it depends on the CDA. By default it does not verify signatures, so it accepts these tokens, and anyone who reaches it directly can forge one. To let it verify them, give it the same key set and issuer through its environment. This needs [CDA#696](https://github.com/eclipse-opensovd/classic-diagnostic-adapter/pull/696), and no build feature:
+
+| CDA environment      | Value                                                       |
+|----------------------|-------------------------------------------------------------|
+| `CDA_AUTH_JWKS_FILE` | Path to `dev-jwks.json`, as the CDA sees it                 |
+| `CDA_AUTH_ISSUER`    | The same value as `--auth-issuer`, here `dev-stack`         |
+| `CDA_AUTH_AUDIENCE`  | Optional accepted `aud` values, comma-separated             |
+
+With the CDA's testcontainer setup, `CDA_AUTH_JWKS_DIR` names the host directory, which is mounted at `/app/auth`:
+
+```bash
+export CDA_AUTH_JWKS_DIR=$PWD/keys
+export CDA_AUTH_JWKS_FILE=/app/auth/dev-jwks.json
+export CDA_AUTH_ISSUER=dev-stack
+docker compose up
+```
+
+The CDA then answers its own `/authorize` with 403, and a broken key set stops it at startup. Every CDA behind the gateway needs these settings, as each one verifies tokens on its own.
+
 ## Contributing
 
 See [CONTRIBUTING.md](../../CONTRIBUTING.md) for guidelines.
