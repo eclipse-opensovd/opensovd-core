@@ -487,7 +487,7 @@ async fn lists_stand_without_an_answer_from_the_upstream() {
 #[timeout(std::time::Duration::from_secs(10))]
 #[tokio::test]
 async fn lists_hold_the_upstreams_entities_only_when_forwarding_them() {
-    let server = start_with("/sovd", None, Some(&[ForwardRoute::Authorize])).await;
+    let server = start_with("/sovd", None, Some(&[ForwardRoute::Locks])).await;
 
     let reply = send(&server, Method::GET, "/sovd/v1/components", None, b"").await;
 
@@ -498,7 +498,7 @@ async fn lists_hold_the_upstreams_entities_only_when_forwarding_them() {
 
 #[rstest]
 #[case(Some(&[ForwardRoute::Entities][..]), true)]
-#[case(Some(&[ForwardRoute::Authorize][..]), false)]
+#[case(Some(&[ForwardRoute::Locks][..]), false)]
 #[timeout(std::time::Duration::from_secs(10))]
 #[tokio::test]
 async fn an_empty_server_advertises_the_entities_of_the_upstream(
@@ -589,6 +589,7 @@ async fn the_root_adds_what_the_upstream_offers_through_the_server() {
     let root = capabilities(&reply);
     let link = |name| Some(UriReference(format!("{base}/{name}")));
     assert_eq!(root.functions, link("functions"), "{path}");
+    assert_eq!(root.locks, link("locks"), "{path}");
     assert_eq!(root.components, link("components"), "{path}");
     let links = links(&reply);
     for name in COLLECTIONS {
@@ -646,6 +647,7 @@ async fn the_root_keeps_the_upstreams_description_of_itself_out() {
 #[case(ForwardRoute::Entities, &["apps", "areas", "components"])]
 #[case(ForwardRoute::Functions, &["functions"])]
 #[case(ForwardRoute::Collections, &COLLECTIONS)]
+#[case(ForwardRoute::Locks, &["locks"])]
 #[case(ForwardRoute::CustomCollections, &["x-acme-reports"])]
 #[case(ForwardRoute::Authorize, &[])]
 #[timeout(std::time::Duration::from_secs(10))]
@@ -684,7 +686,7 @@ async fn the_root_stands_without_an_answer_from_the_upstream() {
 }
 
 /// A request of each [`ForwardRoute`], and how the server answers it itself.
-const ROUTE_REQUESTS: [(ForwardRoute, Method, &str, u16); 13] = [
+const ROUTE_REQUESTS: [(ForwardRoute, Method, &str, u16); 17] = [
     (
         ForwardRoute::Entities,
         Method::GET,
@@ -752,6 +754,15 @@ const ROUTE_REQUESTS: [(ForwardRoute, Method, &str, u16); 13] = [
         "/sovd/v1/x-vendor",
         404,
     ),
+    (ForwardRoute::Locks, Method::GET, "/sovd/v1/locks", 404),
+    (ForwardRoute::Locks, Method::POST, "/sovd/v1/locks", 404),
+    (ForwardRoute::Locks, Method::GET, "/sovd/v1/locks/l1", 404),
+    (
+        ForwardRoute::Locks,
+        Method::DELETE,
+        "/sovd/v1/locks/l1",
+        404,
+    ),
     (
         ForwardRoute::Authorize,
         Method::POST,
@@ -786,7 +797,7 @@ async fn forwards_only_the_given_routes(#[case] selected: ForwardRoute) {
 #[rstest]
 #[case(ForwardRoute::Entities, true)]
 #[case(ForwardRoute::CustomCollections, false)]
-#[case(ForwardRoute::Authorize, false)]
+#[case(ForwardRoute::Locks, false)]
 #[timeout(std::time::Duration::from_secs(10))]
 #[tokio::test]
 async fn a_custom_collection_of_an_unknown_entity(

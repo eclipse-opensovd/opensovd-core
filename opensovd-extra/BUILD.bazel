@@ -26,6 +26,7 @@ workspace_rust_library(
         "tower",
         "tower-http",
         "tracing",
+        "uuid",
     ],
     crate_features = [
         "auth",
