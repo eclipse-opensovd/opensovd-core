@@ -319,6 +319,6 @@ def test_capabilities_link_everything_served(client):
 
     # The walk only finds listed links, so probe each entity for an unlisted updates collection.
     for url, body in capabilities.items():
-        if ("id" in body and "items" not in body and "data" not in body) or url == root:
+        if "id" in body:
             served = client.get(f"{url}/updates").status_code == 200
             assert served == ("updates" in body), f"{url}: served={served}"
