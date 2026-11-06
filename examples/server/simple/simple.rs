@@ -135,7 +135,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let os = parse_os_release().await;
 
     // Shared sysinfo::System instance for CPU and memory metrics
-    let sys = Arc::new(Mutex::new(System::new()));
+    let sys = Arc::new(Mutex::new(System::new()?));
 
     // Build data provider with os-release constants + dynamic uptime
     let provider = DataProviderBuilder::new()
