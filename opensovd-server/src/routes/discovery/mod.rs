@@ -48,12 +48,15 @@ pub(super) async fn server_capabilities(
 
     let areas = (topo.areas().len() > 0).then(|| format!("{base}/areas").into());
 
+    let updates = topo.get_updates().map(|_| format!("{base}/updates").into());
+
     Ok(Json(EntityCapabilities {
         id: String::new(),   // Empty for SOVDServer
         name: String::new(), // Empty for SOVDServer
         components,
         apps,
         areas,
+        updates,
         schema: query.include_schema.then(EntityCapabilities::schema),
         ..Default::default()
     }))
