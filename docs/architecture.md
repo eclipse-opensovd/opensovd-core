@@ -317,3 +317,6 @@ in the topology and is type agnostic with regard to the actual type that
 implements the `UpdateDescriptor` trait. Helper traits `FromModel` and `ToModel`
 are used to serialize and deserialize this concrete update type into the model
 structs used in the router.
+Only one update may run at a time. A failed or completed update no longer blocks
+the next update, and the active slot is released if the provider cannot start
+the operation.
