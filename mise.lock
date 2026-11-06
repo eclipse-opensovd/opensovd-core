@@ -288,6 +288,15 @@ specifiers = ["1.99.0"]
 components = "clippy,llvm-tools,rustfmt"
 profile = "minimal"
 
+[[tools.rust]]
+version = "nightly-2026-10-05"
+backend = "core:rust"
+specifiers = ["nightly-2026-10-05"]
+
+[tools.rust.options]
+components = "rustfmt"
+profile = "minimal"
+
 [[tools.ty]]
 version = "0.0.84"
 backend = "aqua:astral-sh/ty"
