@@ -84,6 +84,8 @@ pub(crate) async fn component_capabilities(
         .data_provider()
         .map(|_| format!("{own}/data").into());
 
+    let updates = component.updates().map(|_| format!("{own}/updates").into());
+
     let bulk_data = component
         .bulkdata_provider()
         .map(|_| format!("{own}/bulk-data").into());
@@ -100,6 +102,7 @@ pub(crate) async fn component_capabilities(
         hosts,
         belongs_to,
         data,
+        updates,
         bulk_data,
         logs,
         schema: query.include_schema.then(EntityCapabilities::schema),
