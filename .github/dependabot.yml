@@ -4,7 +4,9 @@
 version: 2
 updates:
   - package-ecosystem: github-actions
-    directory: /
+    directories:
+      - /
+      - /.github/actions/*
     schedule:
       interval: monthly
     groups:
@@ -16,6 +18,8 @@ updates:
           - patch
     commit-message:
       prefix: "chore(deps)"
+    cooldown:
+      default-days: 7
 
   - package-ecosystem: uv
     directory: /
@@ -30,6 +34,8 @@ updates:
           - patch
     commit-message:
       prefix: "chore(deps)"
+    cooldown:
+      default-days: 7
 
   - package-ecosystem: cargo
     directory: /
@@ -44,6 +50,8 @@ updates:
           - patch
     commit-message:
       prefix: "chore(deps)"
+    cooldown:
+      default-days: 7
 
   - package-ecosystem: docker
     directories:
@@ -60,6 +68,8 @@ updates:
           - patch
     commit-message:
       prefix: "chore(deps)"
+    cooldown:
+      default-days: 7
 
   - package-ecosystem: pre-commit
     directory: /
@@ -74,3 +84,5 @@ updates:
           - patch
     commit-message:
       prefix: "chore(deps)"
+    cooldown:
+      default-days: 7
