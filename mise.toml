@@ -19,6 +19,7 @@ cargo-deny = "0.20.2"
 "github:nextest-rs/nextest" = { version = "0.9.146", version_prefix = "cargo-nextest-" }
 git-cliff = "2.14.1"
 gh = "2.102.0"
+"github:github/gh-actions-lock" = { version = "0.4.1", bin = "gh-actions-lock" }
 jq = "1.8.2"
 
 [env]
@@ -61,6 +62,10 @@ run = "cargo fmt --all"
 description = "Check that commit messages follow Conventional Commits"
 usage = 'arg "[rev]" default="origin/main..HEAD" help="Commit or range to check"'
 run = "convco check {{ usage.rev | quote }}"
+
+[tasks."lock:actions"]
+description = "Update the actions lockfile"
+run = "gh-actions-lock --no-narrow --no-interactive"
 
 [tasks.test]
 description = "Run all tests"

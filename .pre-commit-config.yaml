@@ -37,6 +37,12 @@ repos:
       - id: zizmor
   - repo: local
     hooks:
+      - id: actions-lock
+        name: actions lockfile
+        entry: sh -c 'gh-actions-lock --verify-local --no-interactive || { echo "Update the lockfile with mise run lock:actions"; exit 1; }'
+        language: system
+        files: ^\.github/(workflows|actions)/
+        pass_filenames: false
       - id: rustfmt
         name: cargo fmt
         entry: mise run fmt
