@@ -3,13 +3,15 @@
 
 use axum::{
     Router,
-    extract::State,
+    extract::{Request, State},
     http::{HeaderMap, StatusCode},
     response::IntoResponse,
     routing::{get, put},
 };
+use axum_extra::headers::{ContentLength, ContentType};
+use futures::{StreamExt, TryStreamExt};
 use http::{HeaderValue, request::Parts};
-use opensovd_core::{Phase, Topology, UpdateError, UpdateFeedbackState};
+use opensovd_core::{Phase, Topology, UpdateError, UpdateFeedbackState, UpdateRequest};
 use opensovd_models::updates::{
     AvailableUpdatesResponse, Status, UpdateDetail, UpdateDetailQuery, UpdateDetailResponse,
     UpdateOrigins, UpdatePackageId, UpdatePackagePath, UpdateQuery, UpdateStatus,
@@ -20,7 +22,7 @@ use super::error::Result;
 use crate::routes::{
     entity::Entity,
     error::Error,
-    extract::{Json, Path, Query},
+    extract::{Json, Path, Query, TypedHeader},
 };
 use crate::schema::JsonSchema;
 
@@ -86,13 +88,29 @@ async fn list_updates(
 async fn create_updates(
     State(topology): State<Topology>,
     entity: Entity,
-    parts: Parts,
-    Json(body): Json<UpdateDetail>,
+    content_type: TypedHeader<ContentType>,
+    content_length: TypedHeader<ContentLength>,
+    request: Request,
 ) -> Result<impl IntoResponse> {
+    let (parts, body) = request.into_parts();
     let topo = topology.read().await;
-    let id = entity.updates_provider(&topo)?.push(&body).await?;
-    let versioned_uri = super::versioned_uri(&parts);
+    let stream = body
+        .into_data_stream()
+        .map_err(axum::Error::into_inner)
+        .boxed();
 
+    let update_request = UpdateRequest {
+        stream,
+        content_type: content_type.0.to_string(),
+        content_length: content_length.0.0,
+    };
+
+    let id = entity
+        .updates_provider(&topo)?
+        .push_from_request(update_request)
+        .await?;
+
+    let versioned_uri = super::versioned_uri(&parts);
     let mut headers = HeaderMap::new();
     let location = HeaderValue::from_str(&format!(
         "{versioned_uri}{}/updates/{}",

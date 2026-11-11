@@ -11,7 +11,8 @@ use crate::bulkdata::BulkDataProvider;
 use crate::data::DataProvider;
 use crate::entity::EntityRef;
 use crate::log::LogProvider;
-use crate::{FromModel, ToModel, UpdateDescriptor, UpdateProvider, Updates};
+use crate::updates::FromRequest;
+use crate::{ToModel, UpdateDescriptor, UpdateProvider, Updates};
 
 pub struct App {
     entity_ref: EntityRef,
@@ -107,20 +108,16 @@ impl App {
 
     #[must_use]
     pub fn with_update_provider<
-        UpdateImpl: UpdateDescriptor + FromModel<UpdateModel> + 'static,
-        UpdateModel: 'static,
+        UpdateImpl: UpdateDescriptor + FromRequest + 'static,
         FeedbackImpl: ToModel<FeedbackModel> + 'static,
         FeedbackModel: 'static,
     >(
         mut self,
         provider: impl UpdateProvider,
     ) -> Self {
-        self.update_provider = Some(Updates::new::<
-            UpdateImpl,
-            UpdateModel,
-            FeedbackImpl,
-            FeedbackModel,
-        >(provider));
+        self.update_provider = Some(Updates::new::<UpdateImpl, FeedbackImpl, FeedbackModel>(
+            provider,
+        ));
         self
     }
 

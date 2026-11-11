@@ -10,6 +10,7 @@ workspace_rust_library(
     crate_deps = [
         "bytes",
         "futures",
+        "serde_json",
         "tokio",
     ],
     crate_name = "opensovd_mocks",

@@ -12,12 +12,12 @@ use indexmap::IndexSet;
 use indexmap::map::Values;
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard, broadcast};
 
-use crate::FromModel;
 use crate::ToModel;
 use crate::UpdateDescriptor;
 use crate::UpdateProvider;
 use crate::Updates;
 use crate::entity::{App, Area, Component, EntityRef};
+use crate::updates::FromRequest;
 
 /// Events emitted when the topology changes.
 #[derive(Debug, Clone)]
@@ -143,20 +143,16 @@ impl TopologyState {
 
     /// Adds an update provider at the topology root.
     pub fn add_update_provider<
-        UpdateImpl: UpdateDescriptor + FromModel<UpdateModel> + 'static,
-        UpdateModel: 'static,
+        UpdateImpl: UpdateDescriptor + FromRequest + 'static,
         FeedbackImpl: ToModel<FeedbackModel> + 'static,
         FeedbackModel: 'static,
     >(
         &mut self,
         provider: impl UpdateProvider,
     ) {
-        self.update_provider = Some(Updates::new::<
-            UpdateImpl,
-            UpdateModel,
-            FeedbackImpl,
-            FeedbackModel,
-        >(provider));
+        self.update_provider = Some(Updates::new::<UpdateImpl, FeedbackImpl, FeedbackModel>(
+            provider,
+        ));
     }
 
     /// Gets the update provider at the topology root, if any.
@@ -360,8 +356,7 @@ impl TopologyWriteGuard<'_> {
 
     /// Adds an update provider to the topology root.
     pub fn add_update_provider<
-        UpdateImpl: UpdateDescriptor + FromModel<UpdateModel> + 'static,
-        UpdateModel: 'static,
+        UpdateImpl: UpdateDescriptor + FromRequest + 'static,
         FeedbackImpl: ToModel<FeedbackModel> + 'static,
         FeedbackModel: 'static,
     >(
@@ -369,7 +364,7 @@ impl TopologyWriteGuard<'_> {
         provider: impl UpdateProvider,
     ) {
         self.state
-            .add_update_provider::<UpdateImpl, UpdateModel, FeedbackImpl, FeedbackModel>(provider);
+            .add_update_provider::<UpdateImpl, FeedbackImpl, FeedbackModel>(provider);
     }
 
     /// Removes a component by ID. Missing IDs are silently skipped.

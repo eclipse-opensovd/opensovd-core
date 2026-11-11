@@ -1,9 +1,14 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 Contributors to the Eclipse Foundation
 // SPDX-License-Identifier: Apache-2.0
 
+use std::num::TryFromIntError;
 use std::sync::Arc;
 use std::{any::Any, collections::HashMap};
 
+use bytes::{Bytes, BytesMut};
+use futures::StreamExt;
+use futures_core::future::BoxFuture;
+use futures_core::stream::BoxStream;
 use tokio::sync::{RwLock, watch};
 
 #[derive(Debug, thiserror::Error, Clone)]
@@ -59,8 +64,11 @@ impl PartialEq for Status {
 
 type FeedbackSender = watch::Sender<Option<Arc<dyn UpdateFeedback>>>;
 type FeedbackReceiver = watch::Receiver<Option<Arc<dyn UpdateFeedback>>>;
-type Model2Update =
-    Arc<dyn Fn(&dyn Any) -> Result<Arc<dyn UpdateDescriptor>, UpdateError> + Send + Sync>;
+type Request2Update = Arc<
+    dyn Fn(UpdateRequest) -> BoxFuture<'static, Result<Arc<dyn UpdateDescriptor>, UpdateError>>
+        + Send
+        + Sync,
+>;
 type Feedback2Model =
     Arc<dyn Fn(&dyn UpdateFeedback) -> Result<Arc<dyn Any>, UpdateError> + Send + Sync>;
 
@@ -87,7 +95,7 @@ struct UpdatesInner {
     // model2update stores the method UpdateModel -> UpdateImpl from the
     // UpdateDescriptor trait as a workaround since the actual UpdateImpl type
     // implementing it is erased from Updates.
-    model2update: Model2Update,
+    request2update: Request2Update,
     feedback2model: Feedback2Model,
 }
 
@@ -98,13 +106,12 @@ pub struct Updates {
 
 impl Updates {
     #[must_use]
-    pub fn new<UpdateImpl, UpdateModel, FeedbackImpl, FeedbackModel>(
+    pub fn new<UpdateImpl, FeedbackImpl, FeedbackModel>(
         provider: impl UpdateProvider + 'static,
     ) -> Self
     where
-        UpdateImpl: UpdateDescriptor + FromModel<UpdateModel> + 'static,
+        UpdateImpl: UpdateDescriptor + FromRequest + 'static,
         FeedbackImpl: ToModel<FeedbackModel> + 'static,
-        UpdateModel: 'static,
         FeedbackModel: 'static,
     {
         Self {
@@ -113,11 +120,11 @@ impl Updates {
                 available: Vec::new(),
                 feedback: HashMap::new(),
                 active: None,
-                model2update: Arc::new(|model| {
-                    let model = model
-                        .downcast_ref::<UpdateModel>()
-                        .ok_or(UpdateError::IncompatibleModel)?;
-                    Ok(Arc::new(UpdateImpl::from_model(model)))
+                request2update: Arc::new(|stream| {
+                    Box::pin(async move {
+                        let update = UpdateImpl::from_request(stream).await?;
+                        Ok::<Arc<dyn UpdateDescriptor>, _>(Arc::new(update))
+                    })
                 }),
                 feedback2model: Arc::new(|feedback| {
                     let feedback = feedback
@@ -130,24 +137,42 @@ impl Updates {
         }
     }
 
+    /// Tries to register an update from an incoming request.
+    ///
+    /// # Errors
+    ///
+    /// Returns both the same errors as [Self::push] and any errors returned
+    /// by [FromRequest::from_request] while handling the request.
+    pub async fn push_from_request(&self, request: UpdateRequest) -> Result<String, UpdateError> {
+        let mut inner = self.inner.write().await;
+        let update = (inner.request2update)(request).await?;
+        self.push_impl(&mut inner, update).await
+    }
+
     /// Adds an update to the list of available updates.
     ///
     /// # Errors
     ///
     /// Returns `UpdateProviderNotConfigured` if no update provider is
     /// configured.
-    pub async fn push<UpdateModel: Any>(
+    pub async fn push<UpdateImpl: UpdateDescriptor + 'static>(
         &self,
-        update: &UpdateModel,
+        update: UpdateImpl,
     ) -> Result<String, UpdateError> {
         let mut inner = self.inner.write().await;
-        let item = (inner.model2update)(update)?;
-        let id = item.id().clone();
+        self.push_impl(&mut inner, Arc::new(update)).await
+    }
+
+    async fn push_impl(
+        &self,
+        inner: &mut UpdatesInner,
+        update: Arc<dyn UpdateDescriptor>,
+    ) -> Result<String, UpdateError> {
+        let id = update.id().clone();
         if inner.available.iter().any(|u| u.id() == id) {
-            // the update id already exists
             return Err(UpdateError::UpdateIdConflict(id));
         }
-        inner.available.push(item);
+        inner.available.push(update);
         Ok(id)
     }
 
@@ -409,7 +434,9 @@ impl Default for Updates {
         Self {
             inner: Arc::new(RwLock::new(UpdatesInner {
                 active: None,
-                model2update: Arc::new(|_model| Err(UpdateError::UpdateProviderNotConfigured)),
+                request2update: Arc::new(|_stream| {
+                    Box::pin(async { Err(UpdateError::UpdateProviderNotConfigured) })
+                }),
                 feedback2model: Arc::new(|_feedback| Err(UpdateError::UpdateProviderNotConfigured)),
                 provider: None,
                 available: Vec::new(),
@@ -419,10 +446,59 @@ impl Default for Updates {
     }
 }
 
-pub trait FromModel<Model> {
-    fn from_model(model: &Model) -> Self
+pub struct UpdateRequest {
+    pub stream: BoxStream<'static, Result<Bytes, Box<dyn std::error::Error + Send + Sync>>>,
+    pub content_type: String,
+    pub content_length: u64,
+}
+
+impl UpdateRequest {
+    /// Attempts to collect the entire request body into a `BytesMut` buffer.
+    ///
+    /// # Errors
+    ///
+    /// Return an error when the request returns an error.
+    pub async fn try_collect(mut self) -> Result<BytesMut, UpdateError> {
+        let max_size: usize = self
+            .content_length
+            .try_into()
+            .map_err(|e: TryFromIntError| UpdateError::ProviderError(e.to_string()))?;
+        let mut received_size = 0;
+
+        let mut collected = BytesMut::new();
+        while received_size < max_size {
+            let Some(chunk) = self.stream.next().await else {
+                break;
+            };
+            let chunk = chunk.map_err(|e| UpdateError::ProviderError(e.to_string()))?;
+
+            let bytes_to_take = chunk.len().min(max_size - received_size);
+            collected.extend_from_slice(&chunk[..bytes_to_take]);
+            received_size += bytes_to_take;
+        }
+        Ok(collected)
+    }
+
+    /// Attempts to parse the request body as JSON into the specified type.
+    ///
+    /// # Errors
+    /// Returns an error if the content type is not `application/json` or if parsing fails.
+    pub async fn try_json<T: serde::de::DeserializeOwned>(self) -> Result<T, UpdateError> {
+        if self.content_type != "application/json" {
+            return Err(UpdateError::ProviderError(
+                "Invalid content type".to_string(),
+            ));
+        }
+        let bytes = self.try_collect().await?;
+        serde_json::from_slice(&bytes).map_err(|e| UpdateError::ProviderError(e.to_string()))
+    }
+}
+
+#[async_trait::async_trait]
+pub trait FromRequest {
+    async fn from_request(data: UpdateRequest) -> Result<Self, UpdateError>
     where
-        Self: Sized;
+        Self: Sized + 'static;
 }
 
 pub trait ToModel<Model> {
@@ -551,9 +627,12 @@ mod tests {
         id: String,
     }
 
-    impl FromModel<TestUpdate> for TestUpdate {
-        fn from_model(update: &TestUpdate) -> Self {
-            update.clone()
+    #[async_trait::async_trait]
+    impl FromRequest for TestUpdate {
+        async fn from_request(_req: UpdateRequest) -> Result<Self, UpdateError> {
+            Ok(TestUpdate {
+                id: "test".to_string(),
+            })
         }
     }
 
@@ -708,10 +787,10 @@ mod tests {
     }
 
     async fn updates_with_provider(provider: impl UpdateProvider) -> Updates {
-        let updates = Updates::new::<TestUpdate, TestUpdate, TestFeedback, _>(provider);
+        let updates = Updates::new::<TestUpdate, TestFeedback, _>(provider);
         assert!(
             updates
-                .push(&TestUpdate {
+                .push(TestUpdate {
                     id: "first".to_string(),
                 })
                 .await
@@ -719,7 +798,7 @@ mod tests {
         );
         assert!(
             updates
-                .push(&TestUpdate {
+                .push(TestUpdate {
                     id: "second".to_string(),
                 })
                 .await

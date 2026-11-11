@@ -21,6 +21,7 @@ futures = { workspace = true, features = ["std", "async-await"] }
 opensovd-core = { workspace = true }
 opensovd-models = { workspace = true }
 opensovd-providers = { workspace = true }
+serde_json = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt", "sync"] }
 
 [lints]

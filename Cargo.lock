@@ -1667,8 +1667,10 @@ dependencies = [
  "async-trait",
  "bytes",
  "chrono",
+ "futures",
  "futures-core",
  "indexmap",
+ "serde",
  "serde_json",
  "thiserror 2.0.21",
  "tokio",
@@ -1796,6 +1798,7 @@ dependencies = [
  "opensovd-core",
  "opensovd-models",
  "opensovd-providers",
+ "serde_json",
  "tokio",
 ]
 
