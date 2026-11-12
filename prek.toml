@@ -69,6 +69,14 @@ files = '(^|/)(\.github/(workflows/[^/]+|dependabot)\.ya?ml|action\.ya?ml)$'
 require_serial = true
 
 [[repos.hooks]]
+id = "actions-lock"
+name = "actions lockfile"
+language = "system"
+entry = "mise run lint:actions-lock"
+files = '^\.github/(workflows|actions)/'
+pass_filenames = false
+
+[[repos.hooks]]
 id = "rustfmt"
 name = "cargo fmt"
 language = "system"
