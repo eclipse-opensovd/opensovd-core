@@ -10,6 +10,7 @@ workspace_rust_library(
     crate_deps = [
         "axum",
         "aws-lc-rs",
+        "base64",
         "bytes",
         "futures",
         "http",
@@ -26,7 +27,6 @@ workspace_rust_library(
         "tower",
         "tower-http",
         "tracing",
-        "uuid",
     ],
     crate_features = [
         "auth",

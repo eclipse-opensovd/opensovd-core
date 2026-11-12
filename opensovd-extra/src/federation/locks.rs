@@ -10,32 +10,36 @@
 //! are locks of upstreams; when the server implements locking, its own lock of
 //! the entities it holds is one more.
 //!
-//! The server remembers which parts make up a lock, and nothing else: the
-//! upstreams hold them and decide who owns one, by the client's token. They are
-//! only asked on a client's request, with its token, and their locks expire by
-//! themselves, so a restart of the server leaves nothing locked for good.
+//! The id of a lock of the server names its parts, so the server keeps no
+//! state: the upstreams hold the locks and decide who owns one, by the client's
+//! token, and they are only asked on a client's request. A lock outlives a
+//! restart of the server, and the locks of the upstreams expire by themselves.
+//! A client owns one lock per upstream at most, as an upstream renews the lock
+//! of its owner, so the parts a client owns on all upstreams are its lock.
 //!
 //! A lock is acquired from the upstreams in their order, so two clients cannot
 //! each hold a part and wait for the other, and only if all of them grant it.
 //! An upstream without locks refuses, as the lock would not be global.
 //!
-//! `GET /locks` lists what the upstreams list, so locks acquired directly from
-//! an upstream, or before a restart of the server, show too, each as its
-//! upstream lists it and with its id, which the server does not know. They keep
-//! a client of this server from acquiring its lock.
+//! `GET /locks` lists the locks of all upstreams by what each lists to the
+//! client. Every lock that is no part of the client's lock, such as one acquired
+//! directly from an upstream or one of another client, is a lock of the server
+//! of a single part, so every id the list holds can be asked for. Such locks
+//! keep a client of this server from acquiring its lock.
 //!
 //! `break_lock` reaches the upstreams with the rest of the request, and each
-//! decides for itself. A part it broke may stay visible, as a CDA keeps it as
-//! a defunct lock until its client deletes it, so a lock that lost a part stays
-//! here too: the upstream's `lock-broken` is passed on, with what it tells about
-//! who broke it, and the client's `DELETE` reaches all parts. If an upstream
-//! refuses after another broke a part, nothing restores that part.
+//! decides for itself, as ISO 17978-3 has no way to ask first. A part it broke
+//! may stay visible, as a CDA keeps it as a defunct lock until its client
+//! deletes it, so a lock that lost a part stays here too: the upstream's
+//! `lock-broken` is passed on, with what it tells about who broke it, and the
+//! client's `DELETE` reaches all parts. If an upstream refuses after others
+//! granted `break_lock`, the locks those broke stay broken, as no upstream can
+//! restore one, and the refusal tells how many granted it.
 
-use std::collections::BTreeMap;
 use std::convert::Infallible;
-use std::sync::{RwLock, RwLockReadGuard};
-use std::time::{Duration, Instant};
 
+use base64::Engine;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use bytes::Bytes;
 use futures::future::join_all;
 use http::header::LOCATION;
@@ -53,12 +57,18 @@ use tower::Service as TowerService;
 
 use super::{
     AxumRequest, AxumResponse, Federation, LOCKS, Request, Response, Routes, TARGET, Upstream,
-    api_uri, empty_body, json_response, read_body, read_guard, server_uri, vendor_error,
-    write_guard,
+    api_uri, empty_body, json_response, read_body, server_uri, vendor_error,
 };
 
-/// The key of the seconds a lock lasts in a request (ISO 17978-3 Table 240).
-const LOCK_EXPIRATION: &str = "lock_expiration";
+/// The key that asks to break the locks of others (ISO 17978-3 Table 240).
+const BREAK_LOCK: &str = "break_lock";
+
+/// The parameter of a refused lock that tells how many upstreams granted
+/// `break_lock` before one refused, each of which may have broken a lock.
+const BREAK_LOCK_GRANTED: &str = "break_lock_granted";
+
+/// The longest id of a lock of the server that is decoded.
+const MAX_LOCK_ID_LEN: usize = 4096;
 
 /// What an id of an upstream's lock has to escape in a path: all but the
 /// unreserved characters of RFC 3986.
@@ -68,73 +78,29 @@ const NOT_UNRESERVED: &AsciiSet = &NON_ALPHANUMERIC
     .remove(b'_')
     .remove(b'~');
 
-/// A lock of the server: the ids the upstreams gave it, in their order, and
-/// when it expires, after which the upstreams have released it by themselves.
-#[derive(Clone)]
-struct Held {
-    ids: Vec<String>,
-    until: Instant,
+/// The id of the lock of the server that consists of `parts`, the ids of the
+/// locks of the upstreams in their order, without a part where it has none.
+fn lock_id(parts: &[Option<&str>]) -> String {
+    URL_SAFE_NO_PAD.encode(serde_json::to_vec(parts).unwrap_or_default())
 }
 
-impl Held {
-    /// Whether the lock has not expired at `now`.
-    fn is_live(&self, now: Instant) -> bool {
-        self.until > now
+/// The upstreams of the lock `id` with the ids of its parts, or nothing if
+/// `id` is no lock of the server with these upstreams.
+fn lock_parts<'a>(forward: &'a Federation, id: &str) -> Option<Vec<(&'a Upstream, String)>> {
+    if id.len() > MAX_LOCK_ID_LEN {
+        return None;
     }
-}
-
-/// What [`VehicleLocks`] holds, for the log.
-const VEHICLE_LOCKS: &str = "vehicle locks";
-
-/// The locks of the server by their id.
-#[derive(Default)]
-pub(super) struct VehicleLocks(RwLock<BTreeMap<String, Held>>);
-
-impl VehicleLocks {
-    /// The table for reading, expired locks included: see [`Held::is_live`].
-    fn table(&self) -> RwLockReadGuard<'_, BTreeMap<String, Held>> {
-        read_guard(&self.0, VEHICLE_LOCKS)
+    let json = URL_SAFE_NO_PAD.decode(id).ok()?;
+    let parts: Vec<Option<String>> = serde_json::from_slice(&json).ok()?;
+    if parts.len() != forward.lock_upstreams().count() {
+        return None;
     }
-
-    /// The lock `id`, unless it expired.
-    fn get(&self, id: &str) -> Option<Held> {
-        let now = Instant::now();
-        self.table()
-            .get(id)
-            .filter(|held| held.is_live(now))
-            .cloned()
-    }
-
-    /// The id of the lock that stands for `ids`. An upstream that renews a
-    /// lock its client already owns gives the same id, which is then the same
-    /// lock, and a lock that shares a part with it is over.
-    fn insert_or_renew(&self, ids: Vec<String>, until: Instant) -> String {
-        let mut locks = write_guard(&self.0, VEHICLE_LOCKS);
-        // Every new lock drops the expired ones, so the table holds no more
-        // than the locks acquired since the oldest that is still running.
-        let now = Instant::now();
-        locks.retain(|_, held| held.is_live(now));
-        if let Some((id, held)) = locks.iter_mut().find(|(_, held)| held.ids == ids) {
-            held.until = until;
-            return id.clone();
-        }
-        locks.retain(|_, held| !held.ids.iter().any(|id| ids.contains(id)));
-        let id = uuid::Uuid::new_v4().to_string();
-        locks.insert(id.clone(), Held { ids, until });
-        id
-    }
-
-    fn renew(&self, id: &str, until: Instant) {
-        let mut locks = write_guard(&self.0, VEHICLE_LOCKS);
-        if let Some(held) = locks.get_mut(id) {
-            held.until = until;
-        }
-    }
-
-    fn remove(&self, id: &str) {
-        let mut locks = write_guard(&self.0, VEHICLE_LOCKS);
-        locks.remove(id);
-    }
+    let parts: Vec<_> = forward
+        .lock_upstreams()
+        .zip(parts)
+        .filter_map(|(upstream, part)| Some((upstream, part?)))
+        .collect();
+    (!parts.is_empty()).then_some(parts)
 }
 
 /// Answers a request below `/locks`.
@@ -162,6 +128,7 @@ async fn acquire_vehicle_lock(forward: &Federation, request: Request) -> Respons
     let Ok(body) = read_body(body).await else {
         return too_large_error();
     };
+    let breaks = breaks_locks(&body);
 
     // The locks acquired so far, without those an upstream merely renewed: the
     // client had these before and keeps them if this fails.
@@ -175,15 +142,19 @@ async fn acquire_vehicle_lock(forward: &Federation, request: Request) -> Respons
             .await;
         let status = answer.status();
         if !status.is_success() {
+            let granted = acquired.len();
             release_acquired(&parts, acquired, query.as_deref()).await;
-            return upstream_error(answer, "the lock").await;
+            let error = upstream_generic_error(answer, "the lock").await;
+            return refused_lock(status, error, breaks.then_some(granted));
         }
         let Some((id, lock)) = parse_body::<Lock>(answer)
             .await
             .and_then(|lock| Some((lock.id.clone()?, lock)))
         else {
+            let granted = acquired.len();
             release_acquired(&parts, acquired, query.as_deref()).await;
-            return invalid_lock_error();
+            let (status, error) = invalid_lock();
+            return refused_lock(status, error, breaks.then_some(granted));
         };
         if status == StatusCode::CREATED {
             acquired.push((upstream.clone(), id.clone()));
@@ -195,9 +166,8 @@ async fn acquire_vehicle_lock(forward: &Federation, request: Request) -> Respons
         return invalid_lock_error();
     }
 
-    let id = forward
-        .vehicle_locks
-        .insert_or_renew(ids, requested_expiry(&body));
+    let parts_ids: Vec<_> = ids.iter().map(|id| Some(id.as_str())).collect();
+    let id = lock_id(&parts_ids);
     let mut lock = merge_parts(answers);
     lock.id = Some(id.clone());
     // A lock that only got renewed was the client's already, as its answer
@@ -213,10 +183,33 @@ async fn acquire_vehicle_lock(forward: &Federation, request: Request) -> Respons
     answer
 }
 
-/// The locks of all upstreams, by what each lists to the client: a lock of
-/// the server once, with its id, as all its parts show it, and every other lock
-/// of an upstream, such as one acquired from it directly or before a restart,
-/// as the upstream lists it. Only the upstreams know who owns a lock.
+/// The answer to a lock that `error` refused with `status`. If the request
+/// asked to break locks, `granted` upstreams granted that before, and each may
+/// have broken the lock of another client, which nothing restores: the client
+/// learns how many there were.
+fn refused_lock(status: StatusCode, mut error: GenericError, granted: Option<usize>) -> Response {
+    if let Some(granted) = granted.filter(|granted| *granted > 0) {
+        error
+            .parameters
+            .get_or_insert_default()
+            .insert(BREAK_LOCK_GRANTED.to_owned(), Value::from(granted));
+    }
+    json_response(status, &error)
+}
+
+/// Whether the request `body` asks to break the locks of others. An upstream
+/// judges its value, so only `true` counts here, as it does for a CDA.
+fn breaks_locks(body: &Bytes) -> bool {
+    let fields: Map<String, Value> = serde_json::from_slice(body).unwrap_or_default();
+    fields
+        .iter()
+        .any(|(name, value)| name.eq_ignore_ascii_case(BREAK_LOCK) && value.as_bool() == Some(true))
+}
+
+/// The locks of all upstreams, by what each lists to the client: the parts
+/// the client owns on all upstreams once, as its lock, and every other lock of
+/// an upstream, such as one acquired from it directly or one of another client,
+/// as a lock of a single part. Only the upstreams know who owns a lock.
 async fn list_locks(forward: &Federation, request: Request) -> Response {
     let (parts, _) = request.into_parts();
     let uri = api_uri(&parts.extensions);
@@ -239,39 +232,37 @@ async fn list_locks(forward: &Federation, request: Request) -> Response {
         return invalid_lock_error();
     }
 
-    let table = forward.vehicle_locks.table();
-    let now = Instant::now();
-    let known: Vec<_> = table.iter().filter(|(_, held)| held.is_live(now)).collect();
     let mut items = Vec::new();
-    for &(id, held) in &known {
-        let seen: Option<Vec<Lock>> = lists
+    let own = own_lock(&lists);
+    if let Some(own) = &own {
+        let seen = lists
             .iter()
-            .zip(&held.ids)
-            .map(|(list, part)| {
-                list.iter()
-                    .find(|lock| lock.id.as_ref() == Some(part))
-                    .cloned()
-            })
+            .zip(own)
+            .filter_map(|(list, part)| list.iter().find(|lock| lock.id.as_deref() == Some(part)))
+            .cloned()
             .collect();
-        // A part one upstream does not list leaves the lock out, but the
-        // lock stays known: what a client sees may not be all there is, and
-        // details and the parts' expiry tell when it is over.
-        let Some(seen) = seen else {
-            continue;
-        };
         let mut item = merge_parts(seen);
-        item.id = Some(id.clone());
+        let own: Vec<_> = own.iter().map(|part| Some(part.as_str())).collect();
+        item.id = Some(lock_id(&own));
         items.push(item);
     }
+    let count = lists.len();
     for (index, list) in lists.into_iter().enumerate() {
-        let of_the_server = |lock: &Lock| {
-            known.iter().any(|(_, held)| {
-                held.ids
-                    .get(index)
-                    .is_some_and(|part| lock.id.as_ref() == Some(part))
-            })
+        let part_of_own = |lock: &Lock| {
+            own.as_ref()
+                .and_then(|own| own.get(index))
+                .is_some_and(|part| lock.id.as_ref() == Some(part))
         };
-        items.extend(list.into_iter().filter(|lock| !of_the_server(lock)));
+        for mut lock in list.into_iter().filter(|lock| !part_of_own(lock)) {
+            // A lock without an id cannot be asked for, and stays as it is.
+            if let Some(part) = lock.id.take() {
+                let single: Vec<_> = (0..count)
+                    .map(|at| (at == index).then_some(part.as_str()))
+                    .collect();
+                lock.id = Some(lock_id(&single));
+            }
+            items.push(lock);
+        }
     }
     let list = Collection {
         items,
@@ -280,22 +271,40 @@ async fn list_locks(forward: &Federation, request: Request) -> Response {
     json_response(StatusCode::OK, &list)
 }
 
+/// The ids of the parts of the client's lock in `lists`, one owned lock on
+/// each upstream, or nothing if an upstream lists none or more than one.
+fn own_lock(lists: &[Vec<Lock>]) -> Option<Vec<String>> {
+    lists
+        .iter()
+        .map(|list| {
+            let mut owned = list.iter().filter(|lock| lock.owned == Some(true));
+            match (owned.next(), owned.next()) {
+                (Some(lock), None) => lock.id.clone(),
+                _ => None,
+            }
+        })
+        .collect()
+}
+
 /// The lock as all upstreams see it. If one has lost its part, the lock does
-/// not hold anymore, whatever the others say.
+/// not hold anymore, whatever the others say, and if all have, it is over.
 async fn lock_details(forward: &Federation, request: Request, id: &str) -> Response {
-    let Some(held) = forward.vehicle_locks.get(id) else {
-        return not_found_error(api_uri(request.extensions()).path());
-    };
+    let path = api_uri(request.extensions()).path().to_owned();
     let query = request_query(&request);
+    let Some(targets) = part_uris(forward, id, query.as_deref()) else {
+        return not_found_error(&path);
+    };
     let (parts, _) = request.into_parts();
-    let targets = part_uris(forward, &held, query.as_deref());
     let answers = join_all(targets.iter().map(|(upstream, uri)| {
         upstream.request_with_client_token(&parts, Method::GET, uri.clone())
     }))
     .await;
 
+    if all_gone(&answers) {
+        return not_found_error(&path);
+    }
     if answers.iter().any(|a| a.status() == StatusCode::NOT_FOUND) {
-        return end_broken_lock(forward, &parts, id, answers, targets).await;
+        return end_broken_lock(&parts, id, answers, targets).await;
     }
     match read_merged_lock(answers, id).await {
         // ISO 17978-3 Table 248 has no id: the path names the lock.
@@ -305,16 +314,15 @@ async fn lock_details(forward: &Federation, request: Request, id: &str) -> Respo
 }
 
 async fn modify_expiration(forward: &Federation, request: Request, id: &str) -> Response {
-    let Some(held) = forward.vehicle_locks.get(id) else {
-        return not_found_error(api_uri(request.extensions()).path());
-    };
     let path = api_uri(request.extensions()).path().to_owned();
     let query = request_query(&request);
+    let Some(targets) = part_uris(forward, id, query.as_deref()) else {
+        return not_found_error(&path);
+    };
     let (parts, body) = request.into_parts();
     let Ok(body) = read_body(body).await else {
         return too_large_error();
     };
-    let targets = part_uris(forward, &held, query.as_deref());
     let answers = join_all(targets.iter().map(|(upstream, uri)| {
         upstream.send_to(
             parts.clone(),
@@ -324,11 +332,11 @@ async fn modify_expiration(forward: &Federation, request: Request, id: &str) -> 
     }))
     .await;
 
-    if answers.iter().any(|a| a.status() == StatusCode::NOT_FOUND) {
-        return end_broken_lock(forward, &parts, id, answers, targets).await;
+    if all_gone(&answers) {
+        return not_found_error(&path);
     }
-    if answers.iter().all(|a| a.status().is_success()) {
-        forward.vehicle_locks.renew(id, requested_expiry(&body));
+    if answers.iter().any(|a| a.status() == StatusCode::NOT_FOUND) {
+        return end_broken_lock(&parts, id, answers, targets).await;
     }
     match first_failure_or_first(answers) {
         Some(answer) => gateway_answer(answer, id).await,
@@ -336,16 +344,15 @@ async fn modify_expiration(forward: &Federation, request: Request, id: &str) -> 
     }
 }
 
-/// Releases all parts. One that is gone already is released, and one that the
-/// upstream refuses to release keeps the lock, so that it stays listed.
+/// Releases all parts. One that is gone already is released, and the first
+/// refusal of an upstream is the answer.
 async fn release_lock(forward: &Federation, request: Request, id: &str) -> Response {
-    let Some(held) = forward.vehicle_locks.get(id) else {
-        return not_found_error(api_uri(request.extensions()).path());
-    };
     let path = api_uri(request.extensions()).path().to_owned();
     let query = request_query(&request);
+    let Some(targets) = part_uris(forward, id, query.as_deref()) else {
+        return not_found_error(&path);
+    };
     let (parts, _) = request.into_parts();
-    let targets = part_uris(forward, &held, query.as_deref());
     let answers = join_all(
         targets
             .iter()
@@ -353,12 +360,6 @@ async fn release_lock(forward: &Federation, request: Request, id: &str) -> Respo
     )
     .await;
 
-    let held_on = |answer: &Response| {
-        !answer.status().is_success() && answer.status() != StatusCode::NOT_FOUND
-    };
-    if !answers.iter().any(held_on) {
-        forward.vehicle_locks.remove(id);
-    }
     let released: Vec<_> = answers
         .into_iter()
         .filter(|answer| answer.status() != StatusCode::NOT_FOUND)
@@ -368,6 +369,14 @@ async fn release_lock(forward: &Federation, request: Request, id: &str) -> Respo
         Some(answer) => gateway_answer(answer, id).await,
         None => not_found_error(&path),
     }
+}
+
+/// Whether all parts of a lock are gone, by the `answers` about them: the lock
+/// is over, as after it expired.
+fn all_gone(answers: &[Response]) -> bool {
+    answers
+        .iter()
+        .all(|answer| answer.status() == StatusCode::NOT_FOUND)
 }
 
 /// The first answer that is no success, or else the first answer.
@@ -382,13 +391,11 @@ fn first_failure_or_first(answers: Vec<Response>) -> Option<Response> {
 /// Answers that the lock `id` is over, as `answers` show: `targets` that still
 /// hold a part release it.
 async fn end_broken_lock(
-    forward: &Federation,
     parts: &Parts,
     id: &str,
     answers: Vec<Response>,
-    targets: Vec<(Upstream, Uri)>,
+    targets: Vec<(&Upstream, Uri)>,
 ) -> Response {
-    forward.vehicle_locks.remove(id);
     let left = targets
         .into_iter()
         .zip(answers)
@@ -431,12 +438,16 @@ async fn release_acquired(parts: &Parts, acquired: Vec<(Upstream, String)>, quer
     .await;
 }
 
-/// The upstreams of `held` with the URIs of their parts.
-fn part_uris(forward: &Federation, held: &Held, query: Option<&str>) -> Vec<(Upstream, Uri)> {
-    forward
-        .lock_upstreams()
-        .zip(&held.ids)
-        .filter_map(|(upstream, id)| Some((upstream.clone(), upstream_lock_uri(id, query)?)))
+/// The upstreams of the lock `id` with the URIs of their parts, or nothing if
+/// `id` is no lock of the server.
+fn part_uris<'a>(
+    forward: &'a Federation,
+    id: &str,
+    query: Option<&str>,
+) -> Option<Vec<(&'a Upstream, Uri)>> {
+    lock_parts(forward, id)?
+        .into_iter()
+        .map(|(upstream, part)| Some((upstream, upstream_lock_uri(&part, query)?)))
         .collect()
 }
 
@@ -463,10 +474,14 @@ fn not_found_error(path: &str) -> Response {
 }
 
 fn invalid_lock_error() -> Response {
-    vendor_error(
+    let (status, error) = invalid_lock();
+    json_response(status, &error)
+}
+
+fn invalid_lock() -> (StatusCode, GenericError) {
+    (
         StatusCode::BAD_GATEWAY,
-        "upstream-invalid-lock",
-        "invalid lock of an upstream",
+        GenericError::with_vendor_code("upstream-invalid-lock", "invalid lock of an upstream"),
     )
 }
 
@@ -476,20 +491,6 @@ fn too_large_error() -> Response {
         "request-too-large",
         "The request is too large",
     )
-}
-
-/// When the lock of the request `body` expires. Only `lock_expiration` counts
-/// here and the upstreams judge the rest, which may treat keys and values more
-/// freely than a model: a CDA ignores the case of keys.
-fn requested_expiry(body: &Bytes) -> Instant {
-    let fields: Map<String, Value> = serde_json::from_slice(body).unwrap_or_default();
-    let seconds = fields
-        .iter()
-        .find(|(name, _)| name.eq_ignore_ascii_case(LOCK_EXPIRATION))
-        .and_then(|(_, seconds)| seconds.as_u64())
-        .unwrap_or_default();
-    let now = Instant::now();
-    now.checked_add(Duration::from_secs(seconds)).unwrap_or(now)
 }
 
 /// The merged lock `id` of the `answers` of all its parts, or the server's
@@ -536,7 +537,13 @@ async fn gateway_answer(answer: Response, id: &str) -> Response {
 /// lock.
 async fn upstream_error(answer: Response, about: &str) -> Response {
     let status = answer.status();
-    let error = parse_body::<GenericError>(answer).await.map_or_else(
+    json_response(status, &upstream_generic_error(answer, about).await)
+}
+
+/// The server's error for an upstream's `answer` that refused `about`: see
+/// [`upstream_error`].
+async fn upstream_generic_error(answer: Response, about: &str) -> GenericError {
+    parse_body::<GenericError>(answer).await.map_or_else(
         || GenericError::with_vendor_code("upstream-error", format!("An upstream refused {about}")),
         |error| GenericError {
             message: match error.error_code {
@@ -546,8 +553,7 @@ async fn upstream_error(answer: Response, about: &str) -> Response {
             translation_id: None,
             ..error
         },
-    );
-    json_response(status, &error)
+    )
 }
 
 /// What the upstreams say about the parts of one lock: it expires with the

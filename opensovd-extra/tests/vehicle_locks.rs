@@ -25,7 +25,9 @@ use tokio::sync::oneshot;
 mod common;
 
 /// An upstream with locks, each with its own id and owned by the token that
-/// acquired it. It locks one client at a time, and renews for the owner.
+/// acquired it. It locks one client at a time, renews for the owner, and
+/// breaks the lock of another client for `break_lock` as a CDA does, unless it
+/// refuses to.
 #[derive(Clone)]
 struct Backend {
     name: &'static str,
@@ -34,6 +36,8 @@ struct Backend {
     /// Locks another client broke, by their id, which their owner has to delete.
     defunct: Arc<Mutex<HashMap<String, String>>>,
     refuse: Arc<Mutex<Option<u16>>>,
+    refuse_breaks: Arc<Mutex<bool>>,
+    acquired: Arc<Mutex<usize>>,
     seen: Arc<Mutex<Vec<String>>>,
 }
 
@@ -45,7 +49,24 @@ impl Backend {
             locks: Arc::default(),
             defunct: Arc::default(),
             refuse: Arc::default(),
+            refuse_breaks: Arc::default(),
+            acquired: Arc::default(),
             seen: Arc::default(),
+        }
+    }
+
+    /// Refuses `break_lock` as a policy of this upstream does.
+    fn refuse_breaks(&self) {
+        *self.refuse_breaks.lock().unwrap() = true;
+    }
+
+    /// The id of a new lock: `{name}-lock`, and a number after the first.
+    fn next_id(&self) -> String {
+        let mut acquired = self.acquired.lock().unwrap();
+        *acquired = acquired.saturating_add(1);
+        match *acquired {
+            1 => format!("{}-lock", self.name),
+            n => format!("{}-lock-{n}", self.name),
         }
     }
 
@@ -89,7 +110,7 @@ impl Backend {
         self.seen.lock().unwrap().clone()
     }
 
-    fn answer(&self, method: &Method, path: &str, token: &str) -> (u16, Value) {
+    fn answer(&self, method: &Method, path: &str, token: &str, body: &[u8]) -> (u16, Value) {
         if let Some(status) = *self.refuse.lock().unwrap() {
             return (status, json!({}));
         }
@@ -144,18 +165,7 @@ impl Backend {
                     json!({ "items": active.chain(broken).collect::<Vec<_>>() }),
                 )
             }
-            ("POST", None) => {
-                if let Some((id, owner)) = locks.iter().next() {
-                    return if owner == token {
-                        (200, json!({ "id": id, "owned": true }))
-                    } else {
-                        (409, json!({}))
-                    };
-                }
-                let id = format!("{}-lock", self.name);
-                locks.insert(id.clone(), token.to_owned());
-                (201, json!({ "id": id, "owned": true }))
-            }
+            ("POST", None) => self.acquire(&mut locks, &mut defunct, token, body),
             ("GET", Some(id)) => match locks.get(id) {
                 Some(owner) => (
                     200,
@@ -181,6 +191,40 @@ impl Backend {
         }
     }
 
+    /// Acquires a lock for `token`, renews the one it owns, or breaks the lock
+    /// of another client for `break_lock`.
+    fn acquire(
+        &self,
+        locks: &mut HashMap<String, String>,
+        defunct: &mut HashMap<String, String>,
+        token: &str,
+        body: &[u8],
+    ) -> (u16, Value) {
+        if let Some((id, owner)) = locks.iter().next() {
+            if owner == token {
+                return (200, json!({ "id": id, "owned": true }));
+            }
+            let request: Value = serde_json::from_slice(body).unwrap_or_default();
+            if request.get("break_lock") != Some(&Value::Bool(true)) {
+                return (409, json!({}));
+            }
+            if *self.refuse_breaks.lock().unwrap() {
+                return (
+                    423,
+                    json!({
+                        "error_code": "vendor-specific",
+                        "vendor_code": "lock-priority-denied",
+                        "message": "Lock preemption denied",
+                    }),
+                );
+            }
+            defunct.extend(locks.drain());
+        }
+        let id = self.next_id();
+        locks.insert(id.clone(), token.to_owned());
+        (201, json!({ "id": id, "owned": true }))
+    }
+
     fn upstream(&self) -> Upstream {
         let backend = self.clone();
         Upstream::new(tower::service_fn(
@@ -197,7 +241,7 @@ impl Backend {
                     let body = request.into_body().collect().await.unwrap().to_bytes();
                     let seen = format!("{method} {path} {}", String::from_utf8_lossy(&body));
                     backend.seen.lock().unwrap().push(seen.trim().to_owned());
-                    let (status, answer) = backend.answer(&method, &path, &token);
+                    let (status, answer) = backend.answer(&method, &path, &token, &body);
                     Ok::<_, Infallible>(
                         Response::builder()
                             .status(status)
@@ -293,9 +337,24 @@ fn time(text: &str) -> DateTime {
 }
 
 async fn acquire(server: &TestServer) -> String {
-    let (status, json) = send(server, "x", Method::POST, "/locks", LOCK).await;
+    acquire_as(server, "x").await
+}
+
+async fn acquire_as(server: &TestServer, token: &str) -> String {
+    let (status, json) = send(server, token, Method::POST, "/locks", LOCK).await;
     assert_eq!(status, 201);
     lock(json).id.unwrap()
+}
+
+/// Asserts that the lock `id` of the server is a lock of `target` alone: its
+/// details are asked of `target`, and of none of the `others`.
+async fn assert_part_of(server: &TestServer, id: &str, target: &Backend, others: &[&Backend]) {
+    let before: Vec<_> = others.iter().map(|other| other.seen().len()).collect();
+    let (status, _) = send(server, "x", Method::GET, &format!("/locks/{id}"), b"").await;
+    assert_eq!(status, 200);
+    assert!(target.seen().last().unwrap().starts_with("GET /locks/"));
+    let after: Vec<_> = others.iter().map(|other| other.seen().len()).collect();
+    assert_eq!(after, before);
 }
 
 #[rstest]
@@ -469,16 +528,20 @@ async fn a_lost_part_breaks_the_lock() {
 #[rstest]
 #[timeout(std::time::Duration::from_secs(10))]
 #[tokio::test]
-async fn a_lock_whose_first_part_is_gone_is_not_listed() {
+async fn a_lock_whose_first_part_is_gone_lists_what_is_left() {
     let (a, b) = pair();
     let server = start(&[&a, &b]).await;
-    acquire(&server).await;
+    let id = acquire(&server).await;
     a.lose_locks();
 
     let (status, json) = send(&server, "x", Method::GET, "/locks", b"").await;
 
     assert_eq!(status, 200);
-    assert_eq!(locks(json).len(), 0);
+    let items = locks(json);
+    assert_eq!(items.len(), 1);
+    let left = items.first().unwrap().id.clone().unwrap();
+    assert_ne!(left, id);
+    assert_part_of(&server, &left, &b, &[&a]).await;
 }
 
 #[rstest]
@@ -537,6 +600,28 @@ async fn an_unknown_lock_is_not_found(#[case] method: Method) {
 
     assert_eq!(status, 404);
     assert_eq!(a.seen(), Vec::<String>::new());
+}
+
+/// An id is a lock of the server only if it names a part on each of its
+/// upstreams, or none: anything else reaches no upstream.
+#[rstest]
+#[case::not_encoded("unknown")]
+#[case::too_few_parts("WyJhLWxvY2siXQ")]
+#[case::too_many_parts("WyJhLWxvY2siLCJiLWxvY2siLCJjIl0")]
+#[case::no_part("W251bGwsbnVsbF0")]
+#[case::no_list("eyJhIjoxfQ")]
+#[case::too_long(&"A".repeat(5000))]
+#[timeout(std::time::Duration::from_secs(10))]
+#[tokio::test]
+async fn an_id_that_names_no_parts_is_not_found(#[case] id: &str) {
+    let (a, b) = pair();
+    let server = start(&[&a, &b]).await;
+
+    let (status, _) = send(&server, "x", Method::GET, &format!("/locks/{id}"), b"").await;
+
+    assert_eq!(status, 404);
+    assert_eq!(a.seen(), Vec::<String>::new());
+    assert_eq!(b.seen(), Vec::<String>::new());
 }
 
 #[rstest]
@@ -615,16 +700,20 @@ async fn the_list_shows_a_part_only_a_later_upstream_broke() {
 #[rstest]
 #[timeout(std::time::Duration::from_secs(10))]
 #[tokio::test]
-async fn a_lock_whose_later_part_is_gone_is_not_listed() {
+async fn a_lock_whose_later_part_is_gone_lists_what_is_left() {
     let (a, b) = pair();
     let server = start(&[&a, &b]).await;
-    acquire(&server).await;
+    let id = acquire(&server).await;
     b.lose_locks();
 
     let (status, json) = send(&server, "x", Method::GET, "/locks", b"").await;
 
     assert_eq!(status, 200);
-    assert_eq!(locks(json).len(), 0);
+    let items = locks(json);
+    assert_eq!(items.len(), 1);
+    let left = items.first().unwrap().id.clone().unwrap();
+    assert_ne!(left, id);
+    assert_part_of(&server, &left, &a, &[&b]).await;
 }
 
 /// A broken part stays with the lock until the client that lost it deletes it,
@@ -687,8 +776,8 @@ async fn a_lock_lasts_whatever_else_its_request_holds(#[case] body: &'static [u8
     assert_eq!(locks(json).len(), 1);
 }
 
-/// A lock the server does not know, such as one acquired from an upstream
-/// directly, is listed as the upstream lists it.
+/// A lock acquired from an upstream directly is a lock of the server of a
+/// single part, which a client can ask for and its owner release.
 #[rstest]
 #[timeout(std::time::Duration::from_secs(10))]
 #[tokio::test]
@@ -703,11 +792,20 @@ async fn the_list_shows_a_lock_acquired_from_an_upstream_directly() {
     let items = locks(json);
     assert_eq!(items.len(), 1);
     let lock = items.first().unwrap();
-    assert_eq!(lock.id, Some(direct));
+    let id = lock.id.clone().unwrap();
+    assert_ne!(id, direct);
     assert_eq!(lock.owned, Some(false));
+    assert_part_of(&server, &id, &b, &[&a]).await;
 
     let (status, _) = send(&server, "x", Method::POST, "/locks", LOCK).await;
     assert_eq!(status, 409);
+
+    let path = format!("/locks/{id}");
+    let (status, _) = send(&server, "x", Method::DELETE, &path, b"").await;
+    assert_eq!(status, 403);
+    let (status, _) = send(&server, "z", Method::DELETE, &path, b"").await;
+    assert_eq!(status, 200);
+    assert_eq!(b.held(), 0);
 }
 
 /// Every answer about a lock is the server's: no upstream's lock shows.
@@ -756,21 +854,176 @@ async fn the_server_names_its_own_lock_only() {
     }
 }
 
-/// A lock of an upstream whose lock of the server expired is the upstream's
-/// alone, and is listed as such.
+/// The parts a client owns on all upstreams are its lock, whatever the server
+/// remembers: the lock lasts as long as its parts do.
 #[rstest]
 #[timeout(std::time::Duration::from_secs(10))]
 #[tokio::test]
-async fn an_upstream_lock_outliving_the_lock_of_the_server_is_listed() {
+async fn the_parts_a_client_owns_on_all_upstreams_are_its_lock() {
     let (a, b) = pair();
     let server = start(&[&a, &b]).await;
     let body = br#"{"lock_expiration":0}"#;
-    let (status, _) = send(&server, "x", Method::POST, "/locks", body).await;
+    let (status, json) = send(&server, "x", Method::POST, "/locks", body).await;
     assert_eq!(status, 201);
+    let id = lock(json).id.unwrap();
 
     let (_, json) = send(&server, "x", Method::GET, "/locks", b"").await;
 
-    let mut ids: Vec<_> = locks(json).into_iter().filter_map(|lock| lock.id).collect();
-    ids.sort();
-    assert_eq!(ids, ["a-lock", "b-lock"]);
+    let ids: Vec<_> = locks(json).into_iter().filter_map(|lock| lock.id).collect();
+    assert_eq!(ids, [id.as_str()]);
+    let (status, _) = send(&server, "x", Method::GET, &format!("/locks/{id}"), b"").await;
+    assert_eq!(status, 200);
+}
+
+const BREAK: &[u8] = br#"{"lock_expiration":60,"break_lock":true}"#;
+
+/// X holds the vehicle, Y breaks it: `a` grants `break_lock` and breaks X's
+/// part, `b` refuses. Returns X's lock and Y's answer.
+async fn break_partly(server: &TestServer, a: &Backend, b: &Backend) -> (String, u16, Value) {
+    let id = acquire_as(server, "x").await;
+    b.refuse_breaks();
+    let (status, json) = send(server, "y", Method::POST, "/locks", BREAK).await;
+    assert_eq!(
+        a.seen().get(1).unwrap(),
+        &format!("POST /locks {}", std::str::from_utf8(BREAK).unwrap())
+    );
+    (id, status, json)
+}
+
+/// A refusal after an upstream granted `break_lock` keeps the refusing
+/// upstream's status and error, and tells how many upstreams granted it, as
+/// each may have broken a lock that nothing restores.
+#[rstest]
+#[timeout(std::time::Duration::from_secs(10))]
+#[tokio::test]
+async fn a_refused_break_tells_how_many_upstreams_granted_it() {
+    let (a, b) = pair();
+    let server = start(&[&a, &b]).await;
+
+    let (_, status, json) = break_partly(&server, &a, &b).await;
+
+    assert_eq!(status, 423);
+    let error: GenericError = serde_json::from_value(json).unwrap();
+    assert!(matches!(error.error_code, ErrorCode::VendorSpecific));
+    assert_eq!(error.vendor_code.as_deref(), Some("lock-priority-denied"));
+    assert_eq!(error.message, "An upstream refused the lock");
+    let parameters = error.parameters.unwrap();
+    assert_eq!(parameters.get("break_lock_granted"), Some(&Value::from(1)));
+    // X's part on `a` is broken for good, Y's part there is released, and X
+    // still holds `b`.
+    assert_eq!((a.defunct(), a.held()), (1, 0));
+    assert_eq!((b.defunct(), b.held()), (0, 1));
+}
+
+/// Without a grant before the refusal nothing was broken, and the refusal is
+/// the upstream's as it is.
+#[rstest]
+#[timeout(std::time::Duration::from_secs(10))]
+#[tokio::test]
+async fn a_break_refused_first_breaks_nothing() {
+    let (a, b) = pair();
+    let server = start(&[&a, &b]).await;
+    acquire_as(&server, "x").await;
+    a.refuse_breaks();
+
+    let (status, json) = send(&server, "y", Method::POST, "/locks", BREAK).await;
+
+    assert_eq!(status, 423);
+    let error: GenericError = serde_json::from_value(json).unwrap();
+    assert_eq!(error.parameters, None);
+    assert_eq!(b.seen().len(), 1);
+    assert_eq!((a.defunct(), b.defunct()), (0, 0));
+    assert_eq!((a.held(), b.held()), (1, 1));
+}
+
+/// A refusal that does not follow `break_lock` says nothing about breaking,
+/// whatever the upstreams before it granted.
+#[rstest]
+#[timeout(std::time::Duration::from_secs(10))]
+#[tokio::test]
+async fn a_refusal_without_break_lock_tells_nothing_about_breaking() {
+    let (a, b) = pair();
+    b.refuse(409);
+    let server = start(&[&a, &b]).await;
+
+    let (status, json) = send(&server, "x", Method::POST, "/locks", LOCK).await;
+
+    assert_eq!(status, 409);
+    let error: GenericError = serde_json::from_value(json).unwrap();
+    assert_eq!(error.parameters, None);
+}
+
+/// The client whose lock was partly broken learns it from the server alone,
+/// as it cannot reach the upstreams, and releases what is left by its `DELETE`.
+/// Then the client that broke it gets the vehicle without `break_lock`.
+#[rstest]
+#[timeout(std::time::Duration::from_secs(10))]
+#[tokio::test]
+async fn both_clients_recover_from_a_partial_break_through_the_server() {
+    let (a, b) = pair();
+    let server = start(&[&a, &b]).await;
+    let (id, _, _) = break_partly(&server, &a, &b).await;
+    let path = format!("/locks/{id}");
+
+    // X: the details show who broke it, a modification fails with lock-broken
+    let (status, json) = send(&server, "x", Method::GET, &path, b"").await;
+    assert_eq!(status, 200);
+    assert_eq!(
+        lock(json).extensions.get("x-sovd2uds-broken-by"),
+        Some(&Value::from("priority-app"))
+    );
+    let (status, json) = send(&server, "x", Method::PUT, &path, LOCK).await;
+    assert_eq!(status, 409);
+    let error: GenericError = serde_json::from_value(json).unwrap();
+    assert!(matches!(error.error_code, ErrorCode::LockBroken));
+    let (status, json) = send(&server, "x", Method::GET, "/locks", b"").await;
+    assert_eq!(status, 200);
+    let items = locks(json);
+    assert_eq!(items.len(), 1);
+    let listed = items.first().unwrap();
+    assert_eq!(listed.id.as_ref(), Some(&id));
+    assert_eq!(
+        listed.extensions.get("x-sovd2uds-broken-by"),
+        Some(&Value::from("priority-app"))
+    );
+
+    // Y: retrying the break fails the same way, as X still holds `b`
+    let (status, _) = send(&server, "y", Method::POST, "/locks", BREAK).await;
+    assert_eq!(status, 423);
+
+    // X: its DELETE clears the broken part and releases the rest
+    let (status, _) = send(&server, "x", Method::DELETE, &path, b"").await;
+    assert_eq!(status, 200);
+    assert_eq!((a.defunct(), a.held(), b.held()), (0, 0, 0));
+
+    // Y: the vehicle is free, no break needed
+    let (status, _) = send(&server, "y", Method::POST, "/locks", LOCK).await;
+    assert_eq!(status, 201);
+    assert_eq!((a.defunct(), b.defunct()), (0, 0));
+}
+
+/// The id names the parts, so a restart of the server loses no lock.
+#[rstest]
+#[timeout(std::time::Duration::from_secs(10))]
+#[tokio::test]
+async fn a_lock_outlives_a_restart_of_the_server() {
+    let (a, b) = pair();
+    let id = acquire(&start(&[&a, &b]).await).await;
+
+    let server = start(&[&a, &b]).await;
+
+    let path = format!("/locks/{id}");
+    let (status, _) = send(&server, "x", Method::GET, &path, b"").await;
+    assert_eq!(status, 200);
+    let (_, json) = send(&server, "x", Method::GET, "/locks", b"").await;
+    let ids: Vec<_> = locks(json).into_iter().filter_map(|lock| lock.id).collect();
+    assert_eq!(ids, [id.as_str()]);
+    let (status, json) = send(&server, "x", Method::POST, "/locks", LOCK).await;
+    assert_eq!(status, 200);
+    assert_eq!(lock(json).id, Some(id));
+    let (status, _) = send(&server, "x", Method::PUT, &path, LOCK).await;
+    assert_eq!(status, 200);
+    let (status, _) = send(&server, "x", Method::DELETE, &path, b"").await;
+    assert_eq!(status, 200);
+    assert_eq!((a.held(), b.held()), (0, 0));
 }

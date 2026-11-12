@@ -62,8 +62,6 @@ use serde_json::{Map, Value};
 use tower::util::BoxCloneSyncService;
 use tower::{Layer, Service as TowerService, ServiceExt};
 
-use self::locks::VehicleLocks;
-
 mod locks;
 
 /// The log target of forwarding.
@@ -406,8 +404,6 @@ pub struct Federation {
     /// `components/ecu`. It saves asking again, and is no source of truth: an
     /// entry that turns out wrong is dropped.
     owners: RwLock<HashMap<String, Upstream>>,
-    /// The locks of the server.
-    vehicle_locks: VehicleLocks,
 }
 
 /// Where a request goes.
@@ -451,7 +447,6 @@ impl Federation {
                 scheme: "http".to_owned(),
                 base: String::new(),
                 owners: RwLock::default(),
-                vehicle_locks: VehicleLocks::default(),
             }),
         }
     }
