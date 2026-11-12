@@ -53,6 +53,13 @@ types = ["shell"]
 require_serial = true
 
 [[repos.hooks]]
+id = "typos"
+name = "typos"
+language = "system"
+entry = "mise run lint:spelling"
+types = ["text"]
+
+[[repos.hooks]]
 id = "gitleaks"
 name = "gitleaks"
 language = "system"
@@ -67,6 +74,15 @@ entry = "mise run lint:actions-security"
 types = ["yaml"]
 files = '(^|/)(\.github/(workflows/[^/]+|dependabot)\.ya?ml|action\.ya?ml)$'
 require_serial = true
+
+[[repos.hooks]]
+id = "jactionlint"
+name = "jactionlint"
+language = "system"
+entry = "mise run lint:actions"
+types = ["yaml"]
+files = '(^|/)(\.github/(workflows/[^/]+|dependabot|jactionlint)\.ya?ml|action\.ya?ml)$'
+pass_filenames = false
 
 [[repos.hooks]]
 id = "actions-lock"
