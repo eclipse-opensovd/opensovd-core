@@ -11,6 +11,10 @@ on:
   pull_request_target: # zizmor: ignore[dangerous-triggers]
     types: [opened]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.issue.number }}
+  cancel-in-progress: true
+
 jobs:
   first-interaction:
     runs-on: ubuntu-24.04
@@ -19,7 +23,7 @@ jobs:
       pull-requests: write
     steps:
       - uses: actions/first-interaction@1c4688942c71f71d4f5502a26ea67c331730fa4d # v3.1.0
-        if: contains(github.actor, '[bot]') == false
+        if: (github.event.pull_request.user.type || github.event.issue.user.type) != 'Bot'
         with:
           issue_message: |
             Hi @${{ github.event.issue.user.login }},
