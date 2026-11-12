@@ -230,6 +230,35 @@ checksum = "sha256:4cdd9fc2292bf8038462db2873d8f5a67135486c98cb975d8bf373eb29315
 url = "https://github.com/convco/convco/releases/download/v0.6.3/convco-windows.zip"
 url_api = "https://api.github.com/repos/convco/convco/releases/assets/365579722"
 
+[[tools."github:github/gh-actions-lock"]]
+version = "0.4.1"
+backend = "github:github/gh-actions-lock"
+specifiers = ["0.4.1"]
+
+[tools."github:github/gh-actions-lock"."platforms.linux-arm64"]
+checksum = "sha256:aee61c993da36a5f09be2c77e6e4a1a22542a1b30ded4996bf8301c15dcf2b39"
+url = "https://github.com/github/gh-actions-lock/releases/download/v0.4.1/linux-arm64"
+url_api = "https://api.github.com/repos/github/gh-actions-lock/releases/assets/702813294"
+provenance = "github-attestations"
+
+[tools."github:github/gh-actions-lock"."platforms.linux-x64"]
+checksum = "sha256:39deb2fe714dbf74b073d8245fc7f3d50cd0eee18d5c0900e9e849ae933ae17e"
+url = "https://github.com/github/gh-actions-lock/releases/download/v0.4.1/linux-amd64"
+url_api = "https://api.github.com/repos/github/gh-actions-lock/releases/assets/702813259"
+provenance = "github-attestations"
+
+[tools."github:github/gh-actions-lock"."platforms.macos-arm64"]
+checksum = "sha256:f205ea5dbbda67165e08aab1fb6395290ca62f0a038bf27d4b684abd0816635c"
+url = "https://github.com/github/gh-actions-lock/releases/download/v0.4.1/darwin-arm64"
+url_api = "https://api.github.com/repos/github/gh-actions-lock/releases/assets/702813195"
+provenance = "github-attestations"
+
+[tools."github:github/gh-actions-lock"."platforms.windows-x64"]
+checksum = "sha256:d3582b58f907c145d673f5f31ebfa21a6570df04f3aca9cce667d129a3c607dc"
+url = "https://github.com/github/gh-actions-lock/releases/download/v0.4.1/windows-amd64.exe"
+url_api = "https://api.github.com/repos/github/gh-actions-lock/releases/assets/702813329"
+provenance = "github-attestations"
+
 [[tools."github:gitleaks/gitleaks"]]
 version = "8.30.1"
 backend = "github:gitleaks/gitleaks"
