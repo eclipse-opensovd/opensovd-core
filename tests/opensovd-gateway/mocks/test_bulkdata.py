@@ -136,7 +136,7 @@ def test_list_with_date_filter_parameters(client):
 
 
 def test_list_invalid_date_returns_400(client):
-    """An unparseable date in created-before returns 400."""
+    """An unparsable date in created-before returns 400."""
     resp = client.get(f"{BASE}/any-cat", params={"created-before": "not-a-date"})
     assert resp.status_code == 400
 
