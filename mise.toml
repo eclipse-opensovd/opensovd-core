@@ -200,6 +200,12 @@ run = "convco check --ignore-reverts {{ usage.rev | quote }}"
 deny_all = true
 allow_read = ["/"]
 
+[tasks."lint:pr-title"]
+description = "Check that a title on standard input follows Conventional Commits"
+run = "convco check --from-stdin"
+deny_all = true
+allow_read = ["/"]
+
 [tasks.test]
 description = "Run all tests"
 depends = ["test:unit", "test:self", "test:integration"]
