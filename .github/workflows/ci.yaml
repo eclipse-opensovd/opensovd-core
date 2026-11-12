@@ -281,6 +281,8 @@ jobs:
 
       - run: mise run lint
 
+      - run: mise run lint:secrets
+
       - name: Allow unprivileged user namespaces for the network namespace tests
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
 

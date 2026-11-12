@@ -230,6 +230,35 @@ checksum = "sha256:4cdd9fc2292bf8038462db2873d8f5a67135486c98cb975d8bf373eb29315
 url = "https://github.com/convco/convco/releases/download/v0.6.3/convco-windows.zip"
 url_api = "https://api.github.com/repos/convco/convco/releases/assets/365579722"
 
+[[tools."github:crate-ci/typos"]]
+version = "1.52.1"
+backend = "github:crate-ci/typos"
+specifiers = ["1.52.1"]
+
+[tools."github:crate-ci/typos"."platforms.linux-arm64"]
+checksum = "sha256:3c82c3e97aafdd686fbb3f8c7b82bca3a870d21a0bcadd41babd37e84cc2f2df"
+url = "https://github.com/crate-ci/typos/releases/download/v1.52.1/typos-v1.52.1-aarch64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/crate-ci/typos/releases/assets/728873236"
+provenance = "github-attestations"
+
+[tools."github:crate-ci/typos"."platforms.linux-x64"]
+checksum = "sha256:c034dbec8797cfa0c4548b3726c1eebbafcf703b8a17f15a961b037788eebcdd"
+url = "https://github.com/crate-ci/typos/releases/download/v1.52.1/typos-v1.52.1-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/crate-ci/typos/releases/assets/728875573"
+provenance = "github-attestations"
+
+[tools."github:crate-ci/typos"."platforms.macos-arm64"]
+checksum = "sha256:e342c1ec32ea6f60a8b557cd75f30e7c604745131754acff295402a0a3d43263"
+url = "https://github.com/crate-ci/typos/releases/download/v1.52.1/typos-v1.52.1-aarch64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/crate-ci/typos/releases/assets/728885543"
+provenance = "github-attestations"
+
+[tools."github:crate-ci/typos"."platforms.windows-x64"]
+checksum = "sha256:adb3ac98b0ca8964a23b984c786c2116a25b3665e070f2a4f8156e2d6d4df2e3"
+url = "https://github.com/crate-ci/typos/releases/download/v1.52.1/typos-v1.52.1-x86_64-pc-windows-msvc.zip"
+url_api = "https://api.github.com/repos/crate-ci/typos/releases/assets/728878647"
+provenance = "github-attestations"
+
 [[tools."github:github/gh-actions-lock"]]
 version = "0.4.1"
 backend = "github:github/gh-actions-lock"
@@ -344,6 +373,35 @@ provenance = "github-attestations"
 checksum = "sha256:244bc3eeade60a0ee586dfe9f5c90bd1c1d790514009aad2c7055dcb731a3e50"
 url = "https://github.com/j178/prek/releases/download/v0.5.4/prek-x86_64-pc-windows-msvc.zip"
 url_api = "https://api.github.com/repos/j178/prek/releases/assets/594534981"
+provenance = "github-attestations"
+
+[[tools."github:jdx/jactionlint"]]
+version = "2.5.0"
+backend = "github:jdx/jactionlint"
+specifiers = ["2.5.0"]
+
+[tools."github:jdx/jactionlint"."platforms.linux-arm64"]
+checksum = "sha256:ad7e33b6264cea16b7e83ad2bb004824d5b1c15aedb35ba0dc84917f791c5525"
+url = "https://github.com/jdx/jactionlint/releases/download/v2.5.0/jactionlint_2.5.0_linux_arm64.tar.gz"
+url_api = "https://api.github.com/repos/jdx/jactionlint/releases/assets/714298511"
+provenance = "github-attestations"
+
+[tools."github:jdx/jactionlint"."platforms.linux-x64"]
+checksum = "sha256:5ac307b0499bb0eab45ae99c23e8e0790874fbc667c75224410954e0e3c6e0f5"
+url = "https://github.com/jdx/jactionlint/releases/download/v2.5.0/jactionlint_2.5.0_linux_amd64.tar.gz"
+url_api = "https://api.github.com/repos/jdx/jactionlint/releases/assets/714298541"
+provenance = "github-attestations"
+
+[tools."github:jdx/jactionlint"."platforms.macos-arm64"]
+checksum = "sha256:15b47d53e3b1aafbd674cca0e8fff0d5952f3cf2a7d7501a8f67576ef76397b4"
+url = "https://github.com/jdx/jactionlint/releases/download/v2.5.0/jactionlint_2.5.0_darwin_arm64.tar.gz"
+url_api = "https://api.github.com/repos/jdx/jactionlint/releases/assets/714298455"
+provenance = "github-attestations"
+
+[tools."github:jdx/jactionlint"."platforms.windows-x64"]
+checksum = "sha256:6f6202d6fc476cbe3978c7dd2349c881cfcfa98257593cb2f1bde87004f054c6"
+url = "https://github.com/jdx/jactionlint/releases/download/v2.5.0/jactionlint_2.5.0_windows_amd64.zip"
+url_api = "https://api.github.com/repos/jdx/jactionlint/releases/assets/714298686"
 provenance = "github-attestations"
 
 [[tools."github:jqlang/jq"]]
