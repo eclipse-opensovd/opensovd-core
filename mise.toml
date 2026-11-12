@@ -6,20 +6,43 @@ min_version = "2026.10.25"
 [settings]
 idiomatic_version_file_enable_tools = ["rust"]
 lockfile_platforms = ["linux-x64", "linux-arm64", "macos-arm64", "windows-x64"]
+disable_backends = [
+  "aqua",
+  "asdf",
+  "cargo",
+  "conda",
+  "dotnet",
+  "forgejo",
+  "gem",
+  "gitlab",
+  "go",
+  "http",
+  "npm",
+  "packslip",
+  "pypi",
+  "s3",
+  "spinel",
+  "spm",
+  "ubi",
+  "vfox",
+]
+
+[tool_config]
+locked = true
 
 [tools]
 python = "3.13.15"
-uv = "0.12.17"
-prek = "0.5.4"
-ruff = "0.16.9"
-ty = "0.0.84"
+"github:astral-sh/uv" = "0.12.17"
+"github:j178/prek" = "0.5.4"
+"github:astral-sh/ruff" = "0.16.9"
+"github:astral-sh/ty" = "0.0.84"
 "github:convco/convco" = "0.6.3"
-cargo-deny = "0.20.2"
+"github:EmbarkStudios/cargo-deny" = "0.20.2"
 "github:taiki-e/cargo-llvm-cov" = "0.9.0"
 "github:nextest-rs/nextest" = { version = "0.9.146", version_prefix = "cargo-nextest-" }
-git-cliff = "2.14.1"
-gh = "2.102.0"
-jq = "1.8.2"
+"github:orhun/git-cliff" = "2.14.1"
+"github:cli/cli" = "2.102.0"
+"github:jqlang/jq" = { version = "1.8.2", version_prefix = "jq-" }
 "github:google/yamlfmt" = "0.21.0"
 "github:akiomik/mado" = "0.4.0"
 "github:koalaman/shellcheck" = "0.11.0"
