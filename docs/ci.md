@@ -139,4 +139,4 @@ fails the run on a mismatch, so a `v0.2.0` tag cannot ship binaries reporting
 
 ## Branch Protection
 
-Use the `gate` job as the required status check for branch protection rules.
+Use the `gate` and `pr-title` jobs as the required status checks for branch protection rules.
