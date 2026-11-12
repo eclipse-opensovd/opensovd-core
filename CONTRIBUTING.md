@@ -57,8 +57,8 @@ This project follows these conventions:
   every commit, and check the whole tree before submitting a PR:
 
   ```bash
-  prek install
-  prek run --all-files
+  mise run install-hooks
+  mise run lint
   ```
 
 ## Legal considerations

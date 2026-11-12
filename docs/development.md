@@ -38,7 +38,7 @@ installs the Rust toolchain from `rust-toolchain.toml` and every other tool from
 mise trust
 mise install
 uv sync
-prek install
+mise run install-hooks
 ```
 
 ## Option 3: Bazel bootstrap

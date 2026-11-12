@@ -81,6 +81,64 @@ checksum = "sha256:791aa263079aa7894e24d4e2f8e978aa6214e9dd9dbf04f79ae5f3565758f
 url = "https://github.com/orhun/git-cliff/releases/download/v2.14.1/git-cliff-2.14.1-x86_64-pc-windows-msvc.zip"
 url_api = "https://api.github.com/repos/orhun/git-cliff/releases/assets/539702434"
 
+[[tools."github:akiomik/mado"]]
+version = "0.4.0"
+backend = "github:akiomik/mado"
+specifiers = ["0.4.0"]
+
+[tools."github:akiomik/mado"."platforms.linux-arm64"]
+checksum = "sha256:a9009893bdf59a81561f69a8de7d7860b3079ca148ec0a33f3ec3688d924c4e4"
+checksum_source = "mise-versions"
+url = "https://github.com/akiomik/mado/releases/download/v0.4.0/mado-Linux-gnu-arm64.tar.gz"
+url_api = "https://api.github.com/repos/akiomik/mado/releases/assets/680622623"
+
+[tools."github:akiomik/mado"."platforms.linux-x64"]
+checksum = "sha256:cb540bf0af659b7add3507f57bcd4025f2b6382d1509fb56bf9dd3f624eed380"
+checksum_source = "mise-versions"
+url = "https://github.com/akiomik/mado/releases/download/v0.4.0/mado-Linux-gnu-x86_64.tar.gz"
+url_api = "https://api.github.com/repos/akiomik/mado/releases/assets/680622621"
+
+[tools."github:akiomik/mado"."platforms.macos-arm64"]
+checksum = "sha256:8a646da7c4381580710594f3de54e65bc1b13e0610a6504d598e1f66f6ec9dff"
+checksum_source = "mise-versions"
+url = "https://github.com/akiomik/mado/releases/download/v0.4.0/mado-macOS-arm64.tar.gz"
+url_api = "https://api.github.com/repos/akiomik/mado/releases/assets/680622641"
+
+[tools."github:akiomik/mado"."platforms.windows-x64"]
+checksum = "sha256:e77719339517387b61b0dbea7c61a13c33043e0b99d52aa0f84bbeb3d2cc1610"
+checksum_source = "mise-versions"
+url = "https://github.com/akiomik/mado/releases/download/v0.4.0/mado-Windows-msvc-x86_64.zip"
+url_api = "https://api.github.com/repos/akiomik/mado/releases/assets/680622625"
+
+[[tools."github:bnjbvr/cargo-machete"]]
+version = "0.9.2"
+backend = "github:bnjbvr/cargo-machete"
+specifiers = ["0.9.2"]
+
+[tools."github:bnjbvr/cargo-machete"."platforms.linux-arm64"]
+checksum = "sha256:6f96c3e6026a5bdd241b6ae600c6fb86c9197c6e189a894f91371baa01fd10f5"
+checksum_source = "mise-versions"
+url = "https://github.com/bnjbvr/cargo-machete/releases/download/v0.9.2/cargo-machete-v0.9.2-aarch64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/bnjbvr/cargo-machete/releases/assets/397130991"
+
+[tools."github:bnjbvr/cargo-machete"."platforms.linux-x64"]
+checksum = "sha256:48200087f54c55aabcd4db4af1e25742b49846c02a1b1bfa134711945b35b2e9"
+checksum_source = "mise-versions"
+url = "https://github.com/bnjbvr/cargo-machete/releases/download/v0.9.2/cargo-machete-v0.9.2-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/bnjbvr/cargo-machete/releases/assets/397131172"
+
+[tools."github:bnjbvr/cargo-machete"."platforms.macos-arm64"]
+checksum = "sha256:63e28fee386d82d33f2d12406c857f98e2d4697f3f7df7f71f34dff07fca0fde"
+checksum_source = "mise-versions"
+url = "https://github.com/bnjbvr/cargo-machete/releases/download/v0.9.2/cargo-machete-v0.9.2-aarch64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/bnjbvr/cargo-machete/releases/assets/397131114"
+
+[tools."github:bnjbvr/cargo-machete"."platforms.windows-x64"]
+checksum = "sha256:996120ac70afe405c58fce508a476f25bb71032c6fb8013aa0123bba36429c76"
+checksum_source = "mise-versions"
+url = "https://github.com/bnjbvr/cargo-machete/releases/download/v0.9.2/cargo-machete-v0.9.2-x86_64-pc-windows-msvc.tar.gz"
+url_api = "https://api.github.com/repos/bnjbvr/cargo-machete/releases/assets/397131414"
+
 [[tools."github:convco/convco"]]
 version = "0.6.3"
 backend = "github:convco/convco"
@@ -105,6 +163,93 @@ url_api = "https://api.github.com/repos/convco/convco/releases/assets/365579749"
 checksum = "sha256:4cdd9fc2292bf8038462db2873d8f5a67135486c98cb975d8bf373eb29315f13"
 url = "https://github.com/convco/convco/releases/download/v0.6.3/convco-windows.zip"
 url_api = "https://api.github.com/repos/convco/convco/releases/assets/365579722"
+
+[[tools."github:gitleaks/gitleaks"]]
+version = "8.30.1"
+backend = "github:gitleaks/gitleaks"
+specifiers = ["8.30.1"]
+
+[tools."github:gitleaks/gitleaks"."platforms.linux-arm64"]
+checksum = "sha256:e4a487ee7ccd7d3a7f7ec08657610aa3606637dab924210b3aee62570fb4b080"
+checksum_source = "mise-versions"
+url = "https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_arm64.tar.gz"
+url_api = "https://api.github.com/repos/gitleaks/gitleaks/releases/assets/378332057"
+
+[tools."github:gitleaks/gitleaks"."platforms.linux-x64"]
+checksum = "sha256:551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
+checksum_source = "mise-versions"
+url = "https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz"
+url_api = "https://api.github.com/repos/gitleaks/gitleaks/releases/assets/378332058"
+
+[tools."github:gitleaks/gitleaks"."platforms.macos-arm64"]
+checksum = "sha256:b40ab0ae55c505963e365f271a8d3846efbc170aa17f2607f13df610a9aeb6a5"
+checksum_source = "mise-versions"
+url = "https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_darwin_arm64.tar.gz"
+url_api = "https://api.github.com/repos/gitleaks/gitleaks/releases/assets/378332059"
+
+[tools."github:gitleaks/gitleaks"."platforms.windows-x64"]
+checksum = "sha256:d29144deff3a68aa93ced33dddf84b7fdc26070add4aa0f4513094c8332afc4e"
+checksum_source = "mise-versions"
+url = "https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_windows_x64.zip"
+url_api = "https://api.github.com/repos/gitleaks/gitleaks/releases/assets/378333178"
+
+[[tools."github:google/yamlfmt"]]
+version = "0.21.0"
+backend = "github:google/yamlfmt"
+specifiers = ["0.21.0"]
+
+[tools."github:google/yamlfmt"."platforms.linux-arm64"]
+checksum = "sha256:5b2689c963b177271330c5ce8ca7396751107e5a826be46f03d2cb9b6f0c7784"
+checksum_source = "mise-versions"
+url = "https://github.com/google/yamlfmt/releases/download/v0.21.0/yamlfmt_0.21.0_Linux_arm64.tar.gz"
+url_api = "https://api.github.com/repos/google/yamlfmt/releases/assets/336650208"
+
+[tools."github:google/yamlfmt"."platforms.linux-x64"]
+checksum = "sha256:1f300d9257b232bb3b541d7fb1b0e6b3c121bcbab381c86cd38cb8722be8a566"
+checksum_source = "mise-versions"
+url = "https://github.com/google/yamlfmt/releases/download/v0.21.0/yamlfmt_0.21.0_Linux_x86_64.tar.gz"
+url_api = "https://api.github.com/repos/google/yamlfmt/releases/assets/336650203"
+
+[tools."github:google/yamlfmt"."platforms.macos-arm64"]
+checksum = "sha256:4b417ecb94339d57e4c122ecc948c1a00fe328b5853266de9806e652a92858fa"
+checksum_source = "mise-versions"
+url = "https://github.com/google/yamlfmt/releases/download/v0.21.0/yamlfmt_0.21.0_Darwin_arm64.tar.gz"
+url_api = "https://api.github.com/repos/google/yamlfmt/releases/assets/336650209"
+
+[tools."github:google/yamlfmt"."platforms.windows-x64"]
+checksum = "sha256:07f80ce5d741eb4b0a9380ac78a19c7cb5bd44e2a9a47a5a04839e3ba54dd463"
+checksum_source = "mise-versions"
+url = "https://github.com/google/yamlfmt/releases/download/v0.21.0/yamlfmt_0.21.0_Windows_x86_64.tar.gz"
+url_api = "https://api.github.com/repos/google/yamlfmt/releases/assets/336650206"
+
+[[tools."github:koalaman/shellcheck"]]
+version = "0.11.0"
+backend = "github:koalaman/shellcheck"
+specifiers = ["0.11.0"]
+
+[tools."github:koalaman/shellcheck"."platforms.linux-arm64"]
+checksum = "sha256:12b331c1d2db6b9eb13cfca64306b1b157a86eb69db83023e261eaa7e7c14588"
+checksum_source = "mise-versions"
+url = "https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.linux.aarch64.tar.xz"
+url_api = "https://api.github.com/repos/koalaman/shellcheck/releases/assets/279056934"
+
+[tools."github:koalaman/shellcheck"."platforms.linux-x64"]
+checksum = "sha256:8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198"
+checksum_source = "mise-versions"
+url = "https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.linux.x86_64.tar.xz"
+url_api = "https://api.github.com/repos/koalaman/shellcheck/releases/assets/279056942"
+
+[tools."github:koalaman/shellcheck"."platforms.macos-arm64"]
+checksum = "sha256:56affdd8de5527894dca6dc3d7e0a99a873b0f004d7aabc30ae407d3f48b0a79"
+checksum_source = "mise-versions"
+url = "https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.darwin.aarch64.tar.xz"
+url_api = "https://api.github.com/repos/koalaman/shellcheck/releases/assets/279056932"
+
+[tools."github:koalaman/shellcheck"."platforms.windows-x64"]
+checksum = "sha256:8a4e35ab0b331c85d73567b12f2a444df187f483e5079ceffa6bda1faa2e740e"
+checksum_source = "mise-versions"
+url = "https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.zip"
+url_api = "https://api.github.com/repos/koalaman/shellcheck/releases/assets/279056944"
 
 [[tools."github:nextest-rs/nextest"]]
 version = "0.9.146"
@@ -165,6 +310,35 @@ provenance = "github-attestations"
 checksum = "sha256:5f2c1d805136aadd53483af6cdf3e123291e9a224c37dc5817aab9563b0eef64"
 url = "https://github.com/taiki-e/cargo-llvm-cov/releases/download/v0.9.0/cargo-llvm-cov-x86_64-pc-windows-msvc.zip"
 url_api = "https://api.github.com/repos/taiki-e/cargo-llvm-cov/releases/assets/517185669"
+provenance = "github-attestations"
+
+[[tools."github:zizmorcore/zizmor"]]
+version = "1.32.0"
+backend = "github:zizmorcore/zizmor"
+specifiers = ["1.32.0"]
+
+[tools."github:zizmorcore/zizmor"."platforms.linux-arm64"]
+checksum = "sha256:cb152b207f815116d7fa1c1ee4614f61578803351395052908095e79adfd9fd0"
+url = "https://github.com/zizmorcore/zizmor/releases/download/v1.32.0/zizmor-aarch64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/zizmorcore/zizmor/releases/assets/703541931"
+provenance = "github-attestations"
+
+[tools."github:zizmorcore/zizmor"."platforms.linux-x64"]
+checksum = "sha256:bb110cc765eca9cd7efb2e284a956be5974c60027b0970f16397d86208a9957b"
+url = "https://github.com/zizmorcore/zizmor/releases/download/v1.32.0/zizmor-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/zizmorcore/zizmor/releases/assets/703541932"
+provenance = "github-attestations"
+
+[tools."github:zizmorcore/zizmor"."platforms.macos-arm64"]
+checksum = "sha256:6efed18c4539a663fd3c851a2be9533fd8456c4e646d9416206da059154a0d3c"
+url = "https://github.com/zizmorcore/zizmor/releases/download/v1.32.0/zizmor-aarch64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/zizmorcore/zizmor/releases/assets/703541933"
+provenance = "github-attestations"
+
+[tools."github:zizmorcore/zizmor"."platforms.windows-x64"]
+checksum = "sha256:d284a16e09d9df4ce2c000357e7b59bd531be093bea5718a1ce225b449b59d49"
+url = "https://github.com/zizmorcore/zizmor/releases/download/v1.32.0/zizmor-x86_64-pc-windows-msvc.zip"
+url_api = "https://api.github.com/repos/zizmorcore/zizmor/releases/assets/703541929"
 provenance = "github-attestations"
 
 [[tools.jq]]
