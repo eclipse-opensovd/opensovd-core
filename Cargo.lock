@@ -1779,6 +1779,7 @@ version = "0.1.1"
 dependencies = [
  "aws-lc-rs",
  "axum",
+ "axum-extra",
  "base64 0.23.1",
  "bytes",
  "futures",
@@ -1829,7 +1830,6 @@ dependencies = [
  "opensovd-core",
  "opensovd-extra",
  "opensovd-mocks",
- "opensovd-models",
  "opensovd-server",
  "schemars",
  "sd-notify",

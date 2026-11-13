@@ -5,12 +5,14 @@
 
 use std::sync::{Arc, Mutex};
 
+use axum::middleware::Next;
 use http_body_util::BodyExt;
 use hyper::Request;
 use hyper_util::client::legacy::Client;
 use hyper_util::rt::TokioExecutor;
 use opensovd_server::{
-    Access, Auth, AuthError, Authenticator, Authorizer, Parts, Principal, Server,
+    Access, Auth, AuthError, Authenticator, Authorizer, Parts, Principal, Server, api_request_uri,
+    api_uri,
 };
 use tokio::net::TcpListener;
 use tokio::sync::oneshot;
@@ -56,6 +58,10 @@ impl Authorizer for Policy {
     }
 }
 
+/// What an inner layer saw of each request: [`api_uri`] and
+/// [`api_request_uri`].
+type Seen = Arc<Mutex<Vec<(String, Option<String>)>>>;
+
 struct TestServer {
     addr: std::net::SocketAddr,
     policy: Policy,
@@ -68,11 +74,26 @@ impl TestServer {
     }
 
     async fn mounted_at(base: &str) -> Self {
+        Self::with_inner_layer(base, Seen::default()).await
+    }
+
+    /// A server mounted at `base` whose inner layer records what it `seen`.
+    async fn with_inner_layer(base: &str, seen: Seen) -> Self {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
         let (shutdown_tx, shutdown_rx) = oneshot::channel();
         let policy = Policy::default();
 
+        let record = move |request: axum::extract::Request, next: Next| {
+            let seen = Arc::clone(&seen);
+            async move {
+                let (parts, body) = request.into_parts();
+                let uri = api_request_uri(&parts).map(|uri| uri.to_string());
+                seen.lock().unwrap().push((api_uri(&parts), uri));
+                next.run(axum::extract::Request::from_parts(parts, body))
+                    .await
+            }
+        };
         let server = Server::builder()
             .listener(listener)
             .base_uri(base)
@@ -81,37 +102,7 @@ impl TestServer {
                 shutdown_rx.await.ok();
             })
             .auth(Auth::new(ExtractBearer, policy.clone()))
-            .build()
-            .unwrap();
-
-        tokio::spawn(async move {
-            server.serve().await.unwrap();
-        });
-
-        Self {
-            addr,
-            policy,
-            shutdown: Some(shutdown_tx),
-        }
-    }
-
-    /// A server with auth as a layer, as an application adds it to run something
-    /// after it.
-    async fn with_auth_as_layer() -> Self {
-        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let addr = listener.local_addr().unwrap();
-        let (shutdown_tx, shutdown_rx) = oneshot::channel();
-        let policy = Policy::default();
-        let auth = Auth::new(ExtractBearer, policy.clone());
-
-        let server = Server::builder()
-            .listener(listener)
-            .base_uri("/sovd")
-            .unwrap()
-            .shutdown(async {
-                shutdown_rx.await.ok();
-            })
-            .layer(auth.into_layer(Some("/sovd")))
+            .inner_layer(axum::middleware::from_fn(record))
             .build()
             .unwrap();
 
@@ -227,22 +218,33 @@ async fn test_auth_policy_sees_route_template_and_params() {
     assert_eq!(access["principal"]["subject"], "admin@example.com");
 }
 
+/// An inner layer runs after auth, so it never sees a refused request, and
+/// sees the server's configuration.
 #[tokio::test]
-async fn test_auth_as_a_layer_checks_like_the_auth_of_the_builder() {
-    let server = TestServer::with_auth_as_layer().await;
+async fn test_auth_runs_before_an_inner_layer() {
+    let seen = Seen::default();
+    let server = TestServer::with_inner_layer("/sovd", Arc::clone(&seen)).await;
+
+    let response = server.get("/sovd/v1/components", Some("user-token")).await;
+    assert_eq!(response.status(), hyper::StatusCode::FORBIDDEN);
     let response = server.get("/sovd/v1/components", None).await;
     assert_eq!(response.status(), hyper::StatusCode::UNAUTHORIZED);
+    assert!(seen.lock().unwrap().is_empty());
 
-    server
-        .get("/sovd/v1/components/ec%75/data/speed", Some("admin-token"))
+    let response = server
+        .get("/sovd/v1/components/ecu/faults?x=1", Some("admin-token"))
         .await;
-    let access = server.last_access();
+    assert_ne!(response.status(), hyper::StatusCode::UNAUTHORIZED);
+    let response = server.get("/sovd/v1", Some("admin-token")).await;
+    assert_ne!(response.status(), hyper::StatusCode::UNAUTHORIZED);
+    let api = format!("http://{}/sovd/v1", server.addr);
     assert_eq!(
-        access["route"],
-        "/v1/components/{component_id}/data/{data_id}"
+        *seen.lock().unwrap(),
+        [
+            (api.clone(), Some("/components/ecu/faults?x=1".to_owned())),
+            (api, Some("/".to_owned())),
+        ]
     );
-    assert_eq!(access["params"]["component_id"], "ecu");
-    assert_eq!(access["principal"]["subject"], "admin@example.com");
 }
 
 #[tokio::test]

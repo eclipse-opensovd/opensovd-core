@@ -19,8 +19,6 @@ use axum::response::{IntoResponse, Response};
 use http::request::Parts;
 use opensovd_models::{ErrorCode, GenericError};
 use serde::Serialize;
-use tower::util::BoxCloneSyncService;
-use tower::{Layer, Service};
 
 use crate::routes::extract::Json;
 
@@ -133,41 +131,8 @@ impl Auth {
     }
 
     pub(crate) fn apply(self, router: Router, base: Option<&str>) -> Router {
-        router.layer(self.into_layer(base))
-    }
-
-    /// Auth as a layer for a server mounted at `base`, for an application that
-    /// has to run something after auth: [`ServerBuilder::layer`] runs outside
-    /// [`ServerBuilder::auth`], so such an application adds this layer first.
-    ///
-    /// [`ServerBuilder::layer`]: crate::ServerBuilder::layer
-    /// [`ServerBuilder::auth`]: crate::ServerBuilder::auth
-    #[must_use]
-    pub fn into_layer(self, base: Option<&str>) -> AuthLayer {
-        AuthLayer {
-            auth: self,
-            base: base.unwrap_or_default().into(),
-        }
-    }
-}
-
-/// [`Auth`] as a layer; see [`Auth::into_layer`].
-#[derive(Clone)]
-pub struct AuthLayer {
-    auth: Auth,
-    base: Arc<str>,
-}
-
-impl<S> Layer<S> for AuthLayer
-where
-    S: Service<Request, Response = Response, Error = Infallible> + Clone + Send + Sync + 'static,
-    S::Future: Send + 'static,
-{
-    type Service = BoxCloneSyncService<Request, Response, Infallible>;
-
-    fn layer(&self, inner: S) -> Self::Service {
-        let state = (self.auth.clone(), Arc::clone(&self.base));
-        BoxCloneSyncService::new(middleware::from_fn_with_state(state, enforce).layer(inner))
+        let base: Arc<str> = base.unwrap_or_default().into();
+        router.layer(middleware::from_fn_with_state((self, base), enforce))
     }
 }
 

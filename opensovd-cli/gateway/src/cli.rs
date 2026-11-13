@@ -106,8 +106,9 @@ pub struct UpstreamArgs {
     /// below the gateway's API version is appended to this URL. Unset or empty,
     /// the gateway answers everything itself.
     ///
-    /// All upstreams serve their entities, and if several have an id, the first
-    /// of them in the given order answers for it. A vehicle lock is acquired
+    /// All upstreams serve their entities, whose ids have to be unique across
+    /// them; if several have an id, the first of them in the given order
+    /// answers for it. A vehicle lock is acquired
     /// on all upstreams. Everything else goes to the first upstream.
     #[arg(
         long = "upstream-url",

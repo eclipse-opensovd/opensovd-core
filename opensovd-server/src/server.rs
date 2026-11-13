@@ -98,18 +98,16 @@ impl From<UnixListener> for Listener {
     }
 }
 
-fn build_router<Vendor, Layer>(
+fn build_router<Layer>(
     base: Option<&str>,
     advertised: crate::routes::BaseUri,
-    vendor_info: Option<Vendor>,
+    inner: Router,
     auth: Option<Auth>,
-    topology: Topology,
+    inner_layers: Vec<InnerLayer>,
     layer: Layer,
     services: Vec<(String, Service)>,
 ) -> Router
 where
-    Vendor: Serialize + Clone + Send + Sync + 'static,
-    crate::routes::VersionInfo<Vendor>: crate::schema::JsonSchema,
     Layer: tower::Layer<axum::routing::Route> + Clone + Send + Sync + 'static,
     Layer::Service: TowerService<http::Request<axum::body::Body>> + Clone + Send + Sync + 'static,
     <Layer::Service as TowerService<http::Request<axum::body::Body>>>::Response:
@@ -118,19 +116,22 @@ where
         Into<std::convert::Infallible> + 'static,
     <Layer::Service as TowerService<http::Request<axum::body::Body>>>::Future: Send + 'static,
 {
-    let inner = crate::routes::router(vendor_info, topology);
     let mut router = match base {
         Some(path) => Router::new().nest(path, inner),
         None => Router::new().merge(inner),
     }
-    .fallback(crate::routes::not_found)
-    .layer(axum::Extension(advertised));
+    .fallback(crate::routes::not_found);
+    // the first added is the outermost, as for `layer`
+    for inner_layer in inner_layers.into_iter().rev() {
+        router = inner_layer(router);
+    }
+    router = router.layer(axum::Extension(advertised));
 
     for (path, svc) in services {
         router = router.nest_service(&path, svc);
     }
 
-    // Request flow: UserLayer -> Auth -> Handler
+    // Request flow: UserLayer -> Auth -> InnerLayer -> Handler
     let router = match auth {
         Some(auth) => auth.apply(router, base),
         None => router,
@@ -140,6 +141,9 @@ where
 
 type ShutdownFuture = Shared<Pin<Box<dyn Future<Output = ()> + Send>>>;
 
+/// A layer of [`ServerBuilder::inner_layer`], applied to the router.
+type InnerLayer = Box<dyn FnOnce(Router) -> Router + Send>;
+
 #[must_use]
 pub struct ServerBuilder<Vendor = VendorInfo, Layer = Identity> {
     listener: Option<Listener>,
@@ -148,6 +152,7 @@ pub struct ServerBuilder<Vendor = VendorInfo, Layer = Identity> {
     vendor_info: Option<Vendor>,
     auth: Option<Auth>,
     topology: Topology,
+    inner_layers: Vec<InnerLayer>,
     layer: Layer,
     services: Vec<(String, Service)>,
     #[cfg(feature = "tls")]
@@ -161,6 +166,7 @@ pub struct Server<Vendor = VendorInfo, Layer = Identity> {
     vendor_info: Option<Vendor>,
     auth: Option<Auth>,
     topology: Topology,
+    inner_layers: Vec<InnerLayer>,
     layer: Layer,
     services: Vec<(String, Service)>,
     #[cfg(feature = "tls")]
@@ -202,6 +208,7 @@ impl ServerBuilder<VendorInfo, Identity> {
             }),
             auth: None,
             topology: Topology::default(),
+            inner_layers: Vec::new(),
             layer: Identity::new(),
             services: Vec::new(),
             #[cfg(feature = "tls")]
@@ -250,6 +257,7 @@ impl<Vendor, Layer> ServerBuilder<Vendor, Layer> {
             vendor_info: Some(vendor_info),
             auth: self.auth,
             topology: self.topology,
+            inner_layers: self.inner_layers,
             layer: self.layer,
             services: self.services,
             #[cfg(feature = "tls")]
@@ -263,9 +271,32 @@ impl<Vendor, Layer> ServerBuilder<Vendor, Layer> {
         self
     }
 
+    /// Add a Tower layer that runs after auth, around the routes: what it
+    /// does is authorized like a request of the routes, and it sees the
+    /// server's configuration, for [`api_uri`](crate::api_uri) and
+    /// [`api_request_uri`](crate::api_request_uri). Such a layer may answer
+    /// requests itself, such as forwarding them. It does not run for a
+    /// [`service`](Self::service). The first layer added is the outermost.
+    pub fn inner_layer<L>(mut self, layer: L) -> Self
+    where
+        L: tower::Layer<axum::routing::Route> + Clone + Send + Sync + 'static,
+        L::Service: TowerService<http::Request<axum::body::Body>> + Clone + Send + Sync + 'static,
+        <L::Service as TowerService<http::Request<axum::body::Body>>>::Response:
+            axum::response::IntoResponse + 'static,
+        <L::Service as TowerService<http::Request<axum::body::Body>>>::Error:
+            Into<std::convert::Infallible> + 'static,
+        <L::Service as TowerService<http::Request<axum::body::Body>>>::Future: Send + 'static,
+    {
+        self.inner_layers
+            .push(Box::new(move |router: Router| router.layer(layer)));
+        self
+    }
+
     /// Add a Tower layer to the server middleware stack.
     ///
     /// Layers are applied outside auth. The first layer added is the outermost.
+    /// A layer that has to run after auth is an
+    /// [`inner_layer`](Self::inner_layer).
     pub fn layer<NewLayer>(self, layer: NewLayer) -> ServerBuilder<Vendor, Stack<NewLayer, Layer>> {
         ServerBuilder {
             listener: self.listener,
@@ -274,6 +305,7 @@ impl<Vendor, Layer> ServerBuilder<Vendor, Layer> {
             vendor_info: self.vendor_info,
             auth: self.auth,
             topology: self.topology,
+            inner_layers: self.inner_layers,
             layer: Stack::new(layer, self.layer),
             services: self.services,
             #[cfg(feature = "tls")]
@@ -332,6 +364,7 @@ impl<Vendor, Layer> ServerBuilder<Vendor, Layer> {
             vendor_info: self.vendor_info,
             auth: self.auth,
             topology: self.topology,
+            inner_layers: self.inner_layers,
             layer: self.layer,
             services: self.services,
             #[cfg(feature = "tls")]
@@ -386,9 +419,9 @@ where
         let router = build_router(
             base.as_deref(),
             advertised,
-            self.vendor_info,
+            crate::routes::router(self.vendor_info, self.topology),
             self.auth,
-            self.topology,
+            self.inner_layers,
             self.layer,
             self.services,
         );
