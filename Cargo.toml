@@ -29,6 +29,7 @@ libcli-build = { path = "opensovd-cli/build" }
 anyhow = { version = "1", default-features = false, features = ["std"] }
 async-trait = { version = "0.1", default-features = false }
 base64 = { version = "0.23", default-features = false, features = ["std"] }
+brotli-decompressor = { version = "6", default-features = false, features = ["std"] }
 axum = { version = "0.8", default-features = false }
 axum-extra = { version = "0.12", default-features = false }
 dashmap = { version = "6", default-features = false }
@@ -36,6 +37,7 @@ bytes = { version = "1", default-features = false }
 chrono = { version = "0.4", default-features = false }
 clap = { version = "4", default-features = false }
 criterion = { version = "0.8", default-features = false }
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
 futures = { version = "0.3", default-features = false }
 futures-core = { version = "0.3", default-features = false }
 indexmap = { version = "2", default-features = false, features = ["std"] }

@@ -95,7 +95,8 @@ const PATH_SEGMENT_ENCODE_SET: &AsciiSet = &CONTROLS
     .add(b':');
 
 /// Percent-encode a string for use in a URI path segment.
-pub(super) fn encode_path_segment(s: &str) -> String {
+#[must_use]
+pub fn encode_path_segment(s: &str) -> String {
     utf8_percent_encode(s, PATH_SEGMENT_ENCODE_SET).to_string()
 }
 
