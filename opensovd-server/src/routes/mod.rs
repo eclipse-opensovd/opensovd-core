@@ -90,6 +90,43 @@ fn advertised(parts: &Parts) -> (&str, &str) {
         .map_or(("http", ""), |b| (b.scheme.as_str(), b.path.as_str()))
 }
 
+/// The server's API as the client of `parts` reaches it, such as
+/// `http://localhost:7690/sovd/v1`, for links to it.
+///
+/// The scheme and mount path come from the server's configuration, which a
+/// request carries from [`ServerBuilder::inner_layer`] on: elsewhere, such as
+/// in a layer of [`ServerBuilder::layer`], they are `http` and the root.
+///
+/// [`ServerBuilder::inner_layer`]: crate::ServerBuilder::inner_layer
+/// [`ServerBuilder::layer`]: crate::ServerBuilder::layer
+#[must_use]
+pub fn api_uri(parts: &Parts) -> String {
+    versioned_uri(parts)
+}
+
+/// The URI of the request of `parts` relative to the API version, with its
+/// query, such as `/components/ecu/faults?status=x`, and `/` for the API root;
+/// nothing for a request outside the API. Its mount path comes from the
+/// server's configuration as for [`api_uri`].
+#[must_use]
+pub fn api_request_uri(parts: &Parts) -> Option<Uri> {
+    let original = original_uri(parts);
+    let (_, base) = advertised(parts);
+    let path = original
+        .path()
+        .strip_prefix(base)?
+        .strip_prefix('/')?
+        .strip_prefix(API_VERSION)
+        .filter(|path| path.is_empty() || path.starts_with('/'))?;
+    let path = if path.is_empty() { "/" } else { path };
+    match original.query() {
+        Some(query) => format!("{path}?{query}"),
+        None => path.to_owned(),
+    }
+    .parse()
+    .ok()
+}
+
 pub(crate) fn versioned_uri(parts: &Parts) -> String {
     let (scheme, path) = advertised(parts);
     let host = parts
