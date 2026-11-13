@@ -4,8 +4,9 @@
 //! Several SOVD servers behind one: a layer that serves what the server does
 //! not hold from upstream services, such as classic diagnostic adapters. The
 //! server does not know about it. The layer belongs inside auth, so that
-//! forwarded requests are authorized like any other: add it after
-//! [`Auth::into_layer`](opensovd_server::Auth::into_layer).
+//! forwarded requests are authorized like any other: add it with
+//! [`ServerBuilder::inner_layer`](opensovd_server::ServerBuilder::inner_layer),
+//! where it also learns how clients reach the server.
 //!
 //! The server still answers what it serves itself: entities in the topology,
 //! on every path below them, including the stub routes. The [`ForwardRoute`]s
@@ -43,21 +44,20 @@ use std::sync::{Arc, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::task::{Context, Poll};
 use std::time::Duration;
 
-use axum::extract::OriginalUri;
 use axum::response::IntoResponse;
 use bytes::Bytes;
 use futures::future::{BoxFuture, join_all};
 use http::header::{
-    AUTHORIZATION, CONTENT_ENCODING, CONTENT_LENGTH, CONTENT_TYPE, HOST, HeaderMap, IF_MATCH,
+    AUTHORIZATION, CONTENT_ENCODING, CONTENT_LENGTH, CONTENT_TYPE, HeaderMap, IF_MATCH,
     IF_MODIFIED_SINCE, IF_NONE_MATCH, IF_RANGE, IF_UNMODIFIED_SINCE, RANGE, TRANSFER_ENCODING,
 };
 use http::request::Parts;
 use http::{Extensions, Method, StatusCode, Uri};
 use http_body_util::{BodyExt, Empty, Full, Limited};
 use opensovd_models::Collection;
-use opensovd_models::discovery::{Entities, EntityReference};
+use opensovd_models::discovery::{Entities, EntitiesQuery, EntityReference};
 use opensovd_models::error::GenericError;
-use opensovd_server::{Body, Topology, encode_path_segment};
+use opensovd_server::{Body, Topology, api_request_uri, encode_path_segment};
 use percent_encoding::percent_decode_str;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -69,9 +69,6 @@ mod locks;
 
 /// The log target of forwarding.
 const TARGET: &str = "forwarding";
-
-/// The API version below the server's mount path.
-const API_VERSION: &str = "v1";
 
 /// A request to an upstream.
 type Request = http::Request<Body>;
@@ -412,15 +409,14 @@ impl Upstream {
 }
 
 /// Serves what the server does not hold from upstreams, in the order they are
-/// given, which decides between equal entity ids.
+/// given, which decides between equal entity ids. Entity ids have to be
+/// unique across the upstreams: the order keeps an id with one entity while
+/// an upstream before its owner refuses the client or fails, see
+/// [`Upstream::discovery_timeout`].
 pub struct Federation {
     upstreams: Vec<Upstream>,
     /// What the server holds, which stays with the server.
     topology: Topology,
-    /// The scheme the server is reached by.
-    scheme: String,
-    /// The path the server is mounted at, empty at the root.
-    base: String,
     /// The upstream that answered for an entity, by its path, such as
     /// `components/ecu`. It saves asking again, and is no source of truth: an
     /// entry that turns out wrong is dropped.
@@ -465,25 +461,9 @@ impl Federation {
             None => Ok(Self {
                 upstreams,
                 topology,
-                scheme: "http".to_owned(),
-                base: String::new(),
                 owners: RwLock::default(),
             }),
         }
-    }
-
-    /// The server is reached by `scheme`, by default `http`.
-    #[must_use]
-    pub fn scheme(mut self, scheme: &str) -> Self {
-        scheme.clone_into(&mut self.scheme);
-        self
-    }
-
-    /// The server is mounted at `base`, by default at the root.
-    #[must_use]
-    pub fn base(mut self, base: &str) -> Self {
-        base.trim_end_matches('/').clone_into(&mut self.base);
-        self
     }
 
     /// The federation as a layer around the routes of the server.
@@ -627,45 +607,17 @@ impl Federation {
 
     /// The answer to `request`, which is outside the API or goes through
     /// [`Self::route`].
-    async fn answer<S>(&self, mut request: Request, routes: Routes<S>) -> Response
+    async fn answer<S>(&self, request: Request, routes: Routes<S>) -> Response
     where
         S: TowerService<AxumRequest, Response = AxumResponse, Error = Infallible>,
     {
-        let Some(api) = self.api_request(&request) else {
-            return routes.run(request).await;
+        let (mut parts, body) = request.into_parts();
+        let Some(uri) = api_request_uri(&parts) else {
+            return routes.run(Request::from_parts(parts, body)).await;
         };
-        request.extensions_mut().insert(api);
-        self.route(request, routes).await
-    }
-
-    /// The API request of `request`, with the mount path and the API version
-    /// stripped from its path, so `/sovd/v1/components` becomes `/components` and
-    /// `/sovd/v1` becomes `/`. `None` for a path outside the API.
-    fn api_request(&self, request: &Request) -> Option<ApiRequest> {
-        let original = request
-            .extensions()
-            .get::<OriginalUri>()
-            .map_or(request.uri(), |OriginalUri(uri)| uri);
-        let path = original
-            .path()
-            .strip_prefix(self.base.as_str())?
-            .strip_prefix('/')?
-            .strip_prefix(API_VERSION)
-            .filter(|path| path.is_empty() || path.starts_with('/'))?;
-        let path = if path.is_empty() { "/" } else { path };
-        let uri = match original.query() {
-            Some(query) => format!("{path}?{query}"),
-            None => path.to_owned(),
-        };
-        let host = request
-            .headers()
-            .get(HOST)
-            .and_then(|host| host.to_str().ok())
-            .unwrap_or("localhost");
-        Some(ApiRequest {
-            uri: uri.parse().ok()?,
-            server_uri: format!("{}://{host}{}/{API_VERSION}", self.scheme, self.base),
-        })
+        let server_uri = opensovd_server::api_uri(&parts);
+        parts.extensions.insert(ApiRequest { uri, server_uri });
+        self.route(Request::from_parts(parts, body), routes).await
     }
 
     /// The answer to a request the routes may serve.
@@ -1013,18 +965,17 @@ fn without_tags(parts: &Parts) -> Parts {
     parts
 }
 
-/// The values of the `tags` query parameter of `uri`.
+/// The values of the `tags` query parameter of `uri`, read as the server
+/// reads them.
+#[expect(
+    clippy::disallowed_types,
+    reason = "the server's query parser, without its rejection, which is the server's to answer"
+)]
 fn tags(uri: &Uri) -> Vec<String> {
-    uri.query()
+    use axum_extra::extract::Query;
+    Query::<EntitiesQuery>::try_from_uri(uri)
+        .map(|Query(query)| query.tags)
         .unwrap_or_default()
-        .split('&')
-        .filter_map(|pair| pair.strip_prefix("tags="))
-        .map(|tag| {
-            percent_decode_str(&tag.replace('+', " "))
-                .decode_utf8_lossy()
-                .into_owned()
-        })
-        .collect()
 }
 
 /// `answer` with its JSON body, a `T`, changed by `change`, or as it is if its
@@ -1075,8 +1026,11 @@ fn json_response(status: StatusCode, body: &impl Serialize) -> Response {
     (status, axum::Json(body)).into_response().map(Body::new)
 }
 
-/// A SOVD `GenericError` of the federation itself, with a vendor code.
-fn vendor_error(status: StatusCode, code: &str, message: &str) -> Response {
+/// A SOVD `GenericError` with the vendor `code`, as the federation answers
+/// itself, for an [`Upstream`] service that answers for an upstream it cannot
+/// reach as well.
+#[must_use]
+pub fn vendor_error(status: StatusCode, code: &str, message: &str) -> Response {
     json_response(status, &GenericError::with_vendor_code(code, message))
 }
 

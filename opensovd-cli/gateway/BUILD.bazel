@@ -52,7 +52,6 @@ workspace_rust_binary(
         "//opensovd-core:opensovd_core",
         "//opensovd-extra:opensovd_extra",
         "//opensovd-mocks:opensovd_mocks",
-        "//opensovd-models:opensovd_models",
         "//opensovd-server:opensovd_server",
     ],
 )
