@@ -12,6 +12,7 @@ workspace_rust_library(
         "chrono",
         "futures-core",
         "indexmap",
+        "serde",
         "serde_json",
         "thiserror",
         "tokio",
