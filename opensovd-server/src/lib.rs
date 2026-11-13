@@ -13,9 +13,7 @@ mod server;
 mod tls;
 
 pub use ::http::request::Parts;
-pub use auth::{
-    Access, Auth, AuthError, AuthLayer, Authenticated, Authenticator, Authorizer, Principal,
-};
+pub use auth::{Access, Auth, AuthError, Authenticated, Authenticator, Authorizer, Principal};
 pub use body::Body;
 #[cfg(unix)]
 pub use connect_info::UdsConnectInfo;
