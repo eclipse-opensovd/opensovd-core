@@ -13,6 +13,14 @@ pub mod auth;
 #[cfg(feature = "auth")]
 pub use auth::{JwtAuthenticator, RegorusAuthorizer};
 
+#[cfg(feature = "federation")]
+pub mod federation;
+
+#[cfg(feature = "federation")]
+pub use federation::{
+    Federation, FederationLayer, ForwardRoute, ServerUri, SharedForwardRoute, Upstream,
+};
+
 #[cfg(feature = "tls")]
 pub mod tls;
 

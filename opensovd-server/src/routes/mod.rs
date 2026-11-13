@@ -43,6 +43,7 @@ use axum::{
     http::{Uri, request::Parts},
     routing::get,
 };
+pub use discovery::encode_path_segment;
 use discovery::{app, area, component};
 use entity::stub;
 use http::header::HOST;
