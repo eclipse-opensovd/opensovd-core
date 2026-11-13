@@ -106,3 +106,4 @@ runs:
         subject-name: ghcr.io/${{ github.repository_owner }}/${{ inputs.binary }}
         subject-digest: ${{ steps.push.outputs.digest }}
         push-to-registry: true
+        create-storage-record: false
