@@ -80,16 +80,6 @@ jobs:
             echo "sha=${SHA::7}"
           } >> "$GITHUB_OUTPUT"
 
-  git-lint:
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-24.04
-    permissions:
-      pull-requests: read
-    steps:
-      - uses: amannn/action-semantic-pull-request@2252a14e810aa9b85c2d560bd7070c802206ecf6 # v6.1.2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
   build:
     name: build (${{ matrix.binary }}, ${{ matrix.target.triple }}${{ matrix.target.coverage && ', coverage' || '' }})
     needs: prepare
@@ -288,15 +278,10 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3 # zizmor: ignore[cache-poisoning]
         with:
           cache-on-failure: true
-      # Cache prek hooks
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0 # zizmor: ignore[cache-poisoning]
-        with:
-          path: ~/.cache/prek
-          key: prek-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
-          restore-keys: |
-            prek-${{ runner.os }}-
 
       - run: mise run lint
+
+      - run: mise run lint:secrets
 
       - name: Allow unprivileged user namespaces for the network namespace tests
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
@@ -444,7 +429,7 @@ jobs:
             artifacts/release/*
 
   gate:
-    needs: [prepare, git-lint, build, coverage, coverage-comment, licenses, advisories, lint, pages, docker, release]
+    needs: [prepare, build, coverage, coverage-comment, licenses, advisories, lint, pages, docker, release]
     if: always()
     runs-on: ubuntu-24.04
     permissions: {}

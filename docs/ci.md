@@ -62,7 +62,7 @@ On releases the docker job builds one image per binary from the binaries of its
 | **coverage-comment** | Same-repo PRs    | Posts each coverage summary as a PR comment                                           |
 | **licenses**   | When `should_run=true` | Checks licenses and sources with cargo-deny                                           |
 | **advisories** | When `should_run=true` | Checks security advisories with cargo-deny                                            |
-| **lint**       | When `should_run=true` | Runs the prek hooks, including rustfmt, clippy and zizmor, and the plugin self-tests  |
+| **lint**       | When `should_run=true` | Runs the prek hooks and the plugin self-tests, and scans the history for secrets      |
 | **docker**     | main/tags/schedule     | Pushes a multi-arch Docker image per binary to GHCR                                   |
 | **release**    | main/tags/schedule     | Creates GitHub release with artifacts and changelog                                   |
 | **gate**       | Always                 | Final check that all jobs passed (use for branch protection)                          |
@@ -139,4 +139,4 @@ fails the run on a mismatch, so a `v0.2.0` tag cannot ship binaries reporting
 
 ## Branch Protection
 
-Use the `gate` job as the required status check for branch protection rules.
+Use the `gate` and `pr-title` jobs as the required status checks for branch protection rules.

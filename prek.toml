@@ -1,0 +1,146 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 Contributors to the Eclipse Foundation
+# SPDX-License-Identifier: Apache-2.0
+
+minimum_prek_version = "0.5.0"
+default_install_hook_types = ["pre-commit", "commit-msg"]
+default_stages = ["pre-commit"]
+
+[[repos]]
+repo = "meta"
+hooks = [
+  { id = "check-hooks-apply" },
+  { id = "check-useless-excludes" },
+]
+
+[[repos]]
+repo = "builtin"
+hooks = [
+  { id = "trailing-whitespace" },
+  { id = "end-of-file-fixer" },
+  { id = "mixed-line-ending" },
+  { id = "check-added-large-files", exclude = '^MODULE\.bazel\.lock$' },
+  { id = "check-case-conflict" },
+  { id = "check-merge-conflict" },
+  { id = "check-vcs-permalinks" },
+  { id = "check-json" },
+  { id = "check-toml" },
+  { id = "check-yaml" },
+]
+
+[[repos]]
+repo = "local"
+
+[[repos.hooks]]
+id = "yamlfmt"
+name = "yamlfmt"
+language = "system"
+entry = "mise run lint:yaml-format"
+types = ["yaml"]
+
+[[repos.hooks]]
+id = "mado"
+name = "mado"
+language = "system"
+entry = "mise run lint:markdown"
+types = ["markdown"]
+
+[[repos.hooks]]
+id = "shellcheck"
+name = "shellcheck"
+language = "system"
+entry = "mise run lint:shell"
+types = ["shell"]
+require_serial = true
+
+[[repos.hooks]]
+id = "typos"
+name = "typos"
+language = "system"
+entry = "mise run lint:spelling"
+types = ["text"]
+
+[[repos.hooks]]
+id = "gitleaks"
+name = "gitleaks"
+language = "system"
+entry = "mise run lint:secrets-staged"
+pass_filenames = false
+
+[[repos.hooks]]
+id = "zizmor"
+name = "zizmor"
+language = "system"
+entry = "mise run lint:actions-security"
+types = ["yaml"]
+files = '(^|/)(\.github/(workflows/[^/]+|dependabot)\.ya?ml|action\.ya?ml)$'
+require_serial = true
+
+[[repos.hooks]]
+id = "jactionlint"
+name = "jactionlint"
+language = "system"
+entry = "mise run lint:actions"
+types = ["yaml"]
+files = '(^|/)(\.github/(workflows/[^/]+|dependabot|jactionlint)\.ya?ml|action\.ya?ml)$'
+pass_filenames = false
+
+[[repos.hooks]]
+id = "actions-lock"
+name = "actions lockfile"
+language = "system"
+entry = "mise run lint:actions-lock"
+files = '^\.github/(workflows|actions)/'
+pass_filenames = false
+
+[[repos.hooks]]
+id = "rustfmt"
+name = "cargo fmt"
+language = "system"
+entry = "mise run fmt"
+types = ["rust"]
+pass_filenames = false
+
+[[repos.hooks]]
+id = "clippy"
+name = "cargo clippy"
+language = "system"
+entry = "mise run lint:rust"
+types = ["rust"]
+pass_filenames = false
+
+[[repos.hooks]]
+id = "cargo-machete"
+name = "cargo-machete"
+language = "system"
+entry = "mise run lint:unused-deps"
+types_or = ["cargo", "cargo-lock"]
+pass_filenames = false
+
+[[repos.hooks]]
+id = "ruff-check"
+name = "ruff check"
+language = "system"
+entry = "mise run lint:python"
+types_or = ["python", "pyi"]
+
+[[repos.hooks]]
+id = "ruff-format"
+name = "ruff format"
+language = "system"
+entry = "mise run lint:python-format"
+types_or = ["python", "pyi"]
+
+[[repos.hooks]]
+id = "ty"
+name = "ty check"
+language = "system"
+entry = "mise run lint:python-types"
+types = ["python"]
+pass_filenames = false
+
+[[repos.hooks]]
+id = "convco"
+name = "convco"
+language = "system"
+entry = "mise run lint:commit-message"
+stages = ["commit-msg"]
