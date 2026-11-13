@@ -13,12 +13,15 @@ mod server;
 mod tls;
 
 pub use ::http::request::Parts;
-pub use auth::{Access, Auth, AuthError, Authenticated, Authenticator, Authorizer, Principal};
+pub use auth::{
+    Access, Auth, AuthError, AuthLayer, Authenticated, Authenticator, Authorizer, Principal,
+};
 pub use body::Body;
 #[cfg(unix)]
 pub use connect_info::UdsConnectInfo;
 pub use connect_info::{ConnectInfo, TcpConnectInfo};
 pub use opensovd_core::{DataProvider, Topology, Updates};
 pub use opensovd_models::version::VendorInfo;
+pub use routes::encode_path_segment;
 pub use schema::JsonSchema;
 pub use server::{BuilderError, Listener, Server, ServerBuilder};
