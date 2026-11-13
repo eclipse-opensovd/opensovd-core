@@ -26,17 +26,29 @@ mdns = ["libcli/mdns", "opensovd-extra/mdns"]
 
 [dependencies]
 anyhow = { workspace = true }
+brotli-decompressor = { workspace = true }
+bytes = { workspace = true }
+flate2 = { workspace = true }
+http = { workspace = true }
+http-body-util = { workspace = true }
+hyper-util = { workspace = true, features = ["client-legacy", "http1", "tokio"] }
 libcli = { workspace = true, features = ["server"] }
 opensovd-server = { workspace = true }
 opensovd-core = { workspace = true }
-opensovd-extra = { workspace = true, features = ["trace"] }
+opensovd-extra = { workspace = true, features = ["federation", "trace"] }
 opensovd-mocks = { workspace = true, optional = true }
+opensovd-models = { workspace = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true, features = ["std"] }
 tokio = { workspace = true, features = ["rt", "signal", "time", "sync"] }
 tower = { workspace = true, features = ["util"] }
 tracing = { workspace = true }
 clap = { workspace = true, features = ["cargo", "derive", "env", "error-context", "help", "std", "usage"] }
+
+[dev-dependencies]
+hyper = { workspace = true, features = ["http1", "server"] }
+tokio = { workspace = true, features = ["macros"] }
 
 [build-dependencies]
 libcli-build = { workspace = true }

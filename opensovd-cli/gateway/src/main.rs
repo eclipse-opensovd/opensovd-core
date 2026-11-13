@@ -4,11 +4,13 @@
 //! OpenSOVD Gateway server binary.
 
 mod cli;
+mod upstream;
 
 use std::process::ExitCode;
 
 use clap::Parser;
 use opensovd_core::Topology;
+use opensovd_extra::{Federation, FederationLayer};
 #[cfg(feature = "mock")]
 use opensovd_mocks::create_mock_topology;
 use opensovd_server::Server;
@@ -61,9 +63,6 @@ async fn run(cli: cli::Cli) -> anyhow::Result<()> {
     let args = &cli.server;
 
     let mut builder = Server::builder();
-    if let Some(auth) = args.auth()? {
-        builder = builder.auth(auth);
-    }
     #[cfg(feature = "tls")]
     if let Some(tls) = args.tls()? {
         builder = builder.tls(tls);
@@ -73,7 +72,8 @@ async fn run(cli: cli::Cli) -> anyhow::Result<()> {
     #[cfg(feature = "mdns")]
     let mdns = args.mdns(&listener)?;
     builder = builder.listener(listener);
-    builder = configure_topology(builder, &cli).await;
+    let topology = configure_topology(&cli).await;
+    builder = builder.topology(topology.clone());
 
     let cors = args.cors();
     if cors.is_some() {
@@ -83,6 +83,15 @@ async fn run(cli: cli::Cli) -> anyhow::Result<()> {
     if let Some((path, dir)) = args.serve_dir()? {
         builder = builder.service(path, dir);
     }
+
+    // Forwarding has to run inside auth, and layers run outside the auth of the
+    // builder, so the gateway adds both.
+    let uri = args.url();
+    let base = uri.path().trim_end_matches('/');
+    let federation = create_federation(&cli.upstream, topology, uri.scheme_str(), base)?;
+    let auth = args
+        .auth()?
+        .map(|auth| auth.into_layer(Some(base).filter(|base| !base.is_empty())));
 
     #[cfg(feature = "mdns")]
     let (announcer_tx, announcer_rx) =
@@ -98,6 +107,8 @@ async fn run(cli: cli::Cli) -> anyhow::Result<()> {
     let server = builder
         .layer(opensovd_extra::trace::server_layer())
         .layer(tower::util::option_layer(cors))
+        .layer(tower::util::option_layer(auth))
+        .layer(tower::util::option_layer(federation))
         .base_uri(args.url().clone())?
         .vendor_info(VENDOR_INFO)
         .build()?;
@@ -125,10 +136,7 @@ async fn run(cli: cli::Cli) -> anyhow::Result<()> {
 }
 
 #[cfg_attr(not(feature = "mock"), expect(clippy::unused_async))]
-async fn configure_topology<Vendor, Layer>(
-    builder: opensovd_server::ServerBuilder<Vendor, Layer>,
-    cli: &cli::Cli,
-) -> opensovd_server::ServerBuilder<Vendor, Layer> {
+async fn configure_topology(cli: &cli::Cli) -> Topology {
     #[cfg(feature = "mock")]
     let topology = if cli.mock {
         tracing::info!(target: TARGET, "Mock topology enabled");
@@ -143,5 +151,23 @@ async fn configure_topology<Vendor, Layer>(
         Topology::default()
     };
 
-    builder.topology(topology)
+    topology
+}
+
+/// The layer that forwards to the upstreams, if there are any.
+fn create_federation(
+    upstream: &cli::UpstreamArgs,
+    topology: Topology,
+    scheme: Option<&str>,
+    base: &str,
+) -> anyhow::Result<Option<FederationLayer>> {
+    let upstreams = upstream::configured(&upstream.config()?)?;
+    if upstreams.is_empty() {
+        return Ok(None);
+    }
+    let federation = Federation::new(upstreams, topology)?
+        .scheme(scheme.unwrap_or("http"))
+        .base(base)
+        .into_layer();
+    Ok(Some(federation))
 }
