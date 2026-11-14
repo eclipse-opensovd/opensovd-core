@@ -31,7 +31,6 @@ workspace_rust_binary(
         "tracing",
     ],
     crate_features = [
-        "http2",
         "json-preserve-order",
         "jsonschema",
         "mock",
