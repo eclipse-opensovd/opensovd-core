@@ -5,7 +5,7 @@
 
 use opensovd_extra::{ForwardRoute, Upstream, UpstreamProxy};
 
-use crate::cli::{UpstreamConfig, UpstreamUrl};
+use crate::cli::{Endpoint, UpstreamConfig, UpstreamUrl};
 
 /// The upstreams of `config`. All serve their entities and take part in vehicle
 /// locks. Only the first takes what has a single answer, but for authorize,
@@ -20,10 +20,19 @@ pub fn configured(config: &UpstreamConfig) -> anyhow::Result<Vec<Upstream>> {
         .iter()
         .enumerate()
         .map(|(index, upstream)| {
-            let UpstreamUrl { url, authorize } = upstream;
+            let UpstreamUrl {
+                endpoint,
+                authorize,
+            } = upstream;
             let routes = routes(index == 0, *authorize);
-            tracing::debug!(target: "forwarding", ?routes, "{url}");
-            let proxy = UpstreamProxy::new(url, config.connect_timeout)?;
+            tracing::debug!(target: "forwarding", ?routes, "{endpoint}");
+            let proxy = match endpoint {
+                Endpoint::Tcp(url) => UpstreamProxy::new(url, config.connect_timeout)?,
+                #[cfg(unix)]
+                Endpoint::UnixSocket { socket, base } => {
+                    UpstreamProxy::unix_socket(socket, base, config.connect_timeout)
+                }
+            };
             Ok(Upstream::new(proxy.into_service())
                 .routes(routes)
                 .discovery_timeout(config.discovery_timeout))
