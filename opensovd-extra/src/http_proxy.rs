@@ -44,7 +44,7 @@
 //! base URI (including its API version) to rewrite links. Without it, `Location`
 //! and body links are left unchanged, but compressed JSON is still decoded.
 //!
-//! The transport is plain HTTP only. The constructor keeps the existing
+//! The transport is plain HTTP over TCP or a Unix domain socket. The TCP constructor keeps the existing
 //! gateway behavior: it requires an authority, uses HTTP regardless of the
 //! supplied scheme, ignores the base URI's query, and trims trailing path
 //! slashes. Callers should pass an `http://` base URI without a query.
@@ -99,8 +99,83 @@ pub struct UpstreamProxy {
     origin: Uri,
     /// Path of the upstream's API, without a trailing `/`, such as `/vehicle/v15`.
     base: String,
+    /// The upstream as configured, for forwarding logs.
+    endpoint: String,
     /// Pooled HTTP client used to forward requests to the upstream.
-    client: Client<HttpConnector, Body>,
+    client: Transport,
+}
+
+#[derive(Clone)]
+enum Transport {
+    Tcp(Client<HttpConnector, Body>),
+    #[cfg(unix)]
+    UnixSocket(Client<unix_socket::Connector, Body>),
+}
+
+impl Transport {
+    async fn request(
+        &self,
+        request: Request<Body>,
+    ) -> Result<Response<hyper::body::Incoming>, hyper_util::client::legacy::Error> {
+        match self {
+            Self::Tcp(client) => client.request(request).await,
+            #[cfg(unix)]
+            Self::UnixSocket(client) => client.request(request).await,
+        }
+    }
+}
+
+#[cfg(unix)]
+mod unix_socket {
+    use std::io;
+    use std::pin::Pin;
+    use std::task::{Context, Poll};
+    use std::time::Duration;
+
+    use http::Uri;
+    use hyper_util::rt::TokioIo;
+    use tokio::net::UnixStream;
+
+    /// Connects every request to one socket, whatever its authority.
+    #[derive(Clone)]
+    pub struct Connector {
+        socket: String,
+        connect_timeout: Duration,
+    }
+
+    impl Connector {
+        pub const fn new(socket: String, connect_timeout: Duration) -> Self {
+            Self {
+                socket,
+                connect_timeout,
+            }
+        }
+
+        async fn connect(&self) -> io::Result<UnixStream> {
+            let path = match self.socket.strip_prefix('@') {
+                Some(name) => format!("\0{name}"),
+                None => self.socket.clone(),
+            };
+            tokio::time::timeout(self.connect_timeout, UnixStream::connect(path))
+                .await
+                .map_err(|_| io::Error::new(io::ErrorKind::TimedOut, "connect timed out"))?
+        }
+    }
+
+    impl tower::Service<Uri> for Connector {
+        type Response = TokioIo<UnixStream>;
+        type Error = io::Error;
+        type Future = Pin<Box<dyn Future<Output = io::Result<Self::Response>> + Send>>;
+
+        fn poll_ready(&mut self, _: &mut Context<'_>) -> Poll<io::Result<()>> {
+            Poll::Ready(Ok(()))
+        }
+
+        fn call(&mut self, _: Uri) -> Self::Future {
+            let connector = self.clone();
+            Box::pin(async move { connector.connect().await.map(TokioIo::new) })
+        }
+    }
 }
 
 impl UpstreamProxy {
@@ -124,13 +199,36 @@ impl UpstreamProxy {
         let mut connector = HttpConnector::new();
         connector.set_connect_timeout(Some(connect_timeout));
         connector.set_nodelay(true);
-        let client = Client::builder(TokioExecutor::new()).build(connector);
+        let client = Transport::Tcp(Client::builder(TokioExecutor::new()).build(connector));
 
         Ok(Self {
             origin,
             base: url.path().trim_end_matches('/').to_owned(),
+            endpoint: url.to_string(),
             client,
         })
+    }
+
+    /// A proxy over a Unix domain socket. `socket` is a filesystem path or,
+    /// on Linux, `@name` for an abstract socket. `base` is the API path.
+    /// `connect_timeout` limits establishing a connection, not response time.
+    #[cfg(unix)]
+    #[must_use]
+    pub fn unix_socket(socket: &str, base: &str, connect_timeout: Duration) -> Self {
+        let connector = unix_socket::Connector::new(socket.to_owned(), connect_timeout);
+        let client = Client::builder(TokioExecutor::new()).build(connector);
+        let base = base.trim_end_matches('/').to_owned();
+        let endpoint = if base.is_empty() {
+            format!("unix:{socket}")
+        } else {
+            format!("unix:{socket}:{base}")
+        };
+        Self {
+            origin: Uri::from_static("http://localhost/"),
+            base,
+            endpoint,
+            client: Transport::UnixSocket(client),
+        }
     }
 
     /// The proxy as a cloneable Tower service accepted by [`crate::Upstream::new`].
@@ -175,7 +273,7 @@ impl UpstreamProxy {
             Err(error) => return bad_gateway(&format!("{error:#}")),
         };
         let server = parts.extensions.get::<ServerUri>().cloned();
-        tracing::debug!(target: "forwarding", "{} {target}", parts.method);
+        tracing::debug!(target: "forwarding", upstream = %self.endpoint, "{} {target}", parts.method);
         parts.uri = target;
         strip_hop_by_hop_headers(&mut parts.headers);
         // the client sets the upstream's authority
@@ -192,7 +290,7 @@ impl UpstreamProxy {
                 self.point_at(server, parts, body).await
             }
             Err(error) => {
-                tracing::warn!(target: "forwarding", error = %error, "Upstream unreachable");
+                tracing::warn!(target: "forwarding", upstream = %self.endpoint, error = %error, "Upstream unreachable");
                 bad_gateway("The upstream is unreachable")
             }
         }
@@ -213,7 +311,8 @@ impl UpstreamProxy {
             parts.headers.insert(header::LOCATION, location);
         }
         let encoded = parts.headers.contains_key(header::CONTENT_ENCODING);
-        if !is_json(&parts.headers) || (server.is_none() && !encoded) {
+        let rewritten = server.is_some() && self.reference().is_some();
+        if !is_json(&parts.headers) || (!rewritten && !encoded) {
             return Response::from_parts(parts, body);
         }
 
@@ -289,7 +388,7 @@ impl UpstreamProxy {
             let text = std::str::from_utf8(body).ok()?;
             return self.at_server(text, server).map(bytes::Bytes::from);
         }
-        let reference = self.reference().as_bytes();
+        let reference = self.reference()?.as_bytes();
         let mut rewritten = Vec::new();
         let mut copied = 0;
         for (string, key) in json_strings(body) {
@@ -316,12 +415,15 @@ impl UpstreamProxy {
     }
 
     /// What identifies a reference to the upstream's API: its path, or its
-    /// host without a path to go by. See [`Self::at_server`].
-    fn reference(&self) -> &str {
-        if self.base.is_empty() {
-            self.origin.authority().map_or("", |a| a.as_str())
-        } else {
-            self.base.as_str()
+    /// host without a path to go by. A socket without a path has no reference.
+    fn reference(&self) -> Option<&str> {
+        if !self.base.is_empty() {
+            return Some(&self.base);
+        }
+        match &self.client {
+            Transport::Tcp(_) => self.origin.authority().map(http::uri::Authority::as_str),
+            #[cfg(unix)]
+            Transport::UnixSocket(_) => None,
         }
     }
 
@@ -335,7 +437,7 @@ impl UpstreamProxy {
     /// CDA also spells it `/Vehicle/v15`. Without a path to go by, only URLs
     /// of the configured host match.
     fn at_server(&self, text: &str, server: &str) -> Option<String> {
-        let reference = self.reference();
+        let reference = self.reference()?;
         let server_path = server
             .split_once("://")
             .and_then(|(_, rest)| rest.find('/').and_then(|path| rest.get(path..)))
@@ -700,6 +802,147 @@ mod tests {
             .header("accept-encoding", "gzip, br")
             .body(Body::new(Full::new(Bytes::from_static(body))))
             .unwrap()
+    }
+
+    #[cfg(unix)]
+    fn mock_unix_socket_upstream(listener: tokio::net::UnixListener) -> Arc<Mutex<Vec<String>>> {
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let recorded = Arc::clone(&seen);
+        let service = hyper::service::service_fn(move |request: Request<hyper::body::Incoming>| {
+            recorded.lock().unwrap().push(request.uri().to_string());
+            async { Ok::<_, Infallible>(Response::new(Full::new(Bytes::from_static(b"unix")))) }
+        });
+        tokio::spawn(async move {
+            loop {
+                let (stream, _) = listener.accept().await.unwrap();
+                let service = service.clone();
+                tokio::spawn(async move {
+                    hyper::server::conn::http1::Builder::new()
+                        .serve_connection(hyper_util::rt::TokioIo::new(stream), service)
+                        .await
+                        .ok();
+                });
+            }
+        });
+        seen
+    }
+
+    #[cfg(unix)]
+    async fn assert_forwards_to_the_mock(proxy: UpstreamProxy, seen: &Mutex<Vec<String>>) {
+        let response = proxy
+            .into_service()
+            .oneshot(request("GET", "/components/flxc1000/faults?x=1", b""))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), 200);
+        assert_eq!(
+            &response.into_body().collect().await.unwrap().to_bytes()[..],
+            b"unix"
+        );
+        assert_eq!(
+            *seen.lock().unwrap(),
+            ["/vehicle/v15/components/flxc1000/faults?x=1"]
+        );
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn forwards_over_a_unix_socket() {
+        let dir = tempfile::tempdir().unwrap();
+        let socket = dir.path().join("cda.sock");
+        let seen = mock_unix_socket_upstream(tokio::net::UnixListener::bind(&socket).unwrap());
+        let proxy = UpstreamProxy::unix_socket(
+            socket.to_str().unwrap(),
+            "/vehicle/v15",
+            Duration::from_secs(1),
+        );
+        assert_forwards_to_the_mock(proxy, &seen).await;
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn forwards_over_an_abstract_unix_socket() {
+        use std::os::linux::net::SocketAddrExt;
+        let name = format!("opensovd-gateway-test:{}", std::process::id());
+        let address = std::os::unix::net::SocketAddr::from_abstract_name(&name).unwrap();
+        let listener = std::os::unix::net::UnixListener::bind_addr(&address).unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let seen = mock_unix_socket_upstream(tokio::net::UnixListener::from_std(listener).unwrap());
+        let proxy =
+            UpstreamProxy::unix_socket(&format!("@{name}"), "/vehicle/v15", Duration::from_secs(1));
+        assert_forwards_to_the_mock(proxy, &seen).await;
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_unix_socket_upstream_without_a_path_rewrites_no_localhost_urls() {
+        let proxy = UpstreamProxy::unix_socket("/run/cda.sock", "", Duration::from_secs(1));
+        assert_eq!(
+            proxy.at_server(
+                "see http://localhost/other-service/x",
+                "http://gateway/sovd/v1"
+            ),
+            None
+        );
+        assert_eq!(
+            proxy.json_at_server(
+                br#"{"href":"http://localhost/x"}"#,
+                "http://gateway/sovd/v1"
+            ),
+            None
+        );
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn json_without_a_reference_to_rewrite_stays_streamed() {
+        fn unreadable_json() -> (Parts, Body) {
+            let (parts, ()) = Response::builder()
+                .status(200)
+                .header("content-type", "application/json")
+                .body(())
+                .unwrap()
+                .into_parts();
+            let failing = futures::stream::iter([Err::<hyper::body::Frame<Bytes>, _>(
+                std::io::Error::other("unread"),
+            )]);
+            (parts, Body::new(http_body_util::StreamBody::new(failing)))
+        }
+        let socket = UpstreamProxy::unix_socket("/run/cda.sock", "", Duration::from_secs(1));
+        let (parts, body) = unreadable_json();
+        assert_eq!(
+            socket
+                .point_at(Some("http://gateway/sovd/v1"), parts, body)
+                .await
+                .status(),
+            200
+        );
+        let (parts, body) = unreadable_json();
+        assert_eq!(
+            proxy("http://cda:20002/vehicle/v15")
+                .point_at(Some("http://gateway/sovd/v1"), parts, body)
+                .await
+                .status(),
+            502
+        );
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn a_missing_unix_socket_answers_bad_gateway() {
+        let dir = tempfile::tempdir().unwrap();
+        let socket = dir.path().join("missing.sock");
+        let proxy = UpstreamProxy::unix_socket(
+            socket.to_str().unwrap(),
+            "/vehicle/v15",
+            Duration::from_secs(1),
+        );
+        let response = proxy
+            .into_service()
+            .oneshot(request("GET", "/locks", b""))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), 502);
     }
 
     #[tokio::test]
