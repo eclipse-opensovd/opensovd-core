@@ -1,3 +1,4 @@
+load("@rules_rust//rust:defs.bzl", "rust_test")
 load("//bazel:rust_crate.bzl", "workspace_cargo_build_script", "workspace_rust_binary")
 
 package(default_visibility = ["//:workspace_crates"])
@@ -9,9 +10,9 @@ workspace_cargo_build_script(
     srcs = ["build.rs"],
     crate_name = "build_script_build",
     crate_root = "build.rs",
-    deps = ["//opensovd-cli/build:libcli_build"],
     pkg_name = "opensovd-gateway",
     version = "0.1.1",
+    deps = ["//opensovd-cli/build:libcli_build"],
 )
 
 workspace_rust_binary(
@@ -19,13 +20,8 @@ workspace_rust_binary(
     srcs = glob(["src/**/*.rs"]),
     crate_deps = [
         "anyhow",
-        "brotli-decompressor",
-        "bytes",
         "clap",
-        "flate2",
         "http",
-        "http-body-util",
-        "hyper-util",
         "schemars",
         "sd-notify",
         "serde",
@@ -47,12 +43,23 @@ workspace_rust_binary(
     version = "0.1.1",
     deps = [
         ":build_script_build",
-        "@crate_index//:rustls",
         "//opensovd-cli/lib:libcli",
         "//opensovd-core:opensovd_core",
         "//opensovd-extra:opensovd_extra",
         "//opensovd-mocks:opensovd_mocks",
-        "//opensovd-models:opensovd_models",
         "//opensovd-server:opensovd_server",
+        "@crate_index//:rustls",
+    ],
+)
+
+rust_test(
+    name = "upstream_config_test",
+    crate = ":opensovd_gateway",
+    crate_features = [
+        "http2",
+        "json-preserve-order",
+        "jsonschema",
+        "mock",
+        "tls",
     ],
 )

@@ -21,6 +21,12 @@ pub use federation::{
     Federation, FederationLayer, ForwardRoute, ServerUri, SharedForwardRoute, Upstream,
 };
 
+#[cfg(feature = "http-proxy")]
+pub mod http_proxy;
+
+#[cfg(feature = "http-proxy")]
+pub use http_proxy::UpstreamProxy;
+
 #[cfg(feature = "tls")]
 pub mod tls;
 

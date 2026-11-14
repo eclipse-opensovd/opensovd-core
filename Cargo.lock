@@ -1777,10 +1777,13 @@ dependencies = [
 name = "opensovd-extra"
 version = "0.1.1"
 dependencies = [
+ "anyhow",
  "aws-lc-rs",
  "axum",
  "base64 0.23.1",
+ "brotli-decompressor",
  "bytes",
+ "flate2",
  "futures",
  "http",
  "http-body",
@@ -1816,20 +1819,13 @@ name = "opensovd-gateway"
 version = "0.1.1"
 dependencies = [
  "anyhow",
- "brotli-decompressor",
- "bytes",
  "clap",
- "flate2",
  "http",
- "http-body-util",
- "hyper",
- "hyper-util",
  "libcli",
  "libcli-build",
  "opensovd-core",
  "opensovd-extra",
  "opensovd-mocks",
- "opensovd-models",
  "opensovd-server",
  "schemars",
  "sd-notify",
