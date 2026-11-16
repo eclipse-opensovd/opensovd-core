@@ -63,10 +63,12 @@ runs:
       run: |
         PKG=$(cargo metadata --format-version 1 --no-deps \
           | jq --arg name "$BINARY" '.packages[] | select(.name == $name)')
-        echo "version=$(jq -r '.version' <<<"$PKG")"           >> "$GITHUB_OUTPUT"
-        echo "description=$(jq -r '.description' <<<"$PKG")"   >> "$GITHUB_OUTPUT"
-        echo "license=$(jq -r '.license' <<<"$PKG")"           >> "$GITHUB_OUTPUT"
-        echo "repository=$(jq -r '.repository' <<<"$PKG")"     >> "$GITHUB_OUTPUT"
+        {
+          echo "version=$(jq -r '.version' <<<"$PKG")"
+          echo "description=$(jq -r '.description' <<<"$PKG")"
+          echo "license=$(jq -r '.license' <<<"$PKG")"
+          echo "repository=$(jq -r '.repository' <<<"$PKG")"
+        } >> "$GITHUB_OUTPUT"
 
     - id: meta
       uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
