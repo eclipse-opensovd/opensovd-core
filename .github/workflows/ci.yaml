@@ -12,6 +12,8 @@ on:
     - cron: '0 2 * * *' # 02:00 UTC daily
   workflow_dispatch:
 
+permissions: {}
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
