@@ -116,6 +116,7 @@ jobs:
           key: ${{ matrix.binary }}${{ matrix.target.coverage && '-coverage' || '' }}
           workspaces: ${{ matrix.target.coverage && '. -> target/coverage' || '. -> target' }}
           cache-on-failure: true
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       # A coverage job builds and tests instrumented in one task; the others
       # build the release binary and test it stage by stage.
@@ -278,6 +279,7 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3 # zizmor: ignore[cache-poisoning]
         with:
           cache-on-failure: true
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - run: mise run lint
 
