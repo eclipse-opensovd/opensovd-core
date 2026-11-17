@@ -18,7 +18,6 @@ workflows:
         - 'docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550'
         - 'docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302'
         - 'docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069'
-        - 'docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1'
         - 'jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b'
         - 'swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0'
     '.github/workflows/first-interaction.yaml':
@@ -113,11 +112,6 @@ dependencies:
         commit: 'sha1-f87e5991a6d7451dcb8d9637bfbc97413f497069'
         owner_id: 5429470
         repo_id: 288485773
-    'docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1':
-        ref: 'v4.4.0'
-        commit: 'sha1-99012661954931238ded8c8b007157a8430204e1'
-        owner_id: 5429470
-        repo_id: 288487894
     'jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b':
         ref: 'v5.2.7'
         commit: 'sha1-b44d12e7d0d8ee7461bb893e1b1993500433185b'
