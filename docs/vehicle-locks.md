@@ -1,9 +1,6 @@
 <!--
 SPDX-FileCopyrightText: Copyright (c) 2026 Contributors to the Eclipse Foundation
 SPDX-License-Identifier: Apache-2.0
-
-AI Disclosure: This document was created with the assistance of Claude Code.
-Assisted-by: Claude Code
 -->
 
 # Vehicle locks across upstreams
