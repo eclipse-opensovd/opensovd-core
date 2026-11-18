@@ -16,7 +16,7 @@ dependencies = [
 ]
 
 [dependency-groups]
-docs = ["sphinx>=9.2.0", "furo>=2025.12.19", "myst-parser>=5.1.0"]
+docs = ["sphinx>=9.2.0", "furo>=2025.12.19", "myst-parser>=5.2.0"]
 dev = [
     "pytest-html>=4.2.0",
     "pytest-metadata>=3.1.1",
