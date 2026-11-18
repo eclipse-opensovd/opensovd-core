@@ -21,6 +21,8 @@ workflows:
         - 'docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1'
         - 'jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b'
         - 'swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0'
+    '.github/workflows/devcontainer.yaml':
+        - 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1'
     '.github/workflows/first-interaction.yaml':
         - 'actions/first-interaction@1c4688942c71f71d4f5502a26ea67c331730fa4d'
     '.github/workflows/labeler.yaml':
