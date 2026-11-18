@@ -16,11 +16,11 @@ categories.workspace = true
 jsonschema = ["dep:schemars"]
 
 [dependencies]
-schemars = { workspace = true, optional = true, features = ["derive", "std", "chrono04"] }
+jiff = { workspace = true, features = ["serde"] }
+schemars = { workspace = true, optional = true, features = ["derive", "std", "jiff02"] }
 serde = { workspace = true, features = ["derive", "std"] }
 serde_json = { workspace = true, features = ["std"] }
 serde_path_to_error = { workspace = true }
-chrono = { workspace = true, features = ["serde"] }
 
 [lints]
 workspace = true

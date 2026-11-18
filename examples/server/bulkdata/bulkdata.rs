@@ -15,7 +15,6 @@ use std::path::PathBuf;
 
 use async_trait::async_trait;
 use bytes::Bytes;
-use chrono::{DateTime, Utc};
 use futures::{Stream, StreamExt, stream};
 use opensovd_core::{
     App, BulkData, BulkDataError, BulkDataMetadata, BulkDataProvider, CategoryFilter, CategoryInfo,
@@ -113,8 +112,8 @@ impl TempFsBulkDataProvider {
             .await
             .map_err(|error| BulkDataError::Internal(error.to_string()))?;
 
-        let creation_date = stats.created().ok().map(Into::<DateTime<Utc>>::into);
-        let last_modified = stats.modified().ok().map(Into::<DateTime<Utc>>::into);
+        let creation_date = stats.created().ok().and_then(|time| time.try_into().ok());
+        let last_modified = stats.modified().ok().and_then(|time| time.try_into().ok());
 
         Ok(Some(BulkDataMetadata {
             id: data_id.clone(),

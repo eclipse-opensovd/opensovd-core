@@ -26,7 +26,7 @@ axum = { workspace = true, features = ["json", "macros", "matched-path", "origin
 bytes = { workspace = true }
 http-body = { workspace = true }
 axum-extra = { workspace = true, features = ["query", "typed-header"] }
-chrono = { workspace = true }
+jiff = { workspace = true }
 futures = { workspace = true, features = ["std", "async-await"] }
 futures-core = { workspace = true }
 http = { workspace = true }

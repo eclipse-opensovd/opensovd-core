@@ -13,10 +13,10 @@ mod common;
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
-use chrono::{TimeZone, Utc};
 use futures::stream;
 use http_body_util::BodyExt;
 use hyper::Request;
+use jiff::Timestamp;
 use opensovd_core::{
     App, Component, LogConfiguration, LogContext, LogEntry, LogError, LogFilter, LogProvider,
     LogResult, LogSeverity, LogStream, Topology,
@@ -114,7 +114,7 @@ impl LogProvider for ErrorStreamProvider {
 }
 
 fn test_entry(severity: LogSeverity, message: &str) -> LogEntry {
-    let timestamp = Utc.with_ymd_and_hms(2026, 10, 7, 8, 0, 0).unwrap();
+    let timestamp = "2026-10-07T08:00:00Z".parse::<Timestamp>().unwrap();
     LogEntry {
         timestamp,
         context: LogContext {

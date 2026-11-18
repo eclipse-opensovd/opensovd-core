@@ -33,12 +33,12 @@ axum = { version = "0.8", default-features = false }
 axum-extra = { version = "0.12", default-features = false }
 dashmap = { version = "6", default-features = false }
 bytes = { version = "1", default-features = false }
-chrono = { version = "0.4", default-features = false }
 clap = { version = "4", default-features = false }
 criterion = { version = "0.8", default-features = false }
 futures = { version = "0.3", default-features = false }
 futures-core = { version = "0.3", default-features = false }
 indexmap = { version = "2", default-features = false, features = ["std"] }
+jiff = { version = "0.2", default-features = false, features = ["std"] }
 jsonschema = { version = "0.61", default-features = false }
 jsonwebtoken = { version = "11", default-features = false, features = ["aws_lc_rs", "use_pem"] }
 http = { version = "1", default-features = false, features = ["std"] }

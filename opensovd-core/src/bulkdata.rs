@@ -5,8 +5,8 @@
 
 use async_trait::async_trait;
 use bytes::Bytes;
-use chrono::{DateTime, Utc};
 use futures_core::Stream;
+use jiff::Timestamp;
 
 use crate::CategoryInfo;
 
@@ -24,8 +24,8 @@ pub enum BulkDataError {
 
 #[derive(Debug, Default)]
 pub struct CategoryFilter {
-    pub created_before: Option<DateTime<Utc>>,
-    pub created_after: Option<DateTime<Utc>>,
+    pub created_before: Option<Timestamp>,
+    pub created_after: Option<Timestamp>,
     pub tags: Option<Vec<String>>,
 }
 
@@ -36,8 +36,8 @@ pub struct BulkDataMetadata {
     pub name: Option<String>,
     pub translation_id: Option<String>,
     pub size: Option<u64>,
-    pub creation_date: Option<DateTime<Utc>>,
-    pub last_modified: Option<DateTime<Utc>>,
+    pub creation_date: Option<Timestamp>,
+    pub last_modified: Option<Timestamp>,
     pub hash: Option<String>,
     pub hash_algorithm: Option<String>,
     pub tags: Option<Vec<String>>,
