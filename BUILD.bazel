@@ -18,3 +18,8 @@ alias(
     name = "opensovd-gateway",
     actual = "//opensovd-cli/gateway:opensovd_gateway",
 )
+
+alias(
+    name = "opensovd-http-proxy",
+    actual = "//opensovd-extra:opensovd_extra_http_proxy",
+)

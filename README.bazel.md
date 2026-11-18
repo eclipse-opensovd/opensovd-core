@@ -113,6 +113,56 @@ gateway's transitive dependencies.
 bazel build //:opensovd-gateway
 ```
 
+## Reusable HTTP Upstream Proxy
+
+The gateway's HTTP proxy is exported as `opensovd_extra::UpstreamProxy`. Cargo
+consumers enable `http-proxy`, which also enables `federation`:
+
+```toml
+opensovd-extra = { git = "https://github.com/eclipse-opensovd/opensovd-core", rev = "<revision-containing-the-extraction>", default-features = false, features = ["http-proxy"] }
+```
+
+```rust
+use std::time::Duration;
+use opensovd_extra::{Federation, Upstream, UpstreamProxy};
+
+let base = "http://cda:20002/vehicle/v15".parse()?;
+let proxy = UpstreamProxy::new(&base, Duration::from_secs(5))?;
+let upstream = Upstream::new(proxy.into_service());
+let layer = Federation::new(vec![upstream], topology)?.base("/sovd").into_layer();
+// Install `layer` around the server's routes, inside any authorization layer.
+```
+
+Federation supplies the existing `ServerUri` request extension used to rewrite
+`Location` and JSON string values. Direct service users can insert that extension
+themselves. Transport behavior is unchanged: plain HTTP only, a connection timeout
+(not a request timeout), bounded JSON decoding/rewriting, and streaming non-JSON
+responses. Pass an `http://` base URI without a query; the existing constructor
+uses its authority and path only. Configure routes and discovery timeouts on
+`Upstream`, not on the proxy.
+
+Bazel consumers add the public target to their Rust target's `deps`:
+
+```starlark
+deps = ["@opensovd_core//:opensovd-http-proxy"]
+```
+
+The equivalent package target is
+`@opensovd_core//opensovd-extra:opensovd_extra_http_proxy`. Its Rust crate name is
+`opensovd_extra`; it enables only `federation` and `http-proxy`, not authentication,
+TLS, or tracing middleware. No visibility patches are needed for this target;
+the workspace's full-featured extra target and unrelated internal targets remain
+private. Consumers still provide their own compatible Rust toolchain and any
+other libraries they use directly. Do not depend on both variants of
+`opensovd_extra` in the same Rust target.
+
+Proxy regression tests and a downstream-style federation usage test run with:
+
+```bash
+cargo test -p opensovd-extra --no-default-features --features http-proxy
+bazel test //opensovd-extra:http_proxy_test //opensovd-extra:http_proxy_usage_test //opensovd-cli/gateway:upstream_config_test
+```
+
 All Bazel targets can be inspected with:
 
 ```bash
