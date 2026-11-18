@@ -8,7 +8,7 @@
 
 use std::{path::Path, process::Command};
 
-use time::OffsetDateTime;
+use jiff::Timestamp;
 
 /// Emits `VERSION`, `RELEASE_CHANNEL`, `COMMIT_SHA` and `BUILD_DATE` for the
 /// calling crate.
@@ -88,15 +88,12 @@ fn emit_build_date() {
         .and_then(|ts| ts.parse::<i64>().ok())
         .or_else(|| git(["log", "-1", "--pretty=%ct"]).and_then(|ts| ts.parse::<i64>().ok()));
 
-    let build_date = if let Some(epoch) = epoch
-        && let Ok(dt) = OffsetDateTime::from_unix_timestamp(epoch)
-    {
-        let format =
-            time::macros::format_description!("[year]-[month padding:zero]-[day padding:zero]");
-        dt.format(&format).unwrap_or_else(|_| "unknown".to_string())
-    } else {
-        "unknown".to_string()
-    };
+    let build_date = epoch
+        .and_then(|epoch| Timestamp::from_second(epoch).ok())
+        .map_or_else(
+            || "unknown".to_string(),
+            |date| date.strftime("%F").to_string(),
+        );
     println!("cargo::rustc-env=BUILD_DATE={build_date}");
 }
 

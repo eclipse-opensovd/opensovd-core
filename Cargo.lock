@@ -1341,7 +1341,7 @@ dependencies = [
 name = "libcli-build"
 version = "0.1.1"
 dependencies = [
- "time",
+ "jiff",
 ]
 
 [[package]]
