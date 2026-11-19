@@ -16,8 +16,13 @@ async fn main() -> ExitCode {
     }
 
     if let Err(e) = opensovd_gateway::run_default(cli).await {
-        eprintln!("Error: {e:?}");
-        return ExitCode::FAILURE;
+        match e.downcast::<clap::Error>() {
+            Ok(error) => error.exit(),
+            Err(error) => {
+                eprintln!("Error: {error:?}");
+                return ExitCode::FAILURE;
+            }
+        }
     }
 
     ExitCode::SUCCESS
