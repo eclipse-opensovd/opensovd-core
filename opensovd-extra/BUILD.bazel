@@ -104,7 +104,6 @@ workspace_rust_library(
     crate_deps = [
         "if-addrs",
         "mdns-sd",
-        "rustix",
         "thiserror",
         "tokio",
         "tracing",
@@ -114,6 +113,28 @@ workspace_rust_library(
     crate_root = "src/lib.rs",
     version = "0.1.1",
     visibility = ["//visibility:public"],
+    deps = select({
+        "@rules_rust//rust/platform:unix": crate_deps(["rustix"]),
+        "//conditions:default": [],
+    }),
+)
+
+rust_test(
+    name = "mdns_test",
+    crate = ":opensovd_extra_mdns",
+    crate_features = ["mdns"],
+)
+
+rust_test(
+    name = "mdns_http_proxy_usage_test",
+    srcs = ["bazel_tests/mdns_http_proxy.rs"],
+    aliases = {"//:opensovd-mdns": "opensovd_extra_mdns"},
+    crate_name = "mdns_http_proxy_usage_test",
+    edition = "2024",
+    deps = [
+        "//:opensovd-http-proxy",
+        "//:opensovd-mdns",
+    ],
 )
 
 rust_test(
