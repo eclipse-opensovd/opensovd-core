@@ -46,7 +46,9 @@ socket2 = { workspace = true, optional = true }
 sd-notify = { workspace = true }
 
 [dev-dependencies]
-tokio = { workspace = true, features = ["macros"] }
+opensovd-models = { workspace = true }
+opensovd-providers = { workspace = true }
+tokio = { workspace = true, features = ["io-util", "macros"] }
 
 [build-dependencies]
 libcli-build = { workspace = true }
