@@ -62,6 +62,28 @@ manifest next to the BUILD.bazel file, so the package has to be a workspace
 member whose Cargo.toml lists those crates. When a crate's dependencies
 change, update its BUILD.bazel.
 
+## Gateway Target
+
+The root `BUILD.bazel` exposes `//:opensovd-gateway` as the public executable.
+
+```bash
+bazel build //:opensovd-gateway
+```
+
+For an application with its own in-process providers, the public Rust library
+`@opensovd_core//:opensovd-gateway-lib` exposes the same gateway runner as the
+binary. Construct a topology, parse gateway options with
+`opensovd_gateway::cli::try_parse_from`, and pass both to
+`opensovd_gateway::run`. The runner supports the same `SOVD_*` settings,
+federation, authentication, TLS and mDNS as the binary; it does not initialize
+tracing. Use `run_with_shutdown` to supply a shutdown future. A caller-supplied
+topology cannot be combined with `--mock`.
+
+The Bazel library enables mDNS as well as the other gateway features. Consumers
+can construct a topology using `@opensovd_core//:opensovd-core`,
+`@opensovd_core//:opensovd-models` and `@opensovd_core//:opensovd-providers`.
+They must provide compatible Rust and C/C++ toolchains.
+
 ## Reusable HTTP Upstream Proxy
 
 The gateway's HTTP proxy is exported as `opensovd_extra::UpstreamProxy`. Cargo
