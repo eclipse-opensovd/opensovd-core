@@ -111,7 +111,10 @@ rust_test(
     srcs = ["tests/http_proxy.rs"],
     crate_name = "http_proxy_usage_test",
     edition = "2024",
-    deps = [":opensovd_extra_http_proxy"] + crate_deps([
+    deps = [
+        ":opensovd_extra_http_proxy",
+        "//opensovd-server:opensovd_server",
+    ] + crate_deps([
         "axum",
         "bytes",
         "flate2",
