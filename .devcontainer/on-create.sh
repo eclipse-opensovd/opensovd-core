@@ -9,7 +9,7 @@ mise install
 eval "$(mise activate bash --shims)"
 uv sync --locked
 if git rev-parse --git-dir >/dev/null 2>&1; then
-  prek install
+  mise run install-hooks
 fi
 
 {

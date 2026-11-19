@@ -1,0 +1,39 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 Contributors to the Eclipse Foundation
+# SPDX-License-Identifier: Apache-2.0
+
+name: Dev container
+
+on:
+  pull_request:
+    paths:
+      - .devcontainer/**
+      - .github/workflows/devcontainer.yaml
+      - mise.toml
+      - mise.lock
+      - prek.toml
+      - pyproject.toml
+      - rust-toolchain.toml
+      - uv.lock
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: npm ci --prefix .devcontainer --ignore-scripts
+      - env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: .devcontainer/node_modules/.bin/devcontainer up --workspace-folder . --remote-env "GITHUB_TOKEN=$GITHUB_TOKEN"
+      - run: .devcontainer/node_modules/.bin/devcontainer exec --workspace-folder . mise run build
+      - run: .devcontainer/node_modules/.bin/devcontainer exec --workspace-folder . mise run lint

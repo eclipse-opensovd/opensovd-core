@@ -38,8 +38,11 @@ installs the Rust toolchain from `rust-toolchain.toml` and every other tool from
 mise trust
 mise install
 uv sync
-prek install
+mise run install-hooks
 ```
+
+mise sandboxes the hooks, so on Linux, the dev container included, they need kernel 6.2
+or newer with Landlock enabled.
 
 ## Option 3: Bazel bootstrap
 

@@ -41,7 +41,7 @@ flate2 = { version = "1", default-features = false, features = ["rust_backend"] 
 futures = { version = "0.3", default-features = false }
 futures-core = { version = "0.3", default-features = false }
 indexmap = { version = "2", default-features = false, features = ["std"] }
-jsonschema = { version = "0.60", default-features = false }
+jsonschema = { version = "0.61", default-features = false }
 jsonwebtoken = { version = "11", default-features = false, features = ["aws_lc_rs", "use_pem"] }
 http = { version = "1", default-features = false, features = ["std"] }
 http-body = { version = "1", default-features = false }
@@ -56,7 +56,7 @@ rstest = { version = "0.28", default-features = false }
 rustix = { version = "1", default-features = false }
 percent-encoding = { version = "2", default-features = false }
 pin-project = { version = "1", default-features = false }
-regorus = { version = "0.14", default-features = false, features = ["arc", "glob"] }
+regorus = { version = "0.15", default-features = false, features = ["arc", "glob"] }
 schemars = { version = "1", default-features = false }
 sysinfo = { version = "0.40", default-features = false, features = ["system"] }
 sd-notify = { version = "0.5", default-features = false }

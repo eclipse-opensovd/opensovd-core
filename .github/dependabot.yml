@@ -53,14 +53,12 @@ updates:
     cooldown:
       default-days: 7
 
-  - package-ecosystem: docker
-    directories:
-      - /docker
-      - /.devcontainer
+  - package-ecosystem: npm
+    directory: /.devcontainer
     schedule:
       interval: monthly
     groups:
-      docker:
+      npm:
         patterns:
           - "*"
         update-types:
@@ -71,12 +69,14 @@ updates:
     cooldown:
       default-days: 7
 
-  - package-ecosystem: pre-commit
-    directory: /
+  - package-ecosystem: docker
+    directories:
+      - /docker
+      - /.devcontainer
     schedule:
       interval: monthly
     groups:
-      pre-commit:
+      docker:
         patterns:
           - "*"
         update-types:

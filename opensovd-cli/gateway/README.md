@@ -39,6 +39,9 @@ opensovd-gateway --url http://0.0.0.0:7690/sovd --mdns ABC123456789 --mdns-inter
 
 # Forward what the gateway does not serve to a classic diagnostic adapter (CDA)
 opensovd-gateway --mock --upstream-url http://localhost:20002/vehicle/v15
+
+# The same over a Unix domain socket: unix:<socket>[:<base path>]
+opensovd-gateway --mock --upstream-url unix:///run/cda.sock:/vehicle/v15
 ```
 
 Mock data comes from the shared `opensovd-mocks` crate used across examples and tests.
@@ -109,11 +112,13 @@ The id of a lock names its parts, so the gateway keeps no state about locks and 
 
 Known limitation: `break_lock` goes to all upstreams, and each decides for itself. If one refuses after others granted it, the locks those broke stay broken, as SOVD has no way to ask first and no lock can be restored. The refusal tells how many upstreams granted it in `parameters.break_lock_granted`, and the client whose lock was broken learns it from its lock. See [Vehicle locks across upstreams](../../docs/vehicle-locks.md) for examples and how clients recover.
 
+An upstream may also be reached over a Unix domain socket, as `unix:<socket>[:<base path>]`, such as `unix:///run/cda.sock:/vehicle/v15`: the socket is an absolute path, or `@name` for an abstract socket on Linux, and may contain `:` but not `:/`, which starts the base path. The base path, which may be left out, is the path of the upstream's API as in an `http://` URL. Requests, responses, and errors are the same as for an `http://` upstream, and both kinds can be mixed.
+
 With several upstreams, by repeating `--upstream-url` or separating the URLs by commas, all of them serve their entities and list them. An entity id has to be unique across the upstreams. The first one that has an id answers for it, and one before it that refuses the client or fails answers instead, as it may have the entity too, and everything else in the table goes to the first upstream. Entities may come and go at runtime. The gateway passes the client's token on unchanged and stores none, so every upstream has to accept the same token and see the same `sub`, as locks are owned by it. How an upstream validates the token is up to its implementor. The locks of an entity stay with the entity.
 
 | Option                  | Description                                                                 |
 |-------------------------|-----------------------------------------------------------------------------|
-| `--upstream-url`             | Base URL of an upstream API, `http://` only, repeatable or comma-separated (`SOVD_UPSTREAM_URL`, comma-separated only) |
+| `--upstream-url`             | Base URL of an upstream API, `http://` or `unix:<socket>[:<base path>]`, repeatable or comma-separated (`SOVD_UPSTREAM_URL`, comma-separated only) |
 | `--upstream-authorize-url`   | The `--upstream-url` that takes `/authorize` (`SOVD_UPSTREAM_AUTHORIZE_URL`)                     |
 | `--upstream-connect-timeout` | Seconds to wait for a connection to the upstream, default 5 (`SOVD_UPSTREAM_CONNECT_TIMEOUT`) |
 | `--upstream-discovery-timeout` | Seconds an upstream gets to answer `/`, `/components` and `/apps`, and the look for the owner of an entity, default 5 (`SOVD_UPSTREAM_DISCOVERY_TIMEOUT`). Other requests have no timeout |

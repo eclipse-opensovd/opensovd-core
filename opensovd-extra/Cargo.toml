@@ -16,6 +16,7 @@ categories.workspace = true
 unit = ["dep:serde"]
 auth = ["dep:aws-lc-rs", "dep:jsonwebtoken", "dep:regorus", "dep:serde_json", "dep:http", "dep:tracing", "dep:opensovd-server"]
 federation = ["dep:axum", "dep:axum-extra", "dep:bytes", "dep:futures", "dep:http", "dep:http-body", "dep:http-body-util", "dep:opensovd-models", "dep:opensovd-server", "dep:percent-encoding", "dep:serde", "dep:serde_json", "dep:thiserror", "dep:tokio", "dep:tower", "dep:tracing", "dep:base64"]
+http-proxy = ["federation", "dep:anyhow", "dep:brotli-decompressor", "dep:flate2", "dep:hyper", "dep:hyper-util", "tokio/net"]
 tls = ["dep:rustls", "dep:thiserror"]
 trace = ["dep:axum", "dep:http", "dep:tower", "dep:tower-http", "dep:tracing"]
 mdns = ["dep:mdns-sd", "dep:if-addrs", "dep:rustix", "dep:thiserror", "dep:tokio", "dep:tracing"]
@@ -25,11 +26,16 @@ opensovd-models = { workspace = true, optional = true }
 opensovd-server = { workspace = true, optional = true }
 axum = { workspace = true, optional = true, features = ["json", "matched-path"] }
 axum-extra = { workspace = true, optional = true, features = ["query"] }
+anyhow = { workspace = true, optional = true }
 aws-lc-rs = { workspace = true, optional = true }
 bytes = { workspace = true, optional = true }
+brotli-decompressor = { workspace = true, optional = true }
+flate2 = { workspace = true, optional = true }
 futures = { workspace = true, optional = true }
 http-body = { workspace = true, optional = true }
 http-body-util = { workspace = true, optional = true }
+hyper = { workspace = true, optional = true, features = ["http1"] }
+hyper-util = { workspace = true, optional = true, features = ["client-legacy", "http1", "tokio"] }
 percent-encoding = { workspace = true, optional = true }
 base64 = { workspace = true, optional = true }
 jsonwebtoken = { workspace = true, optional = true }
@@ -63,7 +69,7 @@ aws-lc-rs = { workspace = true }
 base64 = { workspace = true }
 tempfile = { workspace = true }
 rcgen = { workspace = true }
-hyper = { workspace = true, features = ["client", "http1"] }
+hyper = { workspace = true, features = ["client", "http1", "server"] }
 hyper-util = { workspace = true, features = ["client-legacy", "http1", "tokio"] }
 opensovd-core = { workspace = true }
 opensovd-mocks = { workspace = true }
@@ -80,6 +86,10 @@ required-features = ["federation"]
 [[test]]
 name = "upstreams"
 required-features = ["federation"]
+
+[[test]]
+name = "http_proxy"
+required-features = ["http-proxy"]
 
 [[test]]
 name = "vehicle_locks"

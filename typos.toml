@@ -1,0 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 Contributors to the Eclipse Foundation
+# SPDX-License-Identifier: Apache-2.0
+
+[default.extend-identifiers]
+flate2 = "flate2"
+WriteableDataResource = "WriteableDataResource"

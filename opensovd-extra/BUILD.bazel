@@ -1,3 +1,5 @@
+load("@crate_index//:defs.bzl", "crate_deps")
+load("@rules_rust//rust:defs.bzl", "rust_test")
 load("//bazel:rust_crate.bzl", "workspace_rust_library")
 
 package(default_visibility = ["//:workspace_crates"])
@@ -8,15 +10,20 @@ workspace_rust_library(
     name = "opensovd_extra",
     srcs = glob(["src/**/*.rs"]),
     crate_deps = [
+        "anyhow",
         "axum",
         "axum-extra",
         "aws-lc-rs",
         "base64",
         "bytes",
+        "brotli-decompressor",
+        "flate2",
         "futures",
         "http",
         "http-body",
         "http-body-util",
+        "hyper",
+        "hyper-util",
         "jsonwebtoken",
         "percent-encoding",
         "regorus",
@@ -32,6 +39,7 @@ workspace_rust_library(
     crate_features = [
         "auth",
         "federation",
+        "http-proxy",
         "tls",
         "trace",
     ],
@@ -42,4 +50,76 @@ workspace_rust_library(
         "//opensovd-models:opensovd_models",
         "//opensovd-server:opensovd_server",
     ],
+)
+
+# Public transport + federation API, without auth, TLS or tracing middleware.
+# Keep the workspace's full-featured target and its other dependencies private.
+workspace_rust_library(
+    name = "opensovd_extra_http_proxy",
+    srcs = glob(["src/**/*.rs"]),
+    crate_deps = [
+        "anyhow",
+        "axum",
+        "axum-extra",
+        "base64",
+        "brotli-decompressor",
+        "bytes",
+        "flate2",
+        "futures",
+        "http",
+        "http-body",
+        "http-body-util",
+        "hyper",
+        "hyper-util",
+        "percent-encoding",
+        "serde",
+        "serde_json",
+        "thiserror",
+        "tokio",
+        "tower",
+        "tracing",
+    ],
+    crate_features = [
+        "federation",
+        "http-proxy",
+    ],
+    crate_name = "opensovd_extra",
+    crate_root = "src/lib.rs",
+    version = "0.1.1",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//opensovd-models:opensovd_models",
+        "//opensovd-server:opensovd_server",
+    ],
+)
+
+rust_test(
+    name = "http_proxy_test",
+    crate = ":opensovd_extra_http_proxy",
+    crate_features = [
+        "federation",
+        "http-proxy",
+    ],
+    deps = crate_deps([
+        "hyper",
+        "tempfile",
+    ]),
+)
+
+rust_test(
+    name = "http_proxy_usage_test",
+    srcs = ["tests/http_proxy.rs"],
+    crate_name = "http_proxy_usage_test",
+    edition = "2024",
+    deps = [":opensovd_extra_http_proxy"] + crate_deps([
+        "axum",
+        "bytes",
+        "flate2",
+        "http",
+        "http-body-util",
+        "hyper",
+        "hyper-util",
+        "tokio",
+        "tower",
+    ]),
 )
