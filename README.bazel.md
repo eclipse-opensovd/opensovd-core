@@ -165,14 +165,41 @@ The equivalent package target is
 TLS, or tracing middleware. No visibility patches are needed for this target;
 the workspace's full-featured extra target and unrelated internal targets remain
 private. Consumers still provide their own compatible Rust toolchain and any
-other libraries they use directly. Do not depend on both variants of
-`opensovd_extra` in the same Rust target.
+other libraries they use directly.
 
 Proxy regression tests and a downstream-style federation usage test run with:
 
 ```bash
 cargo test -p opensovd-extra --no-default-features --features http-proxy
 bazel test //opensovd-extra:http_proxy_test //opensovd-extra:http_proxy_usage_test //opensovd-cli/gateway:upstream_config_test
+```
+
+## mDNS Announcer
+
+The public `@opensovd_core//:opensovd-mdns` target exposes the mDNS announcer
+as `opensovd_extra`. It enables only the `mdns` feature. When using it together
+with the HTTP proxy in the same Rust target, give one dependency a distinct
+Rust extern name using the `aliases` attribute:
+
+```starlark
+rust_binary(
+    # ...
+    aliases = {"@opensovd_core//:opensovd-mdns": "opensovd_extra_mdns"},
+    deps = [
+        "@opensovd_core//:opensovd-http-proxy",
+        "@opensovd_core//:opensovd-mdns",
+    ],
+)
+```
+
+The proxy is then available as `opensovd_extra` and the announcer as
+`opensovd_extra_mdns`. These are separate builds of the crate, so types from
+one variant are not interchangeable with types from the other.
+
+Run the announcer's unit tests and the combined-usage test with:
+
+```bash
+bazel test //opensovd-extra:mdns_test //opensovd-extra:mdns_http_proxy_usage_test
 ```
 
 All Bazel targets can be inspected with:
