@@ -13,8 +13,8 @@ use http::{Request, Response, StatusCode};
 use http_body_util::{BodyExt, Full};
 use hyper_util::rt::TokioIo;
 use opensovd_extra::{Federation, Upstream, UpstreamProxy};
+use opensovd_server::Server;
 use tokio::net::TcpListener;
-use tower::{Layer, ServiceExt};
 
 #[tokio::test]
 #[expect(
@@ -64,26 +64,30 @@ async fn a_public_http_proxy_is_installed_through_federation() {
     let upstream = Upstream::new(proxy.into_service());
     let layer = Federation::new(vec![upstream], Default::default())
         .unwrap()
-        .base("/sovd")
         .into_layer();
-    let routes = tower::service_fn(|_: Request<Body>| async {
-        Ok::<_, Infallible>(
-            Response::builder()
-                .status(StatusCode::NOT_FOUND)
-                .body(Body::empty())
-                .unwrap(),
-        )
-    });
-    let gateway = layer.layer(routes);
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let gateway_addr = listener.local_addr().unwrap();
+    let gateway = Server::builder()
+        .listener(listener)
+        .base_uri("/sovd")
+        .unwrap()
+        .inner_layer(layer)
+        .build()
+        .unwrap();
+    let gateway_server = tokio::spawn(async move { gateway.serve().await.unwrap() });
+    let client = hyper_util::client::legacy::Client::builder(hyper_util::rt::TokioExecutor::new())
+        .build_http();
     let request = Request::builder()
         .method("PUT")
-        .uri("/sovd/v1/components/remote/data?x=1")
+        .uri(format!(
+            "http://{gateway_addr}/sovd/v1/components/remote/data?x=1"
+        ))
         .header("host", "gw:7690")
         .header("authorization", "Bearer client")
         .header("accept-encoding", "gzip, zstd")
         .body(Body::from("request body"))
         .unwrap();
-    let response = tokio::time::timeout(Duration::from_secs(5), gateway.oneshot(request))
+    let response = tokio::time::timeout(Duration::from_secs(5), client.request(request))
         .await
         .unwrap()
         .unwrap();
@@ -94,14 +98,21 @@ async fn a_public_http_proxy_is_installed_through_federation() {
         "http://gw:7690/sovd/v1/components/remote"
     );
     assert!(!response.headers().contains_key("content-encoding"));
-    assert!(!response.headers().contains_key("content-length"));
+    let content_length = response
+        .headers()
+        .get("content-length")
+        .map(|length| length.to_str().unwrap().parse::<usize>().unwrap());
     assert!(!response.headers().contains_key("x-hop"));
     let body = response.into_body().collect().await.unwrap().to_bytes();
+    if let Some(length) = content_length {
+        assert_eq!(length, body.len());
+    }
     assert_eq!(
         body,
         Bytes::from_static(
             br#"{ "/vehicle/v15/key":"http://gw:7690/sovd/v1/components/remote", "n":1.10 }"#
         )
     );
+    gateway_server.abort();
     upstream_server.abort();
 }
