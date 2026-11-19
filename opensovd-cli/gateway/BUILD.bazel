@@ -55,7 +55,10 @@ workspace_rust_library(
 workspace_rust_binary(
     name = "opensovd_gateway",
     srcs = ["src/main.rs"],
-    crate_deps = ["tokio"],
+    crate_deps = [
+        "clap",
+        "tokio",
+    ],
     crate_name = "opensovd_gateway_bin",
     crate_root = "src/main.rs",
     version = "0.1.1",
