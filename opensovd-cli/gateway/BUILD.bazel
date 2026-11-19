@@ -1,5 +1,6 @@
+load("@crate_index//:defs.bzl", "crate_deps")
 load("@rules_rust//rust:defs.bzl", "rust_test")
-load("//bazel:rust_crate.bzl", "workspace_cargo_build_script", "workspace_rust_binary")
+load("//bazel:rust_crate.bzl", "workspace_cargo_build_script", "workspace_rust_binary", "workspace_rust_library")
 
 package(default_visibility = ["//:workspace_crates"])
 
@@ -15,9 +16,9 @@ workspace_cargo_build_script(
     deps = ["//opensovd-cli/build:libcli_build"],
 )
 
-workspace_rust_binary(
-    name = "opensovd_gateway",
-    srcs = glob(["src/**/*.rs"]),
+workspace_rust_library(
+    name = "opensovd_gateway_lib",
+    srcs = glob(["src/**/*.rs"], exclude = ["src/main.rs"]),
     crate_deps = [
         "anyhow",
         "clap",
@@ -32,12 +33,14 @@ workspace_rust_binary(
     crate_features = [
         "json-preserve-order",
         "jsonschema",
+        "mdns",
         "mock",
         "tls",
     ],
     crate_name = "opensovd_gateway",
-    crate_root = "src/main.rs",
+    crate_root = "src/lib.rs",
     version = "0.1.1",
+    visibility = ["//visibility:public"],
     deps = [
         ":build_script_build",
         "//opensovd-cli/lib:libcli",
@@ -49,13 +52,44 @@ workspace_rust_binary(
     ],
 )
 
+workspace_rust_binary(
+    name = "opensovd_gateway",
+    srcs = ["src/main.rs"],
+    crate_deps = ["tokio"],
+    crate_name = "opensovd_gateway_bin",
+    crate_root = "src/main.rs",
+    version = "0.1.1",
+    deps = [
+        ":opensovd_gateway_lib",
+        "//opensovd-cli/lib:libcli",
+    ],
+)
+
 rust_test(
     name = "upstream_config_test",
-    crate = ":opensovd_gateway",
+    crate = ":opensovd_gateway_lib",
     crate_features = [
         "json-preserve-order",
         "jsonschema",
+        "mdns",
         "mock",
         "tls",
     ],
+    deps = [
+        "//opensovd-models:opensovd_models",
+        "//opensovd-providers:opensovd_providers",
+    ],
+)
+
+rust_test(
+    name = "embedded_usage_test",
+    srcs = ["tests/embedded.rs"],
+    crate_name = "embedded_usage_test",
+    edition = "2024",
+    deps = [
+        ":opensovd_gateway_lib",
+        "//:opensovd-core",
+        "//:opensovd-models",
+        "//:opensovd-providers",
+    ] + crate_deps(["tokio"]),
 )

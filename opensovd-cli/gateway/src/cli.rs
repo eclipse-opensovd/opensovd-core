@@ -57,6 +57,25 @@ pub struct Cli {
     pub mock: bool,
 }
 
+/// Parses the command line, and exits with the usage text on an error.
+#[must_use]
+pub fn parse() -> Cli {
+    Cli::parse()
+}
+
+/// Parses gateway arguments and environment without exiting the process on error.
+///
+/// # Errors
+///
+/// Returns a clap error for invalid arguments or configuration.
+pub fn try_parse_from<I, T>(args: I) -> Result<Cli, clap::Error>
+where
+    I: IntoIterator<Item = T>,
+    T: Into<std::ffi::OsString> + Clone,
+{
+    Cli::try_parse_from(args)
+}
+
 #[derive(Args)]
 pub struct UpstreamArgs {
     /// Base URL of an upstream SOVD server's API, such as the classic

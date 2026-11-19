@@ -20,6 +20,11 @@ alias(
 )
 
 alias(
+    name = "opensovd-gateway-lib",
+    actual = "//opensovd-cli/gateway:opensovd_gateway_lib",
+)
+
+alias(
     name = "opensovd-core",
     actual = "//opensovd-core:opensovd_core",
 )
