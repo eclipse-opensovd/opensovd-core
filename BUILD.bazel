@@ -43,3 +43,8 @@ alias(
     name = "opensovd-http-proxy",
     actual = "//opensovd-extra:opensovd_extra_http_proxy",
 )
+
+alias(
+    name = "opensovd-mdns",
+    actual = "//opensovd-extra:opensovd_extra_mdns",
+)
