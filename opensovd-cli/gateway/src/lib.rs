@@ -226,7 +226,10 @@ async fn serve(
         cli.cors.credentials,
         cli.cors.max_age,
     )
-    .map_err(|e| anyhow::anyhow!("invalid CORS configuration: {e}"))?;
+    .map_err(|e| {
+        use clap::CommandFactory;
+        cli::Cli::command().error(clap::error::ErrorKind::ValueValidation, e)
+    })?;
     if cors.is_some() {
         tracing::info!(target: TARGET, "CORS enabled");
     }
@@ -494,7 +497,10 @@ mod tests {
         let error = run_with_shutdown(cli, Topology::default(), std::future::pending())
             .await
             .unwrap_err();
-        assert!(error.to_string().contains("invalid CORS configuration"));
+        assert!(matches!(
+            error.downcast_ref::<clap::Error>(),
+            Some(error) if error.kind() == clap::error::ErrorKind::ValueValidation
+        ));
     }
 
     #[cfg(feature = "mdns")]

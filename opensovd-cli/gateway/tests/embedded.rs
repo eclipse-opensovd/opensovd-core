@@ -36,5 +36,5 @@ async fn application_supplies_a_topology_and_handles_configuration_errors() {
     let error = run_with_shutdown(options, topology, std::future::pending())
         .await
         .unwrap_err();
-    assert!(error.to_string().contains("invalid CORS configuration"));
+    assert!(error.to_string().contains("wildcard '*'"));
 }
