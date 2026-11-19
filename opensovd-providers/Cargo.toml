@@ -13,12 +13,13 @@ keywords.workspace = true
 categories.workspace = true
 
 [features]
-journalctl = ["dep:futures", "dep:tokio"]
+journalctl = ["dep:chrono", "dep:futures", "dep:tokio"]
 
 [dependencies]
 opensovd-core = { workspace = true }
 opensovd-models = { workspace = true }
 async-trait = { workspace = true }
+chrono = { workspace = true, optional = true, features = ["std"] }
 futures = { workspace = true, optional = true, features = ["std", "async-await"] }
 indexmap = { workspace = true }
 schemars = { workspace = true, features = ["derive", "std"] }
