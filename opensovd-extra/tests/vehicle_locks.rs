@@ -307,10 +307,9 @@ async fn start(backends: &[&Backend]) -> TestServer {
         .listener(listener)
         .base_uri("/sovd")
         .unwrap()
-        .layer(
+        .inner_layer(
             Federation::new(upstreams, Topology::default())
                 .unwrap()
-                .base("/sovd")
                 .into_layer(),
         )
         .shutdown(async {

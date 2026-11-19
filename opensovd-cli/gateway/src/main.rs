@@ -63,6 +63,9 @@ async fn run(cli: cli::Cli) -> anyhow::Result<()> {
     let args = &cli.server;
 
     let mut builder = Server::builder();
+    if let Some(auth) = args.auth()? {
+        builder = builder.auth(auth);
+    }
     #[cfg(feature = "tls")]
     if let Some(tls) = args.tls()? {
         builder = builder.tls(tls);
@@ -74,6 +77,10 @@ async fn run(cli: cli::Cli) -> anyhow::Result<()> {
     builder = builder.listener(listener);
     let topology = configure_topology(&cli).await;
     builder = builder.topology(topology.clone());
+    // after auth, so that forwarded requests are authorized like any other
+    if let Some(federation) = create_federation(&cli.upstream, topology)? {
+        builder = builder.inner_layer(federation);
+    }
 
     let cors = args.cors();
     if cors.is_some() {
@@ -83,15 +90,6 @@ async fn run(cli: cli::Cli) -> anyhow::Result<()> {
     if let Some((path, dir)) = args.serve_dir()? {
         builder = builder.service(path, dir);
     }
-
-    // Forwarding has to run inside auth, and layers run outside the auth of the
-    // builder, so the gateway adds both.
-    let uri = args.url();
-    let base = uri.path().trim_end_matches('/');
-    let federation = create_federation(&cli.upstream, topology, uri.scheme_str(), base)?;
-    let auth = args
-        .auth()?
-        .map(|auth| auth.into_layer(Some(base).filter(|base| !base.is_empty())));
 
     #[cfg(feature = "mdns")]
     let (announcer_tx, announcer_rx) =
@@ -107,8 +105,6 @@ async fn run(cli: cli::Cli) -> anyhow::Result<()> {
     let server = builder
         .layer(opensovd_extra::trace::server_layer())
         .layer(tower::util::option_layer(cors))
-        .layer(tower::util::option_layer(auth))
-        .layer(tower::util::option_layer(federation))
         .base_uri(args.url().clone())?
         .vendor_info(VENDOR_INFO)
         .build()?;
@@ -158,16 +154,11 @@ async fn configure_topology(cli: &cli::Cli) -> Topology {
 fn create_federation(
     upstream: &cli::UpstreamArgs,
     topology: Topology,
-    scheme: Option<&str>,
-    base: &str,
 ) -> anyhow::Result<Option<FederationLayer>> {
     let upstreams = upstream::configured(&upstream.config()?)?;
     if upstreams.is_empty() {
         return Ok(None);
     }
-    let federation = Federation::new(upstreams, topology)?
-        .scheme(scheme.unwrap_or("http"))
-        .base(base)
-        .into_layer();
+    let federation = Federation::new(upstreams, topology)?.into_layer();
     Ok(Some(federation))
 }
