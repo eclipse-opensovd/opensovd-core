@@ -469,6 +469,7 @@ impl From<ClientAuthMode> for opensovd_extra::ClientAuth {
 
 #[cfg(feature = "tls")]
 impl TlsArgs {
+    #[must_use]
     pub fn config(&self) -> Option<opensovd_extra::ServerTlsConfig> {
         let (cert, key) = (self.cert.as_ref()?, self.key.as_ref()?);
         Some(
@@ -525,15 +526,29 @@ impl MdnsArgs {
 }
 
 /// Parses the command line and checks rules that clap cannot express.
+#[must_use]
 pub fn parse() -> Cli {
+    try_parse_from(std::env::args_os()).unwrap_or_else(|error| error.exit())
+}
+
+/// Parses gateway arguments and environment without exiting the process on error.
+///
+/// # Errors
+///
+/// Returns a clap error for invalid arguments or configuration.
+pub fn try_parse_from<I, T>(args: I) -> Result<Cli, clap::Error>
+where
+    I: IntoIterator<Item = T>,
+    T: Into<std::ffi::OsString> + Clone,
+{
     let mut cmd = Cli::command();
-    let matches = cmd.get_matches_mut();
-    let cli = Cli::from_arg_matches(&matches).unwrap_or_else(|e| e.format(&mut cmd).exit());
+    let matches = cmd.try_get_matches_from_mut(args)?;
+    let cli = Cli::from_arg_matches(&matches).map_err(|error| error.format(&mut cmd))?;
     #[cfg(feature = "mdns")]
     if let Err(e) = check_mdns(&cli, &matches) {
-        cmd.error(e.0, e.1).exit();
+        return Err(cmd.error(e.0, e.1));
     }
-    cli
+    Ok(cli)
 }
 
 #[cfg(feature = "mdns")]

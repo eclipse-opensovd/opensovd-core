@@ -1800,6 +1800,8 @@ dependencies = [
  "opensovd-core",
  "opensovd-extra",
  "opensovd-mocks",
+ "opensovd-models",
+ "opensovd-providers",
  "opensovd-server",
  "schemars",
  "sd-notify",
