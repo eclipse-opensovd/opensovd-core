@@ -20,6 +20,21 @@ alias(
 )
 
 alias(
+    name = "opensovd-core",
+    actual = "//opensovd-core:opensovd_core",
+)
+
+alias(
+    name = "opensovd-models",
+    actual = "//opensovd-models:opensovd_models",
+)
+
+alias(
+    name = "opensovd-providers",
+    actual = "//opensovd-providers:opensovd_providers",
+)
+
+alias(
     name = "opensovd-http-proxy",
     actual = "//opensovd-extra:opensovd_extra_http_proxy",
 )
