@@ -217,22 +217,19 @@ async fn start_topology(
         None => ServerUpstream::new(upstream.service()),
     };
 
-    let mounted = Some(base).filter(|base| *base != "/");
-    let federation = Federation::new(vec![service], topology.clone())
-        .unwrap()
-        .base(base);
-    let builder = Server::builder()
+    let federation = Federation::new(vec![service], topology.clone()).unwrap();
+    let mut builder = Server::builder()
         .listener(listener)
         .base_uri(base)
         .unwrap()
         .topology(topology)
-        .layer(tower::util::option_layer(
-            auth.map(|auth| auth.into_layer(mounted)),
-        ))
-        .layer(federation.into_layer())
+        .inner_layer(federation.into_layer())
         .shutdown(async {
             shutdown_rx.await.ok();
         });
+    if let Some(auth) = auth {
+        builder = builder.auth(auth);
+    }
     let server = builder.build().unwrap();
     tokio::spawn(async move { server.serve().await.unwrap() });
 

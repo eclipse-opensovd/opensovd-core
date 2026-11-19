@@ -193,12 +193,7 @@ async fn start(upstreams: Vec<Upstream>) -> TestServer {
         .base_uri("/sovd")
         .unwrap()
         .topology(topology.clone())
-        .layer(
-            Federation::new(upstreams, topology)
-                .unwrap()
-                .base("/sovd")
-                .into_layer(),
-        )
+        .inner_layer(Federation::new(upstreams, topology).unwrap().into_layer())
         .shutdown(async {
             shutdown_rx.await.ok();
         })

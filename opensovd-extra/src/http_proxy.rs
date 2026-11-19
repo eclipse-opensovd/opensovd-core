@@ -65,7 +65,6 @@ use http_body_util::{BodyExt, Full, Limited};
 use hyper_util::client::legacy::Client;
 use hyper_util::client::legacy::connect::HttpConnector;
 use hyper_util::rt::TokioExecutor;
-use opensovd_models::error::GenericError;
 use opensovd_server::Body;
 
 use crate::ServerUri;
@@ -394,7 +393,9 @@ impl UpstreamProxy {
         for (string, key) in json_strings(body) {
             let raw = body.get(string.clone())?;
             // A reference shows as it is, or it is escaped.
-            if key || !(raw.contains(&b'\\') || contains_ignoring_case(raw, reference)) {
+            if key
+                || !(raw.contains(&b'\\') || matches_ignoring_case(raw, reference).next().is_some())
+            {
                 continue;
             }
             let Some(text) = serde_json::from_slice::<String>(raw)
@@ -445,7 +446,7 @@ impl UpstreamProxy {
 
         let mut rewritten = String::new();
         let mut copied = 0;
-        for start in matches_ignoring_case(text, reference) {
+        for start in matches_ignoring_case(text.as_bytes(), reference.as_bytes()) {
             let end = start.saturating_add(reference.len());
             let (Some(before), Some(after)) = (text.get(..start), text.get(end..)) else {
                 continue;
@@ -472,21 +473,11 @@ impl UpstreamProxy {
 }
 
 /// The offsets of `needle`, an ASCII string, in `text`, ignoring ASCII case.
-fn matches_ignoring_case<'a>(text: &'a str, needle: &'a str) -> impl Iterator<Item = usize> + 'a {
-    text.as_bytes()
-        .windows(needle.len().max(1))
+fn matches_ignoring_case<'a>(text: &'a [u8], needle: &'a [u8]) -> impl Iterator<Item = usize> + 'a {
+    text.windows(needle.len().max(1))
         .enumerate()
-        .filter(|(_, window)| window.eq_ignore_ascii_case(needle.as_bytes()))
+        .filter(|(_, window)| window.eq_ignore_ascii_case(needle))
         .map(|(offset, _)| offset)
-}
-
-/// Whether `haystack` holds `needle`, an ASCII string that is not empty,
-/// ignoring ASCII case.
-fn contains_ignoring_case(haystack: &[u8], needle: &[u8]) -> bool {
-    !needle.is_empty()
-        && haystack
-            .windows(needle.len())
-            .any(|window| window.eq_ignore_ascii_case(needle))
 }
 
 /// The strings of the JSON `body`, each as the range from its opening to its
@@ -626,15 +617,7 @@ fn strip_hop_by_hop_headers(headers: &mut HeaderMap) {
 /// The answer when the upstream cannot be reached: the only one the proxy makes
 /// itself, as a SOVD `GenericError`.
 fn bad_gateway(message: &str) -> Response<Body> {
-    let error = GenericError::with_vendor_code("upstream-unreachable", message);
-    let body = serde_json::to_vec(&error).unwrap_or_default();
-    let mut response = Response::new(Body::new(Full::new(bytes::Bytes::from(body))));
-    *response.status_mut() = StatusCode::BAD_GATEWAY;
-    response.headers_mut().insert(
-        header::CONTENT_TYPE,
-        HeaderValue::from_static("application/json"),
-    );
-    response
+    crate::federation::vendor_error(StatusCode::BAD_GATEWAY, "upstream-unreachable", message)
 }
 
 #[cfg(test)]

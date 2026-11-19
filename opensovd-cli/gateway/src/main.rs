@@ -140,6 +140,10 @@ async fn serve(cli: cli::Cli, auth: Option<Auth>) -> anyhow::Result<()> {
         .as_str();
 
     let builder = Server::builder();
+    let builder = match auth {
+        Some(auth) => builder.auth(auth),
+        None => builder,
+    };
 
     #[cfg(feature = "tls")]
     let (builder, tls) = if let Some(tls) = cli.tls.config() {
@@ -160,6 +164,10 @@ async fn serve(cli: cli::Cli, auth: Option<Auth>) -> anyhow::Result<()> {
     let (mut builder, local_addr) = configure_listener(builder, &cli, authority).await?;
     let topology = configure_topology(&cli).await;
     builder = builder.topology(topology.clone());
+    // after auth, so that forwarded requests are authorized like any other
+    if let Some(federation) = create_federation(&cli.upstream, topology)? {
+        builder = builder.inner_layer(federation);
+    }
 
     #[cfg(feature = "mdns")]
     let mdns = configure_mdns(cli.mdns, local_addr, &uri, tls)?;
@@ -192,12 +200,6 @@ async fn serve(cli: cli::Cli, auth: Option<Auth>) -> anyhow::Result<()> {
         tracing::info!(target: TARGET, path = %path, dir = %dir, "Serving static files");
     }
 
-    // Forwarding has to run inside auth, and layers run outside the auth of the
-    // builder, so the gateway adds both.
-    let base = uri.path().trim_end_matches('/');
-    let federation = create_federation(&cli.upstream, topology, uri.scheme_str(), base)?;
-    let auth = auth.map(|auth| auth.into_layer(Some(base).filter(|base| !base.is_empty())));
-
     #[cfg(feature = "mdns")]
     let (announcer_tx, announcer_rx) =
         tokio::sync::oneshot::channel::<Option<opensovd_extra::MdnsAnnouncer>>();
@@ -212,8 +214,6 @@ async fn serve(cli: cli::Cli, auth: Option<Auth>) -> anyhow::Result<()> {
     let server = builder
         .layer(opensovd_extra::trace::server_layer())
         .layer(tower::util::option_layer(cors))
-        .layer(tower::util::option_layer(auth))
-        .layer(tower::util::option_layer(federation))
         .base_uri(uri)?
         .vendor_info(VENDOR_INFO)
         .build()?;
@@ -396,17 +396,12 @@ async fn configure_topology(
 fn create_federation(
     upstream: &cli::UpstreamArgs,
     topology: Topology,
-    scheme: Option<&str>,
-    base: &str,
 ) -> anyhow::Result<Option<FederationLayer>> {
     let upstreams = upstream::configured(&upstream.config()?)?;
     if upstreams.is_empty() {
         return Ok(None);
     }
-    let federation = Federation::new(upstreams, topology)?
-        .scheme(scheme.unwrap_or("http"))
-        .base(base)
-        .into_layer();
+    let federation = Federation::new(upstreams, topology)?.into_layer();
     Ok(Some(federation))
 }
 
