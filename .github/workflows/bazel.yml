@@ -27,8 +27,11 @@ jobs:
       - name: Set up Bazelisk
         uses: bazelbuild/setup-bazelisk@b39c379c82683a5f25d34f0d062761f62693e0b2 # v3.0.0
 
-      - name: Build opensovd-gateway
-        run: bazel build //:opensovd-gateway
+      - name: Build opensovd-gateway and opensovd-mdns
+        run: bazel build //:opensovd-gateway //:opensovd-mdns
+
+      - name: Test mDNS targets
+        run: bazel test //opensovd-extra:mdns_test //opensovd-extra:mdns_http_proxy_usage_test
 
       - name: Query Bazel targets
         run: bazel query //...
