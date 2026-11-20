@@ -42,6 +42,10 @@ opensovd-gateway --mock --upstream-url http://localhost:20002/vehicle/v15
 
 # The same over a Unix domain socket: unix:<socket>[:<base path>]
 opensovd-gateway --mock --upstream-url unix:///run/cda.sock:/vehicle/v15
+
+# Also serve the entities of SOVD servers announced via mDNS on eth1
+opensovd-gateway --upstream-url http://localhost:20002/vehicle/v15 \
+  --enable-mdns-upstream-discovery --mdns-interface eth1
 ```
 
 Mock data comes from the shared `opensovd-mocks` crate used across examples and tests.
@@ -84,7 +88,19 @@ Announces the gateway as `_sovd._tcp` with the `identification` and `accessurl` 
 |--------------------|---------------------------------------------------------------|
 | `--mdns ID`        | Vehicle identification to announce, e.g. the VIN              |
 | `--mdns-host`      | Host label published as `HOST.local` (default: derived from the identification) |
-| `--mdns-interface` | Announce only on these interfaces (comma-separated)           |
+| `--mdns-interface` | Announce, and look for upstreams, only on these interfaces (comma-separated) |
+| `--enable-mdns-upstream-discovery` | Use SOVD servers announced via mDNS as upstreams of their entities (default: off), see [mDNS Upstream Discovery](#mdns-upstream-discovery) |
+| `--mdns-discovery-forward-authorization` | Send the client's `Authorization` header to discovered servers too (default: off, requires `--enable-mdns-upstream-discovery`) |
+
+### mDNS Upstream Discovery
+
+With `--enable-mdns-upstream-discovery` (or `SOVD_ENABLE_MDNS_UPSTREAM_DISCOVERY=true`), the gateway looks for `_sovd._tcp` servers via mDNS, on the `--mdns-interface`s or on all interfaces but loopback, and needs no `--upstream-url` for it. It is off by default.
+
+A server that is found joins as an upstream once its `/version-info` names its API: the gateway takes the path of the first `base_uri` there and reaches the server at the announced address and port, IPv4 first. The server serves its entities, listed by `/components` and `/apps` and forwarded below them, after the `--upstream-url` upstreams in the order that decides between equal ids. Everything else, vehicle locks included, stays with the `--upstream-url` upstreams. When the server withdraws its announcement, it leaves again. Only servers that announce an `http` `accessurl` are used, and the gateway's own `--mdns` announcement is skipped. `--upstream-connect-timeout` and `--upstream-discovery-timeout` apply to them as well.
+
+Requests to a discovered server carry the `x-opensovd-discovered-hop` header. The gateway does not send a request with it on to the servers it discovered, so gateways that discover each other do not forward a request in a loop. The header also travels on through the `--upstream-url` upstreams, so a server further down that chain does not use its own discovered servers for that request either.
+
+**Security:** any device on the browsed interfaces that announces `_sovd._tcp` becomes an upstream and can add entity ids. Use `--mdns-interface` to limit discovery to trusted networks. Requests to discovered servers carry no `Authorization` header, so they do not learn the clients' tokens, unless `--mdns-discovery-forward-authorization` (or `SOVD_MDNS_DISCOVERY_FORWARD_AUTHORIZATION=true`) is given.
 
 ### Upstream Options
 
