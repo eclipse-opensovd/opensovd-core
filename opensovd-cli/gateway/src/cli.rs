@@ -143,6 +143,37 @@ pub struct UpstreamArgs {
         default_value_t = 5
     )]
     pub upstream_discovery_timeout: u64,
+
+    /// Find further upstream SOVD servers via mDNS (DNS-SD `_sovd._tcp`),
+    /// on the interfaces of --mdns-interface, or all but loopback.
+    ///
+    /// A server that is found serves its entities next to those of the
+    /// --upstream-url upstreams, after them in the order that decides between
+    /// equal ids, and leaves again when it withdraws its announcement.
+    /// Everything else stays with the --upstream-url upstreams. Only servers
+    /// that announce an http `accessurl` are used, and the gateway's own
+    /// announcement is skipped. A request from a discovered server does not go
+    /// on to discovered servers, and keeps its marker on the way to the
+    /// --upstream-url upstreams, so that servers behind them do not either.
+    ///
+    /// Any device on these interfaces that announces `_sovd._tcp` becomes an
+    /// upstream, so limit them to trusted networks. Discovered servers get no
+    /// client token unless --mdns-discovery-forward-authorization is given.
+    #[cfg(feature = "mdns")]
+    #[arg(
+        long = "enable-mdns-upstream-discovery",
+        env = "SOVD_ENABLE_MDNS_UPSTREAM_DISCOVERY"
+    )]
+    pub mdns_discovery: bool,
+
+    /// Send the client's `Authorization` header to the SOVD servers found via
+    /// mDNS as well, which only trusted servers should get.
+    #[cfg(feature = "mdns")]
+    #[arg(
+        long = "mdns-discovery-forward-authorization",
+        env = "SOVD_MDNS_DISCOVERY_FORWARD_AUTHORIZATION"
+    )]
+    pub mdns_discovery_forward_authorization: bool,
 }
 
 /// The upstreams of validated [`UpstreamArgs`].
@@ -464,7 +495,8 @@ pub struct MdnsArgs {
     )]
     pub host: Option<String>,
 
-    /// Announce only on these network interfaces (comma-separated).
+    /// Announce, and with --enable-mdns-upstream-discovery look for
+    /// upstreams, only on these network interfaces (comma-separated).
     #[arg(
         id = "mdns_interface",
         long = "mdns-interface",
@@ -537,22 +569,28 @@ fn check_mdns(
         let reason = "identification must not be empty";
         return Err(invalid("--mdns <ID>", "", &reason));
     }
-    let enabled = cli.mdns.identification().is_some();
+    let announce = cli.mdns.identification().is_some();
     #[cfg(unix)]
-    if enabled && cli.unix_socket.is_some() {
+    if announce && cli.unix_socket.is_some() {
         return Err((
             ErrorKind::ArgumentConflict,
             "--mdns cannot be used with --unix-socket".to_owned(),
         ));
     }
-    if !enabled {
-        for (id, msg) in [
-            ("mdns_host", "--mdns-host requires --mdns"),
-            ("mdns_interface", "--mdns-interface requires --mdns"),
-        ] {
-            if matches.value_source(id) == Some(ValueSource::CommandLine) {
-                return Err((ErrorKind::MissingRequiredArgument, msg.to_owned()));
-            }
+    let given = |id| matches.value_source(id) == Some(ValueSource::CommandLine);
+    if !announce && given("mdns_host") {
+        let msg = "--mdns-host requires --mdns";
+        return Err((ErrorKind::MissingRequiredArgument, msg.to_owned()));
+    }
+    if cli.upstream.mdns_discovery_forward_authorization && !cli.upstream.mdns_discovery {
+        let msg =
+            "--mdns-discovery-forward-authorization requires --enable-mdns-upstream-discovery";
+        return Err((ErrorKind::MissingRequiredArgument, msg.to_owned()));
+    }
+    if !announce && !cli.upstream.mdns_discovery {
+        if given("mdns_interface") {
+            let msg = "--mdns-interface requires --mdns or --enable-mdns-upstream-discovery";
+            return Err((ErrorKind::MissingRequiredArgument, msg.to_owned()));
         }
         return Ok(());
     }
@@ -748,12 +786,51 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "mdns")]
+    fn mdns_upstream_discovery_is_off_by_default() {
+        let parse = |args: &[&str]| try_parse_from(["gateway"].iter().chain(args));
+
+        assert!(!parse(&[]).unwrap().upstream.mdns_discovery);
+        let cli = parse(&["--enable-mdns-upstream-discovery"]).unwrap();
+        assert!(cli.upstream.mdns_discovery);
+        let cli = parse(&[
+            "--enable-mdns-upstream-discovery",
+            "--mdns-interface",
+            "eth1",
+        ])
+        .unwrap();
+        assert_eq!(cli.mdns.interfaces().collect::<Vec<_>>(), ["eth1"]);
+        assert!(parse(&["--mdns-interface", "eth1"]).is_err());
+        assert!(parse(&["--enable-mdns-upstream-discovery", "--mdns-host", "gw"]).is_err());
+    }
+
+    #[test]
+    #[cfg(feature = "mdns")]
+    fn discovered_upstreams_get_the_token_only_if_asked() {
+        let parse = |args: &[&str]| try_parse_from(["gateway"].iter().chain(args));
+
+        let cli = parse(&["--enable-mdns-upstream-discovery"]).unwrap();
+        assert!(!cli.upstream.mdns_discovery_forward_authorization);
+        let cli = parse(&[
+            "--enable-mdns-upstream-discovery",
+            "--mdns-discovery-forward-authorization",
+        ])
+        .unwrap();
+        assert!(cli.upstream.mdns_discovery_forward_authorization);
+        assert!(parse(&["--mdns-discovery-forward-authorization"]).is_err());
+    }
+
+    #[test]
     fn an_upstream_may_be_given_once_only() {
         let config = |urls: &[&str]| {
             UpstreamArgs {
                 upstream_url: urls.iter().map(ToString::to_string).collect(),
                 upstream_connect_timeout: 5,
                 upstream_discovery_timeout: 5,
+                #[cfg(feature = "mdns")]
+                mdns_discovery: false,
+                #[cfg(feature = "mdns")]
+                mdns_discovery_forward_authorization: false,
             }
             .config()
         };

@@ -22,7 +22,7 @@ jsonschema = ["opensovd-server/jsonschema", "dep:schemars"]
 json-preserve-order = ["opensovd-server/json-preserve-order"]
 mock = ["dep:opensovd-mocks"]
 tls = ["opensovd-server/tls", "opensovd-extra/tls"]
-mdns = ["opensovd-extra/mdns", "dep:socket2"]
+mdns = ["opensovd-extra/mdns", "dep:socket2", "dep:http-body-util"]
 
 [dependencies]
 anyhow = { workspace = true }
@@ -36,6 +36,7 @@ serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true, features = ["std"] }
 tokio = { workspace = true, features = ["net", "rt", "signal", "time", "sync"] }
 http = { workspace = true }
+http-body-util = { workspace = true, optional = true }
 tower = { workspace = true, features = ["util"] }
 tower-http = { workspace = true, features = ["cors", "fs"] }
 tracing = { workspace = true }

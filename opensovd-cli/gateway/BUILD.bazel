@@ -23,6 +23,7 @@ workspace_rust_library(
         "anyhow",
         "clap",
         "http",
+        "http-body-util",
         "schemars",
         "sd-notify",
         "serde",
