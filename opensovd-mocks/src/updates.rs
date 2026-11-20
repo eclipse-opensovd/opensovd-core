@@ -4,7 +4,8 @@
 use std::time::Duration;
 
 use opensovd_core::{
-    FromModel, ToModel, UpdateDescriptor, UpdateError, UpdateFeedback, UpdateProvider,
+    FromRequest, ToModel, UpdateDescriptor, UpdateError, UpdateFeedback, UpdateProvider,
+    UpdateRequest,
 };
 use opensovd_models::updates::{UpdateDetail, UpdateOrigins, UpdateStatus};
 use tokio::{sync::watch, time::sleep};
@@ -43,11 +44,14 @@ impl UpdateDescriptor for MockUpdate {
     }
 }
 
-impl FromModel<UpdateDetail> for MockUpdate {
-    fn from_model(update_detail: &UpdateDetail) -> Self {
-        Self {
-            detail: update_detail.clone(),
-        }
+#[async_trait::async_trait]
+impl FromRequest for MockUpdate {
+    async fn from_request(request: UpdateRequest) -> Result<Self, UpdateError>
+    where
+        Self: Sized + 'static,
+    {
+        let detail = request.try_json().await?;
+        Ok(MockUpdate { detail })
     }
 }
 

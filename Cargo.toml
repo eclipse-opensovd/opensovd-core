@@ -37,7 +37,7 @@ chrono = { version = "0.4", default-features = false }
 clap = { version = "4", default-features = false }
 criterion = { version = "0.8", default-features = false }
 futures = { version = "0.3", default-features = false }
-futures-core = { version = "0.3", default-features = false }
+futures-core = { version = "0.3", default-features = false, features = ["alloc"] }
 indexmap = { version = "2", default-features = false, features = ["std"] }
 jsonschema = { version = "0.60", default-features = false }
 jsonwebtoken = { version = "11", default-features = false, features = ["aws_lc_rs", "use_pem"] }
