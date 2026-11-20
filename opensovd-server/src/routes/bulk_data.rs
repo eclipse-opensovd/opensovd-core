@@ -12,17 +12,19 @@
 //! - GET /{entity_path}/bulk-data/{category}/{bulk_data_id} - Download bulk data
 //! - DELETE /{entity_path}/bulk-data/{category}/{bulk_data_id} - Delete a bulk-data resource
 
-use std::vec;
+use std::{pin::pin, vec};
 
 use axum::{
     Router,
     body::Body,
     extract::{DefaultBodyLimit, FromRequest, Multipart, Request, State},
+    handler::Handler,
     response::IntoResponse,
     routing::get,
 };
 use axum_extra::headers::{ContentLength, ContentType, Header};
-use futures::StreamExt;
+use bytes::{Bytes, BytesMut};
+use futures::{Stream, StreamExt, TryStreamExt};
 use http::{HeaderMap, HeaderName, HeaderValue, StatusCode, request::Parts};
 use opensovd_core::{BulkDataError, CategoryFilter, Topology};
 use opensovd_models::bulkdata::{
@@ -41,8 +43,8 @@ use crate::routes::{
 };
 use crate::schema::JsonSchema;
 
-// Maximum allowed size for bulk data uploads (1 GiB).
-const MAX_BULKDATA_BODY_BYTES: usize = 1024 * 1024 * 1024;
+/// Maximum allowed body size for a signature in a multipart data upload
+const MAX_SIGNATURE_BODY_SIZE: u64 = 2 * 1024 * 1024;
 
 pub fn routes() -> Router<Topology> {
     Router::new()
@@ -50,14 +52,13 @@ pub fn routes() -> Router<Topology> {
         .route(
             "/bulk-data/{category}",
             get(bulk_data_descriptors)
-                .post(bulk_data_upload)
+                .post(bulk_data_upload.layer(DefaultBodyLimit::disable()))
                 .delete(bulk_data_delete_category),
         )
         .route(
             "/bulk-data/{category}/{bulk_data_id}",
             get(bulk_data_download).delete(bulk_data_delete),
         )
-        .layer(DefaultBodyLimit::max(MAX_BULKDATA_BODY_BYTES))
 }
 
 #[derive(Deserialize)]
@@ -195,6 +196,39 @@ impl Header for ContentDisposition {
     }
 }
 
+type BulkDataResult<T> = std::result::Result<T, BulkDataError>;
+
+/// Limits the number of bytes that can be read from a stream.
+///
+/// Returns an error if the stream exceeds the specified limit.
+fn limit_stream<S>(
+    stream: S,
+    limit: impl TryInto<usize>,
+) -> BulkDataResult<impl Stream<Item = BulkDataResult<Bytes>>>
+where
+    S: Stream<Item = std::result::Result<Bytes, BulkDataError>>,
+{
+    let mut remaining_bytes: usize = limit
+        .try_into()
+        .map_err(|_| BulkDataError::InvalidRequest("Limit too large".into()))?;
+    Ok(stream.try_filter_map(move |chunk| {
+        let result = remaining_bytes
+            .checked_sub(chunk.len())
+            .ok_or_else(|| BulkDataError::InvalidRequest("Content-Length exceeded".into()));
+
+        if let Ok(new_remaining) = result {
+            remaining_bytes = new_remaining;
+        }
+
+        async move {
+            match result {
+                Ok(_) => Ok(Some(chunk)),
+                Err(e) => Err(e),
+            }
+        }
+    }))
+}
+
 /// POST /{entity_path}/bulk-data/{category} - Upload bulk data.
 ///
 /// Stores an octet-stream or multipart body and answers its location.
@@ -217,18 +251,13 @@ async fn bulk_data_upload(
         .or_else(|| content_disposition.name.clone())
         .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
 
-    if content_length.0 > MAX_BULKDATA_BODY_BYTES as u64 {
-        return Err(BulkDataError::InvalidRequest(format!(
-            "Content-Length exceeds maximum allowed size of {MAX_BULKDATA_BODY_BYTES} bytes",
-        ))
-        .into());
-    }
-
     if content_type == ContentType::octet_stream() {
-        let mut stream = req
+        let stream = req
             .into_body()
             .into_data_stream()
             .map(|r| r.map_err(|e| BulkDataError::Internal(e.to_string())));
+
+        let mut stream = pin!(limit_stream(stream, content_length.0)?);
         provider
             .bulk_upload(&category, &filename, content_length.0, &mut stream, None)
             .await?;
@@ -243,36 +272,52 @@ async fn bulk_data_upload(
             .await
             .map_err(|e| BulkDataError::InvalidRequest(e.to_string()))?
         {
+            // if the field has its own Content-Length header, we can
+            // get a better estimate of the size of the data being
+            // uploaded. Otherwise, we fall back to the Content-Length
+            // header of the entire request.
+            let length = field
+                .headers()
+                .get("Content-Length")
+                .and_then(|v| v.to_str().ok())
+                .and_then(|s| s.parse::<u64>().ok())
+                .unwrap_or(content_length.0);
+
             match field.content_type() {
-                Some("application/json") => {
-                    let json: serde_json::Value = serde_json::from_str(
-                        &field
-                            .text()
-                            .await
-                            .map_err(|e| BulkDataError::Internal(e.to_string()))?,
-                    )
-                    .map_err(|e| BulkDataError::InvalidRequest(e.to_string()))?;
+                Some("application/json") if sig.is_none() => {
+                    if length > MAX_SIGNATURE_BODY_SIZE {
+                        return Err(BulkDataError::InvalidRequest(
+                            "signature body too large".to_string(),
+                        )
+                        .into());
+                    }
+
+                    let stream = field.map(|chunk| {
+                        chunk.map_err(|e| BulkDataError::InvalidRequest(e.to_string()))
+                    });
+
+                    let stream = pin!(limit_stream(stream, length)?);
+                    let data: BytesMut = stream.try_collect().await?;
+
+                    let json: serde_json::Value = serde_json::from_slice(&data.freeze())
+                        .map_err(|e| BulkDataError::InvalidRequest(e.to_string()))?;
 
                     if let Some(signature) = json.get("signature").and_then(|s| s.as_str()) {
                         sig = Some(signature.to_string());
+                    } else {
+                        return Err(
+                            BulkDataError::InvalidRequest("missing signature".to_string()).into(),
+                        );
                     }
                 }
                 Some("application/octet-stream") => {
-                    // if the field has its own Content-Length header, we can
-                    // get a better estimate of the size of the data being
-                    // uploaded. Otherwise, we fall back to the Content-Length
-                    // header of the entire request.
-                    let length = field
-                        .headers()
-                        .get("Content-Length")
-                        .and_then(|v| v.to_str().ok())
-                        .and_then(|s| s.parse::<u64>().ok())
-                        .unwrap_or(content_length.0);
-                    let mut data_stream = field.map(|chunk| {
+                    let stream = field.map(|chunk| {
                         chunk.map_err(|e| BulkDataError::InvalidRequest(e.to_string()))
                     });
+
+                    let mut stream = pin!(limit_stream(stream, content_length.0)?);
                     provider
-                        .bulk_upload(&category, &filename, length, &mut data_stream, sig.as_ref())
+                        .bulk_upload(&category, &filename, length, &mut stream, sig.as_ref())
                         .await?;
                     file_content_received = true;
                     break;
@@ -388,4 +433,55 @@ async fn bulk_data_delete(
     provider.bulk_delete(&category, &bulk_data_id).await?;
 
     Ok(StatusCode::NO_CONTENT)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn create_test_stream(
+        chunk_count: usize,
+        chunk_size: usize,
+    ) -> impl Stream<Item = BulkDataResult<Bytes>> {
+        futures::stream::iter(
+            (0..chunk_count)
+                .map(move |_| Ok::<_, BulkDataError>(Bytes::from(vec![0u8; chunk_size]))),
+        )
+    }
+
+    #[tokio::test]
+    async fn test_stream_limit_data_exact() {
+        let stream = create_test_stream(2, 8);
+        let limited_stream = limit_stream(stream, 16).unwrap();
+        assert_eq!(
+            limited_stream
+                .try_collect::<BytesMut>()
+                .await
+                .unwrap()
+                .len(),
+            16
+        );
+    }
+
+    #[tokio::test]
+    async fn test_stream_limit_data_partial() {
+        let stream = create_test_stream(2, 8);
+        let limited_stream = limit_stream(stream, 20).unwrap();
+        assert_eq!(
+            limited_stream
+                .try_collect::<BytesMut>()
+                .await
+                .unwrap()
+                .len(),
+            16
+        );
+    }
+
+    #[tokio::test]
+    async fn test_stream_limit_data_overflow() {
+        let stream = create_test_stream(3, 8);
+        let limited_stream = limit_stream(stream, 16).unwrap();
+        let result = limited_stream.try_collect::<BytesMut>().await;
+        assert!(result.is_err());
+    }
 }
