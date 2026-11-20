@@ -6,9 +6,9 @@
 //! Enable the `journalctl` feature and attach a provider to an app or component:
 //!
 //! ```ignore
-//! let logs = JournalctlLogProvider::new("save-the-spoiler.service")?;
-//! let app = App::new("save-the-spoiler", "Save the Spoiler").with_log_provider(logs);
-//! let ecu = Component::new("proconnect", "ProConnect")
+//! let logs = JournalctlLogProvider::new("APP01.service")?;
+//! let app = App::new("APP01", "APP01").with_log_provider(logs);
+//! let ecu = Component::new("ECU01", "ECU01")
 //!     .with_log_provider(JournalctlLogProvider::system());
 //! ```
 
@@ -377,7 +377,7 @@ mod tests {
     #[test]
     fn parses_journal_entries_and_maps_syslog_severity() {
         let entry = parse_entry_line(
-            br#"{"__REALTIME_TIMESTAMP":"1794506400123456","MESSAGE":"service ready","PRIORITY":"3","_HOSTNAME":"ecu-1","_SYSTEMD_UNIT":"save-the-spoiler.service","SYSLOG_IDENTIFIER":"spoiler","_COMM":"spoiler","_PID":"42"}"#,
+            br#"{"__REALTIME_TIMESTAMP":"1794506400123456","MESSAGE":"service ready","PRIORITY":"3","_HOSTNAME":"ecu-1","_SYSTEMD_UNIT":"APP01.service","SYSLOG_IDENTIFIER":"app01","_COMM":"app01","_PID":"42"}"#,
         )
         .unwrap()
         .unwrap();
@@ -388,13 +388,13 @@ mod tests {
         assert_eq!(entry.context.context_type, "x-sovd-systemd-journal");
         assert_eq!(
             entry.context.attributes.get("unit"),
-            Some(&Value::String("save-the-spoiler.service".into()))
+            Some(&Value::String("APP01.service".into()))
         );
     }
 
     #[test]
     fn severity_filter_maps_to_journalctl_priority_range() {
-        let provider = JournalctlLogProvider::new("save-the-spoiler.service").unwrap();
+        let provider = JournalctlLogProvider::new("APP01.service").unwrap();
         let args = provider.command_args(
             &LogFilter {
                 severity: Some(LogSeverity::Warn),
@@ -404,7 +404,7 @@ mod tests {
         );
 
         assert!(args.contains(&"--priority=0..4".to_owned()));
-        assert!(args.contains(&"--unit=save-the-spoiler.service".to_owned()));
+        assert!(args.contains(&"--unit=APP01.service".to_owned()));
     }
 
     #[test]
@@ -445,7 +445,7 @@ mod tests {
 
     #[test]
     fn live_stream_uses_the_configured_initial_entry_limit() {
-        let provider = JournalctlLogProvider::new("save-the-spoiler.service")
+        let provider = JournalctlLogProvider::new("APP01.service")
             .unwrap()
             .with_max_entries(17)
             .unwrap();

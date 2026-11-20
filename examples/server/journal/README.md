@@ -13,18 +13,19 @@ be installed, the server process must have permission to read the relevant
 entries, and the application must write its logs to journald.
 
 ```bash
-SOVD_JOURNAL_UNIT=save-the-spoiler.service \
+SOVD_JOURNAL_UNIT=APP01.service \
   cargo run -p opensovd-examples-server --features journalctl --example journal
 
-curl -s http://127.0.0.1:7691/sovd/v1/apps/save-the-spoiler/logs
-curl -s http://127.0.0.1:7691/sovd/v1/apps/save-the-spoiler/logs/entries
-curl -s http://127.0.0.1:7691/sovd/v1/components/local-ecu/logs/entries
-curl -N http://127.0.0.1:7691/sovd/v1/apps/save-the-spoiler/logs/x-opensovd-log-streams
+curl -s http://127.0.0.1:7691/sovd/v1/apps/APP01/logs
+curl -s http://127.0.0.1:7691/sovd/v1/apps/APP01/logs/entries
+curl -s http://127.0.0.1:7691/sovd/v1/components/ECU01/logs/entries
+curl -N http://127.0.0.1:7691/sovd/v1/apps/APP01/logs/x-opensovd-log-streams
 ```
 
+Replace `APP01.service` with an existing systemd unit on the target device.
 Set `SOVD_JOURNAL_APP_ID` to change the app ID (otherwise the `.service`
 suffix is removed from the unit name). Set `SOVD_JOURNAL_COMPONENT_ID` to
-name the component, for example `proconnect` when running **on ProConnect**.
+change the component ID (defaults to `ECU01`).
 The component's journal includes all entries readable by the server, not just
 the app's unit. Configure access control before exposing it beyond localhost:
 system logs may contain sensitive information.

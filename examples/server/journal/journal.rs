@@ -3,7 +3,7 @@
 
 //! Local journald logs for a systemd app and a Linux component.
 //!
-//! Run with: SOVD_JOURNAL_UNIT=save-the-spoiler.service cargo run
+//! Run with: SOVD_JOURNAL_UNIT=APP01.service cargo run
 //!   -p opensovd-examples-server --features journalctl --example journal
 
 use opensovd_core::{App, Component, Topology};
@@ -23,7 +23,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         error @ std::env::VarError::NotUnicode(_) => Err(error),
     })?;
     let component_id = std::env::var("SOVD_JOURNAL_COMPONENT_ID").or_else(|error| match error {
-        std::env::VarError::NotPresent => Ok("local-ecu".into()),
+        std::env::VarError::NotPresent => Ok("ECU01".into()),
         error @ std::env::VarError::NotUnicode(_) => Err(error),
     })?;
 
