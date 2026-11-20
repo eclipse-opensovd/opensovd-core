@@ -21,6 +21,8 @@
 
 pub mod cli;
 mod cors;
+#[cfg(feature = "mdns")]
+mod discovery;
 mod serve_dir;
 mod upstream;
 
@@ -77,7 +79,8 @@ pub async fn run(cli: cli::Cli, topology: Topology) -> anyhow::Result<()> {
 
 /// Runs the gateway until `shutdown` resolves, using a caller-provided topology.
 ///
-/// On shutdown the server stops gracefully and any mDNS announcement is withdrawn.
+/// On shutdown the server stops gracefully, any mDNS announcement is withdrawn
+/// and the search for upstreams via mDNS stops.
 /// The caller initializes tracing if required.
 ///
 /// # Errors
@@ -210,14 +213,22 @@ async fn serve(
     let (mut builder, local_addr) = configure_listener(builder, &cli, authority).await?;
     builder = builder.topology(topology.clone());
     // after auth, so that forwarded requests are authorized like any other
-    if let Some(federation) = create_federation(&cli.upstream, topology)? {
-        builder = builder.inner_layer(federation);
+    let federation = create_federation(&cli.upstream, topology)?;
+    if let Some(federation) = &federation {
+        builder = builder.inner_layer(federation.clone());
     }
 
     #[cfg(feature = "mdns")]
-    let mdns = configure_mdns(cli.mdns, local_addr, &uri, tls)?;
+    let mdns = Mdns {
+        announcement: configure_mdns(&cli.mdns, local_addr, &uri, tls)?,
+        discovery: configure_discovery(&cli, federation.as_ref())?,
+    };
     #[cfg(not(feature = "mdns"))]
-    let _ = (local_addr.map(|b| (b.addr, b.v6_only, b.activated)), tls);
+    let _ = (
+        local_addr.map(|b| (b.addr, b.v6_only, b.activated)),
+        tls,
+        federation,
+    );
 
     let cors = cors::create_cors_layer(
         &cli.cors.origins,
@@ -244,13 +255,12 @@ async fn serve(
     }
 
     #[cfg(feature = "mdns")]
-    let (announcer_tx, announcer_rx) =
-        tokio::sync::oneshot::channel::<Option<opensovd_extra::MdnsAnnouncer>>();
+    let (mdns_tx, mdns_rx) = tokio::sync::oneshot::channel::<MdnsRunning>();
     builder = builder.shutdown(async move {
         shutdown.await;
         #[cfg(feature = "mdns")]
-        if let Ok(Some(announcer)) = announcer_rx.await {
-            announcer.shutdown().await;
+        if let Ok(running) = mdns_rx.await {
+            running.shutdown().await;
         }
     });
 
@@ -262,17 +272,7 @@ async fn serve(
         .build()?;
 
     #[cfg(feature = "mdns")]
-    {
-        let announcer = match mdns {
-            Some(mdns) => Some(
-                mdns.announce()
-                    .await
-                    .context("failed to announce via mDNS")?,
-            ),
-            None => None,
-        };
-        let _ = announcer_tx.send(announcer);
-    }
+    let _ = mdns_tx.send(mdns.start().await?);
 
     notify_readiness();
     server.serve().await?;
@@ -374,7 +374,7 @@ async fn bind_tcp<Vendor, Layer>(
 
 #[cfg(feature = "mdns")]
 fn configure_mdns(
-    args: cli::MdnsArgs,
+    args: &cli::MdnsArgs,
     bound: Option<Bound>,
     uri: &http::Uri,
     tls: bool,
@@ -408,10 +408,93 @@ fn configure_mdns(
         .access(if tls { "https" } else { "http" }, uri.path())
         .interfaces(args.interfaces())
         .ipv6_only(v6_only);
-    if let Some(host) = args.host {
+    if let Some(host) = &args.host {
         announcement = announcement.host(host);
     }
     Ok(Some(announcement))
+}
+
+/// What the gateway does via mDNS once it serves.
+#[cfg(feature = "mdns")]
+struct Mdns {
+    /// Its own announcement, with `--mdns`.
+    announcement: Option<opensovd_extra::Announcement>,
+    /// The search for upstreams, with `--enable-mdns-upstream-discovery`.
+    discovery: Option<DiscoveryConfig>,
+}
+
+/// The search for upstreams via mDNS, ready to start.
+#[cfg(feature = "mdns")]
+struct DiscoveryConfig {
+    browser: opensovd_extra::Browser,
+    federation: std::sync::Arc<Federation>,
+    timeouts: discovery::Timeouts,
+}
+
+/// What runs via mDNS until the gateway shuts down.
+#[cfg(feature = "mdns")]
+struct MdnsRunning {
+    announcer: Option<opensovd_extra::MdnsAnnouncer>,
+    discovery: Option<discovery::Discovery>,
+}
+
+#[cfg(feature = "mdns")]
+impl Mdns {
+    /// Announces the gateway, then looks for upstreams but itself.
+    async fn start(self) -> anyhow::Result<MdnsRunning> {
+        let announcer = match self.announcement {
+            Some(announcement) => Some(
+                announcement
+                    .announce()
+                    .await
+                    .context("failed to announce via mDNS")?,
+            ),
+            None => None,
+        };
+        let discovery = self.discovery.map(|config| {
+            let own = announcer
+                .as_ref()
+                .map(opensovd_extra::MdnsAnnouncer::fullname);
+            discovery::Discovery::start(config.browser, config.federation, own, config.timeouts)
+        });
+        Ok(MdnsRunning {
+            announcer,
+            discovery,
+        })
+    }
+}
+
+#[cfg(feature = "mdns")]
+impl MdnsRunning {
+    /// Stops looking for upstreams and withdraws the announcement.
+    async fn shutdown(self) {
+        drop(self.discovery);
+        if let Some(announcer) = self.announcer {
+            announcer.shutdown().await;
+        }
+    }
+}
+
+/// The search for upstreams via mDNS, if `--enable-mdns-upstream-discovery`
+/// asks for it, which adds them to `federation`.
+#[cfg(feature = "mdns")]
+fn configure_discovery(
+    cli: &cli::Cli,
+    federation: Option<&FederationLayer>,
+) -> anyhow::Result<Option<DiscoveryConfig>> {
+    let Some(federation) = federation.filter(|_| cli.upstream.mdns_discovery) else {
+        return Ok(None);
+    };
+    let browser = opensovd_extra::Browser::new(cli.mdns.interfaces())
+        .context("failed to look for upstreams via mDNS")?;
+    Ok(Some(DiscoveryConfig {
+        browser,
+        federation: std::sync::Arc::clone(federation.federation()),
+        timeouts: discovery::Timeouts {
+            connect: std::time::Duration::from_secs(cli.upstream.upstream_connect_timeout),
+            discovery: std::time::Duration::from_secs(cli.upstream.upstream_discovery_timeout),
+        },
+    }))
 }
 
 #[cfg_attr(not(feature = "mock"), expect(clippy::unused_async))]
@@ -433,13 +516,18 @@ async fn configure_topology(cli: &cli::Cli) -> Topology {
     topology
 }
 
-/// The layer that forwards to the upstreams, if there are any.
+/// The layer that forwards to the upstreams, if there are any, or may be
+/// with `--enable-mdns-upstream-discovery`.
 fn create_federation(
     upstream: &cli::UpstreamArgs,
     topology: Topology,
 ) -> anyhow::Result<Option<FederationLayer>> {
     let upstreams = upstream::configured(&upstream.config()?)?;
-    if upstreams.is_empty() {
+    #[cfg(feature = "mdns")]
+    let discovers = upstream.mdns_discovery;
+    #[cfg(not(feature = "mdns"))]
+    let discovers = false;
+    if upstreams.is_empty() && !discovers {
         return Ok(None);
     }
     let federation = Federation::new(upstreams, topology)?.into_layer();
