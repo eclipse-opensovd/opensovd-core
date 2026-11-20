@@ -88,17 +88,18 @@ fn lock_id(parts: &[Option<&str>]) -> String {
 
 /// The upstreams of the lock `id` with the ids of its parts, or nothing if
 /// `id` is no lock of the server with these upstreams.
-fn lock_parts<'a>(forward: &'a Federation, id: &str) -> Option<Vec<(&'a Upstream, String)>> {
+fn lock_parts(forward: &Federation, id: &str) -> Option<Vec<(Upstream, String)>> {
     if id.len() > MAX_LOCK_ID_LEN {
         return None;
     }
     let json = URL_SAFE_NO_PAD.decode(id).ok()?;
     let parts: Vec<Option<String>> = serde_json::from_slice(&json).ok()?;
-    if parts.len() != forward.lock_upstreams().count() {
+    let upstreams = forward.lock_upstreams();
+    if parts.len() != upstreams.len() {
         return None;
     }
-    let parts: Vec<_> = forward
-        .lock_upstreams()
+    let parts: Vec<_> = upstreams
+        .into_iter()
         .zip(parts)
         .filter_map(|(upstream, part)| Some((upstream, part?)))
         .collect();
@@ -138,6 +139,7 @@ async fn acquire_vehicle_lock(forward: &Federation, request: Request) -> Respons
     let mut ids = Vec::new();
     let mut answers = Vec::new();
     for upstream in forward.lock_upstreams() {
+        let upstream = &upstream;
         let request = parts.clone();
         let answer = upstream
             .send_to(request, Body::new(Full::new(body.clone())), uri.clone())
@@ -221,7 +223,7 @@ fn breaks_locks(body: &Bytes) -> bool {
 async fn list_locks(forward: &Federation, request: Request) -> Response {
     let (parts, _) = request.into_parts();
     let uri = api_uri(&parts.extensions);
-    let upstreams: Vec<_> = forward.lock_upstreams().collect();
+    let upstreams = forward.lock_upstreams();
     let requests = upstreams
         .iter()
         .map(|upstream| upstream.request_with_client_token(&parts, Method::GET, uri.clone()));
@@ -451,11 +453,7 @@ async fn release_unnamed(upstream: &Upstream, parts: &Parts, query: Option<&str>
 
 /// The upstreams of the lock `id` with the URIs of their parts, or nothing if
 /// `id` is no lock of the server.
-fn part_uris<'a>(
-    forward: &'a Federation,
-    id: &str,
-    query: Option<&str>,
-) -> Option<Vec<(&'a Upstream, Uri)>> {
+fn part_uris(forward: &Federation, id: &str, query: Option<&str>) -> Option<Vec<(Upstream, Uri)>> {
     lock_parts(forward, id)?
         .into_iter()
         .map(|(upstream, part)| Some((upstream, upstream_lock_uri(&part, query)?)))

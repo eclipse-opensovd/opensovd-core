@@ -13,6 +13,7 @@ use std::sync::{Arc, Mutex};
 use bytes::Bytes;
 use http_body_util::{BodyExt, Full};
 use hyper::{Method, Request, Response};
+use opensovd_extra::federation::DISCOVERED_HOP;
 use opensovd_extra::{Federation, ForwardRoute, SharedForwardRoute, Upstream};
 use opensovd_models::GenericError;
 use opensovd_models::discovery::{Entities, EntityCapabilities, EntityReference};
@@ -35,6 +36,10 @@ struct Backend {
     tags: Arc<Mutex<HashMap<String, String>>>,
     status: Arc<Mutex<Option<u16>>>,
     seen: Arc<Mutex<Vec<String>>>,
+    /// The paths of the requests with the [`DISCOVERED_HOP`] header.
+    hops: Arc<Mutex<Vec<String>>>,
+    /// The requests with an `Authorization` header, such as `GET /components`.
+    authorized: Arc<Mutex<Vec<String>>>,
 }
 
 impl Backend {
@@ -76,6 +81,16 @@ impl Backend {
     /// The requests so far, such as `PUT /components/ecu`.
     fn seen(&self) -> Vec<String> {
         self.seen.lock().unwrap().clone()
+    }
+
+    /// The paths of the requests so far with the [`DISCOVERED_HOP`] header.
+    fn hops(&self) -> Vec<String> {
+        self.hops.lock().unwrap().clone()
+    }
+
+    /// The requests so far with an `Authorization` header.
+    fn authorized(&self) -> Vec<String> {
+        self.authorized.lock().unwrap().clone()
     }
 
     fn answer(&self, path: &str, query: &str) -> (u16, String) {
@@ -139,6 +154,16 @@ impl Backend {
                         .lock()
                         .unwrap()
                         .push(format!("{method} {path}"));
+                    if request.headers().contains_key(DISCOVERED_HOP) {
+                        backend.hops.lock().unwrap().push(path.clone());
+                    }
+                    if request.headers().contains_key("authorization") {
+                        backend
+                            .authorized
+                            .lock()
+                            .unwrap()
+                            .push(format!("{method} {path}"));
+                    }
                     // as a server that answers a matching condition does
                     if request.headers().contains_key("if-none-match") {
                         return Ok::<_, Infallible>(
@@ -184,26 +209,49 @@ impl Drop for TestServer {
 }
 
 async fn start(upstreams: Vec<Upstream>) -> TestServer {
+    start_federation(upstreams).await.0
+}
+
+/// A server of `upstreams`, and its federation, to add upstreams found at
+/// runtime to.
+async fn start_federation(upstreams: Vec<Upstream>) -> (TestServer, Arc<Federation>) {
+    let topology = opensovd_mocks::create_mock_topology().await;
+    start_federation_of(upstreams, topology).await
+}
+
+/// As [`start_federation`], for a server that holds `topology`.
+async fn start_federation_of(
+    upstreams: Vec<Upstream>,
+    topology: Topology,
+) -> (TestServer, Arc<Federation>) {
+    let federation = Federation::new(upstreams, topology.clone()).unwrap();
+    serve(federation, topology).await
+}
+
+/// A server of `federation` that holds `topology`.
+async fn serve(federation: Federation, topology: Topology) -> (TestServer, Arc<Federation>) {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     let (shutdown_tx, shutdown_rx) = oneshot::channel();
-    let topology = opensovd_mocks::create_mock_topology().await;
+    let layer = federation.into_layer();
+    let federation = Arc::clone(layer.federation());
     let server = Server::builder()
         .listener(listener)
         .base_uri("/sovd")
         .unwrap()
         .topology(topology.clone())
-        .inner_layer(Federation::new(upstreams, topology).unwrap().into_layer())
+        .inner_layer(layer)
         .shutdown(async {
             shutdown_rx.await.ok();
         })
         .build()
         .unwrap();
     tokio::spawn(async move { server.serve().await.unwrap() });
-    TestServer {
+    let server = TestServer {
         addr,
         shutdown: Some(shutdown_tx),
-    }
+    };
+    (server, federation)
 }
 
 /// Two upstreams the way the gateway sets them up: the first takes everything.
@@ -221,9 +269,23 @@ async fn send(
     path: &str,
     body: &'static [u8],
 ) -> (u16, Value) {
-    let request = Request::builder()
+    send_with(server, method, path, body, &[]).await
+}
+
+async fn send_with(
+    server: &TestServer,
+    method: Method,
+    path: &str,
+    body: &'static [u8],
+    headers: &[(&str, &str)],
+) -> (u16, Value) {
+    let mut request = Request::builder()
         .method(method)
-        .header("authorization", "Bearer t")
+        .header("authorization", "Bearer t");
+    for (name, value) in headers {
+        request = request.header(*name, *value);
+    }
+    let request = request
         .uri(format!("http://{}/sovd/v1{path}", server.addr))
         .body(Full::new(Bytes::from_static(body)))
         .unwrap();
@@ -775,4 +837,250 @@ async fn an_upstream_that_hangs_answers_for_an_unknown_entity() {
 
     assert_eq!(status, 504);
     assert_eq!(vendor_code(json).as_deref(), Some("upstream-timeout"));
+}
+
+fn ids(json: Value) -> Vec<String> {
+    entities(json).into_iter().map(|entity| entity.id).collect()
+}
+
+#[rstest]
+#[timeout(std::time::Duration::from_secs(10))]
+#[tokio::test]
+async fn discovered_upstreams_join_and_leave_while_the_server_runs() {
+    let configured = Backend::new("configured", &["flxc1000"]);
+    let found = Backend::new("found", &["hovr4000"]);
+    let (server, federation) = start_federation(vec![configured.upstream()]).await;
+
+    let (_, json) = send(&server, Method::GET, "/components", b"").await;
+    assert_eq!(ids(json), ["ecu", "gateway", "flxc1000"]);
+
+    federation.add_discovered("found._sovd._tcp.local.", found.upstream());
+    let (_, json) = send(&server, Method::GET, "/components", b"").await;
+    assert_eq!(ids(json), ["ecu", "gateway", "flxc1000", "hovr4000"]);
+    assert_eq!(
+        get(&server, "/components/hovr4000").await,
+        (200, "found".to_owned())
+    );
+    assert!(found.hops().contains(&"/components/hovr4000".to_owned()));
+    assert_eq!(configured.hops(), Vec::<String>::new());
+
+    assert!(federation.remove_discovered("found._sovd._tcp.local."));
+    assert!(!federation.remove_discovered("found._sovd._tcp.local."));
+    let (_, json) = send(&server, Method::GET, "/components", b"").await;
+    assert_eq!(ids(json), ["ecu", "gateway", "flxc1000"]);
+    let (status, _) = get(&server, "/components/hovr4000").await;
+    assert_eq!(status, 404);
+}
+
+#[rstest]
+#[timeout(std::time::Duration::from_secs(10))]
+#[tokio::test]
+async fn a_discovered_upstream_of_the_same_name_is_replaced() {
+    let (server, federation) = start_federation(Vec::new()).await;
+    let before = Backend::new("before", &["hovr4000"]);
+    let after = Backend::new("after", &["hovr4000"]);
+
+    federation.add_discovered("found", before.upstream());
+    assert_eq!(
+        get(&server, "/components/hovr4000").await,
+        (200, "before".to_owned())
+    );
+    federation.add_discovered("found", after.upstream());
+
+    assert_eq!(
+        get(&server, "/components/hovr4000").await,
+        (200, "after".to_owned())
+    );
+    let (_, json) = send(&server, Method::GET, "/components", b"").await;
+    assert_eq!(ids(json), ["ecu", "gateway", "hovr4000"]);
+}
+
+#[rstest]
+#[timeout(std::time::Duration::from_secs(10))]
+#[tokio::test]
+async fn a_discovered_upstream_serves_its_entities_only() {
+    let (server, federation) = start_federation(Vec::new()).await;
+    let found = Backend::new("found", &["hovr4000"]);
+    federation.add_discovered("found", found.upstream());
+
+    for path in ["/functions", "/data", "/x-found", "/locks"] {
+        let (_, answered_by) = get(&server, path).await;
+        assert_eq!(answered_by, "", "{path}");
+    }
+    assert!(found.seen().iter().all(|seen| !seen.contains("/functions")));
+}
+
+#[rstest]
+#[timeout(std::time::Duration::from_secs(10))]
+#[tokio::test]
+async fn a_request_from_a_discovered_upstream_does_not_go_to_discovered_ones() {
+    let configured = Backend::new("configured", &["flxc1000"]);
+    let found = Backend::new("found", &["hovr4000"]);
+    let (server, federation) = start_federation(vec![configured.upstream()]).await;
+    federation.add_discovered("found", found.upstream());
+    let hop = [(DISCOVERED_HOP, "1")];
+
+    let (_, json) = send_with(&server, Method::GET, "/components", b"", &hop).await;
+    assert_eq!(ids(json), ["ecu", "gateway", "flxc1000"]);
+    let (status, _) = send_with(&server, Method::GET, "/components/hovr4000", b"", &hop).await;
+    assert_eq!(status, 404);
+    assert_eq!(found.seen(), Vec::<String>::new());
+}
+
+#[rstest]
+#[timeout(std::time::Duration::from_secs(10))]
+#[tokio::test]
+async fn a_discovered_upstream_does_not_serve_areas() {
+    let found = Backend::new("found", &["hovr4000"]);
+    let (server, federation) = start_federation_of(Vec::new(), Topology::default()).await;
+    federation.add_discovered("found", found.upstream());
+
+    let (_, answered_by) = get(&server, "/areas").await;
+    assert_eq!(answered_by, "");
+    let (_, json) = send(&server, Method::GET, "/", b"").await;
+    let links: Map<String, Value> = serde_json::from_value(json).unwrap();
+    assert!(!links.contains_key("areas"));
+    assert!(found.seen().iter().all(|seen| !seen.contains("/areas")));
+
+    let configured = Backend::new("configured", &[]);
+    let (server, _) = start_federation_of(vec![configured.upstream()], Topology::default()).await;
+    assert_eq!(get(&server, "/areas").await, (200, "configured".to_owned()));
+}
+
+#[rstest]
+#[timeout(std::time::Duration::from_secs(10))]
+#[tokio::test]
+async fn a_look_for_the_owner_keeps_the_discovered_hop_marker() {
+    let first = Backend::new("first", &[]);
+    let second = Backend::new("second", &["flxc2000"]);
+    let (server, _) = start_federation(vec![
+        first.upstream(),
+        second.upstream().routes([ForwardRoute::Entities]),
+    ])
+    .await;
+
+    let hop = [(DISCOVERED_HOP, "1")];
+    send_with(&server, Method::GET, "/components/flxc2000", b"", &hop).await;
+
+    assert!(first.hops().contains(&"/components/flxc2000".to_owned()));
+    assert!(second.hops().contains(&"/components/flxc2000".to_owned()));
+}
+
+#[rstest]
+#[timeout(std::time::Duration::from_secs(10))]
+#[tokio::test]
+async fn a_remembered_discovered_owner_is_not_used_for_a_request_with_the_hop_marker() {
+    let first = Backend::new("first", &[]);
+    let second = Backend::new("second", &[]);
+    let found = Backend::new("found", &["hovr4000"]);
+    let (server, federation) = start_federation(vec![
+        first.upstream(),
+        second.upstream().routes([ForwardRoute::Entities]),
+    ])
+    .await;
+    federation.add_discovered("found", found.upstream());
+    assert_eq!(
+        get(&server, "/components/hovr4000").await,
+        (200, "found".to_owned())
+    );
+    let before = found.seen().len();
+
+    let hop = [(DISCOVERED_HOP, "1")];
+    let (status, _) = send_with(&server, Method::GET, "/components/hovr4000", b"", &hop).await;
+
+    assert_eq!(status, 404);
+    assert_eq!(found.seen().len(), before);
+}
+
+/// The requests that a discovered upstream and a configured one get for a
+/// list, a look for the owner of an entity and a forwarded request, all with
+/// a token, when the federation forwards the token to discovered upstreams
+/// as `forward` says.
+async fn authorized_requests(forward: bool) -> (Vec<String>, Vec<String>) {
+    let first = Backend::new("first", &["flxc1000"]);
+    let second = Backend::new("second", &[]);
+    let found = Backend::new("found", &["hovr4000"]);
+    let topology = opensovd_mocks::create_mock_topology().await;
+    let federation = Federation::new(
+        vec![
+            first.upstream(),
+            second.upstream().routes([ForwardRoute::Entities]),
+        ],
+        topology.clone(),
+    )
+    .unwrap()
+    .forward_authorization_to_discovered(forward);
+    let (server, federation) = serve(federation, topology).await;
+    federation.add_discovered("found", found.upstream());
+
+    let (_, json) = send(&server, Method::GET, "/components", b"").await;
+    assert_eq!(ids(json), ["ecu", "gateway", "flxc1000", "hovr4000"]);
+    assert_eq!(
+        get(&server, "/components/hovr4000").await,
+        (200, "found".to_owned())
+    );
+    let (status, _) = send(&server, Method::PUT, "/components/hovr4000/data/x", b"{}").await;
+    assert_eq!(status, 200);
+    assert_eq!(
+        found.seen(),
+        [
+            "GET /components",
+            "GET /components/hovr4000",
+            "GET /components/hovr4000",
+            "PUT /components/hovr4000/data/x",
+        ]
+    );
+    (found.authorized(), first.authorized())
+}
+
+#[rstest]
+#[timeout(std::time::Duration::from_secs(10))]
+#[tokio::test]
+async fn a_discovered_upstream_gets_no_token_by_default() {
+    let (found, configured) = authorized_requests(false).await;
+
+    assert_eq!(found, Vec::<String>::new());
+    assert!(configured.contains(&"GET /components".to_owned()));
+    assert!(configured.contains(&"GET /components/hovr4000".to_owned()));
+}
+
+#[rstest]
+#[timeout(std::time::Duration::from_secs(10))]
+#[tokio::test]
+async fn a_discovered_upstream_gets_the_token_if_the_federation_allows_it() {
+    let (found, configured) = authorized_requests(true).await;
+
+    assert_eq!(
+        found,
+        [
+            "GET /components",
+            "GET /components/hovr4000",
+            "GET /components/hovr4000",
+            "PUT /components/hovr4000/data/x",
+        ]
+    );
+    assert!(configured.contains(&"GET /components".to_owned()));
+}
+
+#[rstest]
+#[case(401)]
+#[case(403)]
+#[case(503)]
+#[timeout(std::time::Duration::from_secs(10))]
+#[tokio::test]
+async fn a_discovered_upstream_that_refuses_or_fails_claims_no_entity(#[case] status: u16) {
+    let configured = Backend::new("configured", &["flxc1000"]);
+    let refusing = Backend::new("refusing", &[]);
+    refusing.set_status(status);
+    let found = Backend::new("found", &["hovr4000"]);
+    let (server, federation) = start_federation(vec![configured.upstream()]).await;
+    federation.add_discovered("refusing", refusing.upstream());
+    federation.add_discovered("found", found.upstream());
+
+    assert_eq!(
+        get(&server, "/components/hovr4000").await,
+        (200, "found".to_owned())
+    );
+    let (status, _) = send(&server, Method::GET, "/components/unknown", b"").await;
+    assert_eq!(status, 404);
 }
