@@ -28,6 +28,6 @@ pub use log::{
 };
 pub use topology::{Topology, TopologyError, TopologyEvent, TopologyReadGuard, TopologyWriteGuard};
 pub use updates::{
-    FromModel, Phase, Status, ToModel, UpdateDescriptor, UpdateError, UpdateFeedback,
-    UpdateFeedbackState, UpdateProvider, Updates,
+    FromRequest, Phase, Status, ToModel, UpdateDescriptor, UpdateError, UpdateFeedback,
+    UpdateFeedbackState, UpdateProvider, UpdateRequest, Updates,
 };

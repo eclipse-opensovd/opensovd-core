@@ -16,8 +16,8 @@ use std::sync::Arc;
 
 use futures::StreamExt as _;
 use opensovd_core::{
-    App, Component, FromModel, Phase, Status, UpdateDescriptor, UpdateError, UpdateFeedback,
-    UpdateProvider,
+    App, Component, FromRequest, Phase, Status, UpdateDescriptor, UpdateError, UpdateFeedback,
+    UpdateProvider, UpdateRequest,
 };
 use opensovd_core::{BulkDataProvider, ToModel};
 use opensovd_mocks::InMemoryBulkDataProvider;
@@ -56,14 +56,17 @@ struct Update {
     payload: Arc<RwLock<Vec<Payload>>>,
 }
 
-impl FromModel<UpdateDetail> for Update {
-    fn from_model(model: &UpdateDetail) -> Self {
+#[async_trait::async_trait]
+impl FromRequest for Update {
+    async fn from_request(request: UpdateRequest) -> Result<Self, UpdateError> {
+        let model: UpdateDetail = request.try_json().await?;
+
         let mut payload = Vec::new();
         for target in &model.targets {
             payload.push(Payload::Unresolved(target.file.clone()));
         }
 
-        Update {
+        let update = Update {
             id: model
                 .id
                 .clone()
@@ -72,7 +75,9 @@ impl FromModel<UpdateDetail> for Update {
             #[expect(clippy::cast_possible_truncation)]
             size: model.size as usize,
             payload: Arc::new(RwLock::new(payload)),
-        }
+        };
+
+        Ok(update)
     }
 }
 
@@ -375,9 +380,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut guard = topology.write().await;
         guard.add_component(component);
         guard.add_app(app);
-        guard.add_update_provider::<Update, UpdateDetail, Feedback, UpdateStatus>(Provider {
-            store,
-        });
+        guard.add_update_provider::<Update, Feedback, UpdateStatus>(Provider { store });
     }
 
     let listener = TcpListener::bind("127.0.0.1:7690").await?;
