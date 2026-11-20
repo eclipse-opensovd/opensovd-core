@@ -199,6 +199,26 @@ fn update_error(e: &UpdateError) -> (StatusCode, ErrorDetails) {
             "entity-not-found",
             format!("Entity not found: {id}"),
         ),
+        UpdateError::MalformedUpdate => vendor(
+            StatusCode::BAD_REQUEST,
+            "invalid-update",
+            "Invalid body format".into(),
+        ),
+        UpdateError::UnsupportedMediaType => vendor(
+            StatusCode::UNSUPPORTED_MEDIA_TYPE,
+            "invalid-update",
+            "Unsupported media type".into(),
+        ),
+        UpdateError::BodyOverflow => vendor(
+            StatusCode::BAD_REQUEST,
+            "body-size-overflow",
+            "More data than expected has been received".into(),
+        ),
+        UpdateError::BodyTooLarge => vendor(
+            StatusCode::BAD_REQUEST,
+            "body-too-large",
+            "The body is too large to be handled by the server".into(),
+        ),
     }
 }
 
