@@ -35,6 +35,13 @@
 //! are forwarded, and keeps what the server advertises itself. What is left of
 //! that answer describes the upstream. The combining stops at these links: a
 //! collection has one answer, not the items of both.
+//!
+//! Upstreams found at runtime, such as SOVD servers announced via mDNS, join
+//! with [`Federation::add_discovered`] and leave with
+//! [`Federation::remove_discovered`]. They serve their entities only. Requests
+//! to them carry the [`DISCOVERED_HOP`] header, and a request with it is not
+//! sent on to discovered upstreams, so that servers which discover each other
+//! do not forward a request in a loop.
 
 use std::collections::{BTreeSet, HashMap};
 use std::convert::Infallible;
@@ -123,6 +130,11 @@ const LOCKS: &str = "locks";
 
 /// The collection of updates.
 const UPDATES: &str = "updates";
+
+/// The header of a request that a server sends to an upstream it discovered.
+/// A server does not send a request with it on to the upstreams it
+/// discovered itself, as these may include the sender.
+pub const DISCOVERED_HOP: &str = "x-opensovd-discovered-hop";
 
 /// The resources of the `SOVDServer` that are not plain
 /// [`COLLECTIONS`], and how each is handled. This is the one place that names
@@ -226,6 +238,9 @@ pub struct Upstream {
     routes: Arc<[ForwardRoute]>,
     /// How long this upstream gets to answer a discovery request.
     discovery_timeout: Duration,
+    /// The name of an upstream found at runtime, see
+    /// [`Federation::add_discovered`].
+    discovered: Option<Arc<str>>,
 }
 
 impl Upstream {
@@ -246,6 +261,7 @@ impl Upstream {
             service: BoxCloneSyncService::new(svc),
             routes: ForwardRoute::ALL.into(),
             discovery_timeout: DISCOVERY_TIMEOUT,
+            discovered: None,
         }
     }
 
@@ -289,6 +305,11 @@ impl Upstream {
         let server = parts.extensions.get::<ApiRequest>().cloned();
         if let Some(api) = server {
             parts.extensions.insert(ServerUri(api.server_uri));
+        }
+        if self.discovered.is_some() {
+            parts
+                .headers
+                .insert(DISCOVERED_HOP, http::HeaderValue::from_static("1"));
         }
         parts.uri = uri;
         let request = Request::from_parts(parts, body);
@@ -414,7 +435,8 @@ impl Upstream {
 /// an upstream before its owner refuses the client or fails, see
 /// [`Upstream::discovery_timeout`].
 pub struct Federation {
-    upstreams: Vec<Upstream>,
+    /// The configured upstreams, then those discovered at runtime.
+    upstreams: RwLock<Vec<Upstream>>,
     /// What the server holds, which stays with the server.
     topology: Topology,
     /// The upstream that answered for an entity, by its path, such as
@@ -459,7 +481,7 @@ impl Federation {
         match contested {
             Some(route) => Err(SharedForwardRoute(route)),
             None => Ok(Self {
-                upstreams,
+                upstreams: RwLock::new(upstreams),
                 topology,
                 owners: RwLock::default(),
             }),
@@ -472,29 +494,101 @@ impl Federation {
         FederationLayer(Arc::new(self))
     }
 
-    /// Whether the requests of `route` go upstream.
-    fn includes(&self, route: ForwardRoute) -> bool {
-        self.owner(route).is_some()
+    /// Adds `upstream`, found at runtime under `name`, such as the DNS-SD
+    /// instance name of a server announced via mDNS, after the upstreams
+    /// there are. It serves its entities only, as the other routes have one
+    /// upstream, which has to stay the same. An upstream of the same name is
+    /// replaced in its place, such as one that moved to another address.
+    ///
+    /// Its requests carry the [`DISCOVERED_HOP`] header.
+    pub fn add_discovered(&self, name: &str, upstream: Upstream) {
+        let upstream = Upstream {
+            routes: [ForwardRoute::Entities].into(),
+            discovered: Some(name.into()),
+            ..upstream
+        };
+        self.forget_owners_of(name);
+        let mut upstreams = self.upstreams_mut();
+        match upstreams
+            .iter_mut()
+            .find(|known| known.discovered.as_deref() == Some(name))
+        {
+            Some(known) => *known = upstream,
+            None => upstreams.push(upstream),
+        }
+    }
+
+    /// Removes the upstream found at runtime under `name`, such as a server
+    /// that withdrew its mDNS announcement.
+    ///
+    /// Returns whether there was one.
+    pub fn remove_discovered(&self, name: &str) -> bool {
+        let removed = {
+            let mut upstreams = self.upstreams_mut();
+            let before = upstreams.len();
+            upstreams.retain(|known| known.discovered.as_deref() != Some(name));
+            upstreams.len() != before
+        };
+        self.forget_owners_of(name);
+        removed
+    }
+
+    /// Forgets the entities that the discovered upstream `name` answered for.
+    fn forget_owners_of(&self, name: &str) {
+        self.owners_mut()
+            .retain(|_, owner| owner.discovered.as_deref() != Some(name));
+    }
+
+    // A panic cannot leave the list in a state worse than a missing upstream,
+    // so what it left is used.
+    fn upstreams_mut(&self) -> RwLockWriteGuard<'_, Vec<Upstream>> {
+        self.upstreams
+            .write()
+            .unwrap_or_else(PoisonError::into_inner)
     }
 
     /// The first upstream of `route`, the only one but for entities.
-    fn owner(&self, route: ForwardRoute) -> Option<&Upstream> {
-        self.upstreams.iter().find(|u| u.includes(route))
+    fn owner(&self, route: ForwardRoute) -> Option<Upstream> {
+        let upstreams = self
+            .upstreams
+            .read()
+            .unwrap_or_else(PoisonError::into_inner);
+        upstreams.iter().find(|u| u.includes(route)).cloned()
     }
 
-    /// All upstreams, in the order that decides between equal entity ids.
-    fn upstreams(&self) -> impl Iterator<Item = &Upstream> {
-        self.upstreams.iter()
+    /// All upstreams for the request of `parts`, in the order that decides
+    /// between equal entity ids. A request from a discovered upstream's
+    /// server does not go on to discovered upstreams, see [`DISCOVERED_HOP`].
+    fn upstreams(&self, parts: &Parts) -> Vec<Upstream> {
+        let hop = parts.headers.contains_key(DISCOVERED_HOP);
+        let upstreams = self
+            .upstreams
+            .read()
+            .unwrap_or_else(PoisonError::into_inner);
+        upstreams
+            .iter()
+            .filter(|upstream| !hop || upstream.discovered.is_none())
+            .cloned()
+            .collect()
     }
 
-    fn entity_upstreams(&self) -> impl Iterator<Item = &Upstream> {
-        self.upstreams()
-            .filter(|upstream| upstream.includes(ForwardRoute::Entities))
+    fn entity_upstreams(&self, parts: &Parts) -> Vec<Upstream> {
+        let mut upstreams = self.upstreams(parts);
+        upstreams.retain(|upstream| upstream.includes(ForwardRoute::Entities));
+        upstreams
     }
 
-    fn lock_upstreams(&self) -> impl Iterator<Item = &Upstream> {
-        self.upstreams()
+    /// The upstreams of vehicle locks, which are all configured ones.
+    fn lock_upstreams(&self) -> Vec<Upstream> {
+        let upstreams = self
+            .upstreams
+            .read()
+            .unwrap_or_else(PoisonError::into_inner);
+        upstreams
+            .iter()
             .filter(|upstream| upstream.includes(ForwardRoute::Locks))
+            .cloned()
+            .collect()
     }
 
     // A panic cannot leave the owners in a state a client depends on, as
@@ -520,7 +614,7 @@ impl Federation {
     /// failed, or did not answer in time, may have it as well, so its failure
     /// is the answer. The owner is remembered for all clients.
     async fn find_owner(&self, parts: &Parts, collection: &str, id: &str) -> Destination {
-        let candidates: Vec<_> = self.entity_upstreams().cloned().collect();
+        let candidates = self.entity_upstreams(parts);
         if let [only] = candidates.as_slice() {
             return Destination::Upstream(only.clone());
         }
@@ -561,17 +655,17 @@ impl Federation {
             return Destination::Routes;
         };
         let topology = &self.topology;
-        let entities = self.entity_upstreams().next().is_some();
+        let entities = !self.entity_upstreams(parts).is_empty();
         let to_owner = |route| {
             self.owner(route)
-                .map_or(Destination::Routes, |u| Destination::Upstream(u.clone()))
+                .map_or(Destination::Routes, Destination::Upstream)
         };
         match rule {
             Rule::Route(ForwardRoute::Locks) => {
-                if self.lock_upstreams().next().is_some() {
-                    Destination::Locks
-                } else {
+                if self.lock_upstreams().is_empty() {
                     Destination::Routes
+                } else {
+                    Destination::Locks
                 }
             }
             Rule::Route(route) => to_owner(route),
@@ -737,8 +831,9 @@ impl Federation {
     /// The entities the upstreams add to the list request of `parts`, in their
     /// order, which decides between equal ids.
     async fn upstream_entities(&self, parts: &Parts) -> Vec<EntityReference> {
-        let lists = self
-            .entity_upstreams()
+        let upstreams = self.entity_upstreams(parts);
+        let lists = upstreams
+            .iter()
             .map(|upstream| upstream.discovery::<Collection<Value>>(parts));
         join_all(lists)
             .await
@@ -756,13 +851,17 @@ impl Federation {
     /// The entities of upstreams are only known by asking, so `/components`
     /// and `/apps` are always among them, and `/locks` is the federation's own.
     async fn upstream_capabilities(&self, parts: &Parts) -> Vec<String> {
-        let capabilities = self
-            .upstreams()
+        let upstreams = self.upstreams(parts);
+        let capabilities = upstreams
+            .iter()
             .map(|upstream| upstream.capabilities(parts));
         let mut names: Vec<_> = join_all(capabilities).await.into_iter().flatten().collect();
         for (name, rule) in RESOURCES {
             let own = matches!(rule, Rule::Entities | Rule::Route(ForwardRoute::Locks));
-            if own && rule.route().is_some_and(|route| self.includes(route)) {
+            let routed = rule
+                .route()
+                .is_some_and(|route| upstreams.iter().any(|upstream| upstream.includes(route)));
+            if own && routed {
                 names.push(name.to_owned());
             }
         }
@@ -853,6 +952,15 @@ fn has_dot_segment(path: &str) -> bool {
 /// [`Federation`] as a layer.
 #[derive(Clone)]
 pub struct FederationLayer(Arc<Federation>);
+
+impl FederationLayer {
+    /// The federation of the layer, to add and remove upstreams found at
+    /// runtime while the server runs.
+    #[must_use]
+    pub fn federation(&self) -> &Arc<Federation> {
+        &self.0
+    }
+}
 
 impl<S> Layer<S> for FederationLayer {
     type Service = FederationService<S>;

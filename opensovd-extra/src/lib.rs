@@ -40,4 +40,4 @@ pub mod trace;
 pub mod mdns;
 
 #[cfg(feature = "mdns")]
-pub use mdns::{Announcement, MdnsAnnouncer, MdnsError};
+pub use mdns::{Announcement, BrowseEvent, Browser, DiscoveredServer, MdnsAnnouncer, MdnsError};

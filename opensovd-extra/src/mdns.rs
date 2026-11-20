@@ -18,6 +18,24 @@
 //! # Ok(())
 //! # }
 //! ```
+//!
+//! A [`Browser`] finds the SOVD servers that others announce:
+//!
+//! ```no_run
+//! # async fn run() -> Result<(), opensovd_extra::MdnsError> {
+//! use opensovd_extra::mdns::{BrowseEvent, Browser};
+//!
+//! let mut browser = Browser::new(Vec::<String>::new())?;
+//! while let Some(event) = browser.next().await {
+//!     match event {
+//!         BrowseEvent::Resolved(server) => println!("{server:?}"),
+//!         BrowseEvent::Removed(fullname) => println!("{fullname} left"),
+//!         _ => {}
+//!     }
+//! }
+//! # Ok(())
+//! # }
+//! ```
 
 use std::collections::{HashMap, HashSet};
 use std::net::{IpAddr, SocketAddr};
@@ -26,8 +44,8 @@ use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
 use mdns_sd::{
-    DaemonEvent, DnsNameChange, IfKind, RRType, Receiver, ServiceDaemon, ServiceInfo, TxtProperty,
-    UnregisterStatus,
+    DaemonEvent, DnsNameChange, IfKind, RRType, Receiver, ResolvedService, ServiceDaemon,
+    ServiceEvent, ServiceInfo, TxtProperty, UnregisterStatus,
 };
 
 /// DNS-SD service type of an SOVD server.
@@ -42,7 +60,7 @@ const UNREGISTER_TIMEOUT: Duration = Duration::from_secs(1);
 const ANNOUNCE_TIMEOUT: Duration = Duration::from_secs(5);
 const GOODBYE_REPEAT: Duration = Duration::from_millis(150);
 
-/// Error returned when a service cannot be announced.
+/// Error returned when a service cannot be announced or browsed.
 #[derive(Debug, thiserror::Error)]
 pub enum MdnsError {
     #[error("invalid mDNS host {0:?}: expected 1-58 letters, digits or inner hyphens")]
@@ -662,6 +680,16 @@ impl MdnsAnnouncer {
         }
     }
 
+    /// The full DNS-SD name of the service, such as
+    /// `abc123456789._sovd._tcp.local.`, including renames after a conflict.
+    #[must_use]
+    pub fn fullname(&self) -> String {
+        self.fullname
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
+    }
+
     /// Current instance and host, including renames after a conflict.
     fn names(&self) -> (String, String) {
         let fullname = self.fullname.lock().unwrap_or_else(PoisonError::into_inner);
@@ -685,6 +713,144 @@ impl Drop for MdnsAnnouncer {
         self.stopping.store(true, Ordering::Release);
         if let Some(daemon) = self.daemon.take() {
             let _ = daemon.unregister(&self.registered);
+            let _ = daemon.shutdown();
+        }
+    }
+}
+
+/// An SOVD server that a [`Browser`] found.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DiscoveredServer {
+    /// The full DNS-SD name, such as `abc123456789._sovd._tcp.local.`, which
+    /// names the server until it is removed.
+    pub fullname: String,
+    /// The addresses of the server, IPv4 first.
+    pub addresses: Vec<IpAddr>,
+    /// The port of the server.
+    pub port: u16,
+    /// The `identification` TXT value, such as the VIN.
+    pub identification: Option<String>,
+    /// The `accessurl` TXT value, such as `http://host.local:7690/sovd`, the
+    /// parent of `version-info`.
+    pub access_url: Option<String>,
+}
+
+impl DiscoveredServer {
+    /// The scheme and path of [`Self::access_url`], such as `http` and
+    /// `/sovd`. The path is empty for the root, and `None` without an
+    /// `accessurl` or with one that is no URL.
+    #[must_use]
+    pub fn access(&self) -> Option<(&str, &str)> {
+        let (scheme, rest) = self.access_url.as_deref()?.split_once("://")?;
+        let path = rest.find('/').and_then(|at| rest.get(at..)).unwrap_or("");
+        let path = path.trim_end_matches('/');
+        (!scheme.is_empty()).then_some((scheme, path))
+    }
+
+    fn of(service: &ResolvedService) -> Self {
+        let mut addresses: Vec<IpAddr> = service
+            .get_addresses()
+            .iter()
+            .map(mdns_sd::ScopedIp::to_ip_addr)
+            .collect();
+        addresses.sort_by_key(|ip| (ip.is_ipv6(), *ip));
+        let txt = |key| service.get_property_val_str(key).map(str::to_owned);
+        Self {
+            fullname: service.get_fullname().to_owned(),
+            addresses,
+            port: service.get_port(),
+            identification: txt("identification"),
+            access_url: txt("accessurl"),
+        }
+    }
+}
+
+/// What a [`Browser`] learns.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum BrowseEvent {
+    /// A server was found, or what is known about it changed.
+    Resolved(DiscoveredServer),
+    /// The server of this full name withdrew its announcement.
+    Removed(String),
+}
+
+/// Finds the SOVD servers announced via mDNS, see [`SERVICE_TYPE`].
+///
+/// Dropping it stops looking.
+pub struct Browser {
+    daemon: Option<ServiceDaemon>,
+    events: Receiver<ServiceEvent>,
+}
+
+impl Browser {
+    /// Starts looking on `interfaces`, or on all interfaces but loopback if
+    /// there are none.
+    ///
+    /// # Errors
+    ///
+    /// Fails when the responder cannot start.
+    pub fn new<I, S>(interfaces: I) -> Result<Self, MdnsError>
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        let interfaces: Vec<IfKind> = interfaces
+            .into_iter()
+            .map(|name| IfKind::Name(name.into()))
+            .collect();
+        let daemon = ServiceDaemon::new()?;
+        let browse = || -> Result<Receiver<ServiceEvent>, MdnsError> {
+            if !interfaces.is_empty() {
+                daemon.disable_interface(IfKind::All)?;
+                daemon.enable_interface(interfaces)?;
+            }
+            daemon.disable_interface(vec![IfKind::LoopbackV4, IfKind::LoopbackV6])?;
+            Ok(daemon.browse(SERVICE_TYPE)?)
+        };
+        match browse() {
+            Ok(events) => {
+                tracing::info!(target: TARGET, service = %SERVICE_TYPE, "Browsing");
+                Ok(Self {
+                    daemon: Some(daemon),
+                    events,
+                })
+            }
+            Err(e) => {
+                let _ = daemon.shutdown();
+                Err(e)
+            }
+        }
+    }
+
+    /// The next server found or removed, or `None` once the responder
+    /// stopped.
+    pub async fn next(&mut self) -> Option<BrowseEvent> {
+        loop {
+            match self.events.recv_async().await.ok()? {
+                ServiceEvent::ServiceResolved(service) if service.is_valid() => {
+                    return Some(BrowseEvent::Resolved(DiscoveredServer::of(&service)));
+                }
+                ServiceEvent::ServiceRemoved(_, fullname) => {
+                    return Some(BrowseEvent::Removed(fullname));
+                }
+                ServiceEvent::SearchStopped(_) => return None,
+                _ => {}
+            }
+        }
+    }
+}
+
+impl std::fmt::Debug for Browser {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Browser").finish_non_exhaustive()
+    }
+}
+
+impl Drop for Browser {
+    fn drop(&mut self) {
+        if let Some(daemon) = self.daemon.take() {
+            let _ = daemon.stop_browse(SERVICE_TYPE);
             let _ = daemon.shutdown();
         }
     }
@@ -895,6 +1061,35 @@ mod tests {
             let access = Announcement::new(wildcard()).access("http", path);
             assert_eq!(access.access_url("gw"), url);
         }
+    }
+
+    #[test]
+    fn access_splits_scheme_and_path() {
+        let server = |url: Option<&str>| DiscoveredServer {
+            fullname: "x._sovd._tcp.local.".to_owned(),
+            addresses: Vec::new(),
+            port: 7690,
+            identification: None,
+            access_url: url.map(str::to_owned),
+        };
+        let access = |url| {
+            server(url)
+                .access()
+                .map(|(s, p)| (s.to_owned(), p.to_owned()))
+        };
+        let pair = |s: &str, p: &str| Some((s.to_owned(), p.to_owned()));
+
+        assert_eq!(
+            access(Some("http://h.local:7690/sovd")),
+            pair("http", "/sovd")
+        );
+        assert_eq!(
+            access(Some("https://h.local:1/a/b/")),
+            pair("https", "/a/b")
+        );
+        assert_eq!(access(Some("http://h.local:7690")), pair("http", ""));
+        assert_eq!(access(Some("h.local:7690/sovd")), None);
+        assert_eq!(access(None), None);
     }
 
     #[test]

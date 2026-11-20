@@ -13,6 +13,7 @@ use std::sync::{Arc, Mutex};
 use bytes::Bytes;
 use http_body_util::{BodyExt, Full};
 use hyper::{Method, Request, Response};
+use opensovd_extra::federation::DISCOVERED_HOP;
 use opensovd_extra::{Federation, ForwardRoute, SharedForwardRoute, Upstream};
 use opensovd_models::GenericError;
 use opensovd_models::discovery::{Entities, EntityCapabilities, EntityReference};
@@ -35,6 +36,8 @@ struct Backend {
     tags: Arc<Mutex<HashMap<String, String>>>,
     status: Arc<Mutex<Option<u16>>>,
     seen: Arc<Mutex<Vec<String>>>,
+    /// The paths of the requests with the [`DISCOVERED_HOP`] header.
+    hops: Arc<Mutex<Vec<String>>>,
 }
 
 impl Backend {
@@ -76,6 +79,11 @@ impl Backend {
     /// The requests so far, such as `PUT /components/ecu`.
     fn seen(&self) -> Vec<String> {
         self.seen.lock().unwrap().clone()
+    }
+
+    /// The paths of the requests so far with the [`DISCOVERED_HOP`] header.
+    fn hops(&self) -> Vec<String> {
+        self.hops.lock().unwrap().clone()
     }
 
     fn answer(&self, path: &str, query: &str) -> (u16, String) {
@@ -139,6 +147,9 @@ impl Backend {
                         .lock()
                         .unwrap()
                         .push(format!("{method} {path}"));
+                    if request.headers().contains_key(DISCOVERED_HOP) {
+                        backend.hops.lock().unwrap().push(path.clone());
+                    }
                     // as a server that answers a matching condition does
                     if request.headers().contains_key("if-none-match") {
                         return Ok::<_, Infallible>(
@@ -184,26 +195,37 @@ impl Drop for TestServer {
 }
 
 async fn start(upstreams: Vec<Upstream>) -> TestServer {
+    start_federation(upstreams).await.0
+}
+
+/// A server of `upstreams`, and its federation, to add upstreams found at
+/// runtime to.
+async fn start_federation(upstreams: Vec<Upstream>) -> (TestServer, Arc<Federation>) {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     let (shutdown_tx, shutdown_rx) = oneshot::channel();
     let topology = opensovd_mocks::create_mock_topology().await;
+    let layer = Federation::new(upstreams, topology.clone())
+        .unwrap()
+        .into_layer();
+    let federation = Arc::clone(layer.federation());
     let server = Server::builder()
         .listener(listener)
         .base_uri("/sovd")
         .unwrap()
         .topology(topology.clone())
-        .inner_layer(Federation::new(upstreams, topology).unwrap().into_layer())
+        .inner_layer(layer)
         .shutdown(async {
             shutdown_rx.await.ok();
         })
         .build()
         .unwrap();
     tokio::spawn(async move { server.serve().await.unwrap() });
-    TestServer {
+    let server = TestServer {
         addr,
         shutdown: Some(shutdown_tx),
-    }
+    };
+    (server, federation)
 }
 
 /// Two upstreams the way the gateway sets them up: the first takes everything.
@@ -221,9 +243,23 @@ async fn send(
     path: &str,
     body: &'static [u8],
 ) -> (u16, Value) {
-    let request = Request::builder()
+    send_with(server, method, path, body, &[]).await
+}
+
+async fn send_with(
+    server: &TestServer,
+    method: Method,
+    path: &str,
+    body: &'static [u8],
+    headers: &[(&str, &str)],
+) -> (u16, Value) {
+    let mut request = Request::builder()
         .method(method)
-        .header("authorization", "Bearer t")
+        .header("authorization", "Bearer t");
+    for (name, value) in headers {
+        request = request.header(*name, *value);
+    }
+    let request = request
         .uri(format!("http://{}/sovd/v1{path}", server.addr))
         .body(Full::new(Bytes::from_static(body)))
         .unwrap();
@@ -775,4 +811,92 @@ async fn an_upstream_that_hangs_answers_for_an_unknown_entity() {
 
     assert_eq!(status, 504);
     assert_eq!(vendor_code(json).as_deref(), Some("upstream-timeout"));
+}
+
+fn ids(json: Value) -> Vec<String> {
+    entities(json).into_iter().map(|entity| entity.id).collect()
+}
+
+#[rstest]
+#[timeout(std::time::Duration::from_secs(10))]
+#[tokio::test]
+async fn discovered_upstreams_join_and_leave_while_the_server_runs() {
+    let configured = Backend::new("configured", &["flxc1000"]);
+    let found = Backend::new("found", &["hovr4000"]);
+    let (server, federation) = start_federation(vec![configured.upstream()]).await;
+
+    let (_, json) = send(&server, Method::GET, "/components", b"").await;
+    assert_eq!(ids(json), ["ecu", "gateway", "flxc1000"]);
+
+    federation.add_discovered("found._sovd._tcp.local.", found.upstream());
+    let (_, json) = send(&server, Method::GET, "/components", b"").await;
+    assert_eq!(ids(json), ["ecu", "gateway", "flxc1000", "hovr4000"]);
+    assert_eq!(
+        get(&server, "/components/hovr4000").await,
+        (200, "found".to_owned())
+    );
+    assert!(found.hops().contains(&"/components/hovr4000".to_owned()));
+    assert_eq!(configured.hops(), Vec::<String>::new());
+
+    assert!(federation.remove_discovered("found._sovd._tcp.local."));
+    assert!(!federation.remove_discovered("found._sovd._tcp.local."));
+    let (_, json) = send(&server, Method::GET, "/components", b"").await;
+    assert_eq!(ids(json), ["ecu", "gateway", "flxc1000"]);
+    let (status, _) = get(&server, "/components/hovr4000").await;
+    assert_eq!(status, 404);
+}
+
+#[rstest]
+#[timeout(std::time::Duration::from_secs(10))]
+#[tokio::test]
+async fn a_discovered_upstream_of_the_same_name_is_replaced() {
+    let (server, federation) = start_federation(Vec::new()).await;
+    let before = Backend::new("before", &["hovr4000"]);
+    let after = Backend::new("after", &["hovr4000"]);
+
+    federation.add_discovered("found", before.upstream());
+    assert_eq!(
+        get(&server, "/components/hovr4000").await,
+        (200, "before".to_owned())
+    );
+    federation.add_discovered("found", after.upstream());
+
+    assert_eq!(
+        get(&server, "/components/hovr4000").await,
+        (200, "after".to_owned())
+    );
+    let (_, json) = send(&server, Method::GET, "/components", b"").await;
+    assert_eq!(ids(json), ["ecu", "gateway", "hovr4000"]);
+}
+
+#[rstest]
+#[timeout(std::time::Duration::from_secs(10))]
+#[tokio::test]
+async fn a_discovered_upstream_serves_its_entities_only() {
+    let (server, federation) = start_federation(Vec::new()).await;
+    let found = Backend::new("found", &["hovr4000"]);
+    federation.add_discovered("found", found.upstream());
+
+    for path in ["/functions", "/data", "/x-found", "/locks"] {
+        let (_, answered_by) = get(&server, path).await;
+        assert_eq!(answered_by, "", "{path}");
+    }
+    assert!(found.seen().iter().all(|seen| !seen.contains("/functions")));
+}
+
+#[rstest]
+#[timeout(std::time::Duration::from_secs(10))]
+#[tokio::test]
+async fn a_request_from_a_discovered_upstream_does_not_go_to_discovered_ones() {
+    let configured = Backend::new("configured", &["flxc1000"]);
+    let found = Backend::new("found", &["hovr4000"]);
+    let (server, federation) = start_federation(vec![configured.upstream()]).await;
+    federation.add_discovered("found", found.upstream());
+    let hop = [(DISCOVERED_HOP, "1")];
+
+    let (_, json) = send_with(&server, Method::GET, "/components", b"", &hop).await;
+    assert_eq!(ids(json), ["ecu", "gateway", "flxc1000"]);
+    let (status, _) = send_with(&server, Method::GET, "/components/hovr4000", b"", &hop).await;
+    assert_eq!(status, 404);
+    assert_eq!(found.seen(), Vec::<String>::new());
 }
