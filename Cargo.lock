@@ -1803,6 +1803,7 @@ dependencies = [
  "opensovd-core",
  "opensovd-models",
  "opensovd-providers",
+ "serde_json",
  "tokio",
 ]
 

@@ -5,12 +5,16 @@
 
 use std::collections::HashMap;
 
-use opensovd_core::{App, Area, Component, Topology};
+use opensovd_core::{App, Area, Component, Fault, Topology};
 use opensovd_models::{
     data::DataCategory,
     updates::{UpdateDetail, UpdateStatus},
 };
-use opensovd_providers::data::{Constant, DataProviderBuilder};
+use opensovd_providers::{
+    data::{Constant, DataProviderBuilder},
+    faults::{BuiltFaultProvider, FaultProviderBuilder},
+};
+use serde_json::{Map, Value, json};
 
 mod bulkdata;
 mod updates;
@@ -19,6 +23,42 @@ pub use bulkdata::InMemoryBulkDataProvider;
 mod log;
 pub use log::InMemoryLogProvider;
 pub use updates::{MockFeedback, MockUpdate, MockUpdateProvider};
+
+#[expect(clippy::unwrap_used)]
+fn mock_fault_provider() -> BuiltFaultProvider {
+    FaultProviderBuilder::new()
+        .fault(Fault {
+            code: "P0001".into(),
+            scope: Some("powertrain".into()),
+            display_code: Some("P0001".into()),
+            fault_name: "Fuel Volume Regulator Control Circuit/Open".into(),
+            fault_translation_id: Some("fault.fuel-volume-regulator-open".into()),
+            severity: Some(2),
+            status: Some(Map::from_iter([
+                ("testFailed".into(), Value::from("1")),
+                ("confirmedDTC".into(), Value::from("1")),
+                ("aggregatedStatus".into(), Value::from("active")),
+            ])),
+            tags: vec!["powertrain".into()],
+            symptom: Some("Fuel volume regulator control circuit is open".into()),
+            symptom_translation_id: None,
+        })
+        .environment_data(json!({ "engineTemperature": 93 }))
+        .fault(Fault {
+            code: "P0002".into(),
+            scope: Some("powertrain".into()),
+            display_code: Some("P0002".into()),
+            fault_name: "Fuel Volume Regulator Control Circuit Range/Performance".into(),
+            fault_translation_id: Some("fault.fuel-volume-regulator-range-performance".into()),
+            severity: Some(4),
+            status: Some(Map::from_iter([("pendingDTC".into(), Value::from("1"))])),
+            tags: vec!["emissions".into()],
+            symptom: None,
+            symptom_translation_id: None,
+        })
+        .build()
+        .unwrap()
+}
 
 /// Creates a mock topology with sample ECU, gateway, and app entities.
 ///
@@ -86,7 +126,8 @@ pub async fn create_mock_topology() -> Topology {
             ("manufacturer".to_string(), "ACME".to_string()),
         ]))
         .with_area_id("powertrain")
-        .with_data_provider(ecu_provider);
+        .with_data_provider(ecu_provider)
+        .with_fault_provider(mock_fault_provider());
 
     // Gateway entity with version data
     #[rustfmt::skip]
@@ -169,7 +210,8 @@ pub async fn create_mock_topology() -> Topology {
             ("priority".to_string(), "high".to_string()),
         ]))
         .with_area_id("powertrain")
-        .with_data_provider(engine_control_provider);
+        .with_data_provider(engine_control_provider)
+        .with_fault_provider(mock_fault_provider());
 
     // App 2: "diagnostics" - Network app with minimal metadata
     #[rustfmt::skip]

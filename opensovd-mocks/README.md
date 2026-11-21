@@ -28,18 +28,18 @@ SOVDServer
 
 ### Components
 
-| id        | name                | area       | tags                 | data items                                                                                   |
-|-----------|---------------------|------------|----------------------|----------------------------------------------------------------------------------------------|
-| `ecu`     | Engine Control Unit | powertrain | powertrain, critical | 8 (voltage, temperature, sw.version, sw.build_date, sw.sha1, hw.version, hw.revision, hw.sn) |
-| `gateway` | Vehicle Gateway     | network    | network              | 7 (sw.version, sw.build_date, sw.sha1, hw.version, hw.revision, hw.sn, uptime)               |
+| id        | name                | area       | tags                 | data items                                                                                   | faults           |
+|-----------|---------------------|------------|----------------------|----------------------------------------------------------------------------------------------|------------------|
+| `ecu`     | Engine Control Unit | powertrain | powertrain, critical | 8 (voltage, temperature, sw.version, sw.build_date, sw.sha1, hw.version, hw.revision, hw.sn) | 2 (P0001, P0002) |
+| `gateway` | Vehicle Gateway     | network    | network              | 7 (sw.version, sw.build_date, sw.sha1, hw.version, hw.revision, hw.sn, uptime)               | _(none)_         |
 
 ### Apps
 
-| id               | name                       | host    | area       | tags                   | data items                                               |
-|------------------|----------------------------|---------|------------|------------------------|----------------------------------------------------------|
-| `engine_control` | Engine Control Application | ecu     | powertrain | powertrain, critical   | 3 (app.version, app.status, fuel_injection.rate)         |
-| `diagnostics`    | Diagnostic Services        | gateway | network    | network, service       | 3 (app.version, active_connections, messages_per_second) |
-| `ota_manager`    | OTA Update Manager         | gateway | _(none)_   | system, infrastructure | 3 (app.version, update_available, last_check)            |
+| id               | name                       | host    | area       | tags                   | data items                                               | faults           |
+|------------------|----------------------------|---------|------------|------------------------|----------------------------------------------------------|------------------|
+| `engine_control` | Engine Control Application | ecu     | powertrain | powertrain, critical   | 3 (app.version, app.status, fuel_injection.rate)         | 2 (P0001, P0002) |
+| `diagnostics`    | Diagnostic Services        | gateway | network    | network, service       | 3 (app.version, active_connections, messages_per_second) | _(none)_         |
+| `ota_manager`    | OTA Update Manager         | gateway | _(none)_   | system, infrastructure | 3 (app.version, update_available, last_check)            | _(none)_         |
 
 ### Areas
 
