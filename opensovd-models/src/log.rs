@@ -122,7 +122,6 @@ pub struct LogStreamQuery {
 
 #[cfg(test)]
 mod tests {
-    use chrono::{TimeZone, Utc};
     use serde_json::json;
 
     use super::*;
@@ -137,7 +136,7 @@ mod tests {
 
     #[test]
     fn event_envelope_contains_timestamp_and_payload() {
-        let timestamp = Utc.with_ymd_and_hms(2026, 10, 7, 8, 0, 0).unwrap();
+        let timestamp = "2026-10-07T08:00:00Z".parse::<DateTime>().unwrap();
         let envelope = EventEnvelope {
             timestamp,
             payload: Some(LogEntry {

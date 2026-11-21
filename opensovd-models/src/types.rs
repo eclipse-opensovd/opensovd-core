@@ -23,7 +23,7 @@ impl From<String> for JsonPointer {
     }
 }
 
-pub type DateTime = chrono::DateTime<chrono::Utc>;
+pub type DateTime = jiff::Timestamp;
 
 impl From<&serde_path_to_error::Error<serde_json::Error>> for JsonPointer {
     /// Points at the element where deserialization failed, or at the field
@@ -103,6 +103,16 @@ mod tests {
         let s = String::from("/data/0");
         let ptr: JsonPointer = s.into();
         assert_eq!(ptr.0, "/data/0");
+    }
+
+    #[test]
+    fn date_time_is_written_in_utc_without_trailing_zeros() {
+        let date_time: DateTime =
+            serde_json::from_value(serde_json::json!("2026-10-07T10:00:00.500+02:00")).unwrap();
+        assert_eq!(
+            serde_json::to_value(date_time).unwrap(),
+            serde_json::json!("2026-10-07T08:00:00.5Z")
+        );
     }
 
     fn pointer_of<T: serde::de::DeserializeOwned + std::fmt::Debug>(json: &str) -> String {

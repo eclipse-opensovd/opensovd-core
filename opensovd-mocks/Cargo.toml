@@ -16,8 +16,8 @@ publish = false
 [dependencies]
 async-trait = { workspace = true }
 bytes = { workspace = true }
-chrono = { workspace = true }
 futures = { workspace = true, features = ["std", "async-await"] }
+jiff = { workspace = true }
 opensovd-core = { workspace = true }
 opensovd-models = { workspace = true }
 opensovd-providers = { workspace = true }

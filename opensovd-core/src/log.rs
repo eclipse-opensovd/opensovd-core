@@ -46,8 +46,8 @@
 use std::pin::Pin;
 
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
 use futures_core::Stream;
+use jiff::Timestamp;
 
 /// SOVD log severity levels.
 ///
@@ -91,7 +91,7 @@ pub struct LogContext {
 /// A log entry exposed through the SOVD API.
 #[derive(Debug, Clone, PartialEq)]
 pub struct LogEntry {
-    pub timestamp: DateTime<Utc>,
+    pub timestamp: Timestamp,
     pub context: LogContext,
     pub severity: LogSeverity,
     pub msg: String,
@@ -102,8 +102,8 @@ pub struct LogEntry {
 #[derive(Debug, Clone, Default)]
 pub struct LogFilter {
     pub severity: Option<LogSeverity>,
-    pub created_after: Option<DateTime<Utc>>,
-    pub created_before: Option<DateTime<Utc>>,
+    pub created_after: Option<Timestamp>,
+    pub created_before: Option<Timestamp>,
 }
 
 /// A logging configuration for one context.

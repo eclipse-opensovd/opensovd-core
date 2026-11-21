@@ -8,7 +8,7 @@ workspace_rust_library(
     name = "opensovd_models",
     srcs = glob(["src/**/*.rs"]),
     crate_deps = [
-        "chrono",
+        "jiff",
         "schemars",
         "serde",
         "serde_json",

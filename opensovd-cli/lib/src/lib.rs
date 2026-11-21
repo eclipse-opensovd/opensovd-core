@@ -33,15 +33,9 @@ where
             tracing::Level::TRACE => "T",
         };
 
-        let now = chrono::Utc::now();
+        let now = jiff::Timestamp::now();
         let target = event.metadata().target();
-        write!(
-            writer,
-            "{} {} {} ",
-            now.format("%Y-%m-%dT%H:%M:%S%.6fZ"),
-            level,
-            target
-        )?;
+        write!(writer, "{now:.6} {level} {target} ")?;
 
         if let Some(scope) = ctx.event_scope() {
             let spans: Vec<_> = scope.from_root().collect();

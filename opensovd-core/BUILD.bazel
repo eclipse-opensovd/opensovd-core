@@ -9,9 +9,9 @@ workspace_rust_library(
     srcs = glob(["src/**/*.rs"]),
     crate_deps = [
         "bytes",
-        "chrono",
         "futures-core",
         "indexmap",
+        "jiff",
         "serde_json",
         "thiserror",
         "tokio",

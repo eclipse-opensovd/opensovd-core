@@ -144,7 +144,7 @@ async fn log_entry_stream(
             Err(error) => EventEnvelope {
                 // Provider errors do not carry an entry timestamp. The epoch
                 // makes that absence deterministic and keeps the envelope valid.
-                timestamp: chrono::DateTime::<chrono::Utc>::UNIX_EPOCH,
+                timestamp: jiff::Timestamp::UNIX_EPOCH,
                 payload: None,
                 error: Some(stream_error(&error)),
             },
@@ -272,8 +272,8 @@ fn validate_stream_filter(query: &LogStreamQuery) -> Result<()> {
 }
 
 fn validate_time_range(
-    created_after: Option<chrono::DateTime<chrono::Utc>>,
-    created_before: Option<chrono::DateTime<chrono::Utc>>,
+    created_after: Option<jiff::Timestamp>,
+    created_before: Option<jiff::Timestamp>,
 ) -> Result<()> {
     if let (Some(after), Some(before)) = (created_after, created_before)
         && after >= before

@@ -127,14 +127,17 @@ fn matches_filter(entry: &LogEntry, filter: &LogFilter) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use chrono::{TimeZone, Utc};
+    use jiff::{civil, tz::TimeZone};
     use opensovd_core::{LogContext, LogSeverity};
 
     use super::*;
 
-    fn entry(second: u32, severity: LogSeverity, msg: &str) -> LogEntry {
+    fn entry(second: i8, severity: LogSeverity, msg: &str) -> LogEntry {
         LogEntry {
-            timestamp: Utc.with_ymd_and_hms(2026, 10, 12, 12, 0, second).unwrap(),
+            timestamp: civil::datetime(2026, 10, 12, 12, 0, second, 0)
+                .to_zoned(TimeZone::UTC)
+                .unwrap()
+                .timestamp(),
             context: LogContext {
                 context_type: "RFC5424".into(),
                 attributes: [
