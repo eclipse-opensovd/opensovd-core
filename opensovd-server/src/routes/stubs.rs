@@ -6,7 +6,7 @@
 //! serves. Replace a router here with a real one as it lands.
 
 use axum::Router;
-use axum::routing::{get, post, put};
+use axum::routing::{delete, get, post, put};
 use opensovd_core::Topology;
 
 use super::entity::stub;
@@ -61,8 +61,8 @@ pub(super) fn data_lists() -> Router<Topology> {
 
 pub(super) fn faults() -> Router<Topology> {
     Router::new()
-        .route("/faults", get(stub).delete(stub))
-        .route("/faults/{fault_code}", get(stub).delete(stub))
+        .route("/faults", delete(stub))
+        .route("/faults/{fault_code}", delete(stub))
 }
 
 pub(super) fn locks() -> Router<Topology> {

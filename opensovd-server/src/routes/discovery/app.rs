@@ -82,6 +82,8 @@ pub(crate) async fn app_capabilities(
 
     let data = app.data_provider().map(|_| format!("{own}/data").into());
 
+    let faults = app.fault_provider().map(|_| format!("{own}/faults").into());
+
     let updates = app.updates().map(|_| format!("{own}/updates").into());
 
     let bulk_data = app
@@ -98,6 +100,7 @@ pub(crate) async fn app_capabilities(
         located_on,
         belongs_to,
         data,
+        faults,
         updates,
         bulk_data,
         logs,
