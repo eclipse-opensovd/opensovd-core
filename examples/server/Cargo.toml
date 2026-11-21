@@ -17,6 +17,11 @@ name = "simple"
 path = "simple/simple.rs"
 
 [[example]]
+name = "journal"
+path = "journal/journal.rs"
+required-features = ["journalctl"]
+
+[[example]]
 name = "systemd"
 path = "systemd/systemd.rs"
 
@@ -35,6 +40,7 @@ required-features = ["tls"]
 
 [features]
 tls = ["opensovd-server/tls", "opensovd-extra/tls"]
+journalctl = ["opensovd-providers/journalctl"]
 
 [dependencies]
 async-trait = { workspace = true }

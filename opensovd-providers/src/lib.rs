@@ -2,3 +2,5 @@
 // SPDX-License-Identifier: Apache-2.0
 
 pub mod data;
+#[cfg(feature = "journalctl")]
+pub mod log;
