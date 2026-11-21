@@ -22,7 +22,7 @@
 //! - `entity`: the `Entity` extractor and the stub answer
 //! - `extract`: `Path`, `Query`, `TypedHeader` and `Json`, which reject with `Error`
 //! - `discovery`: capabilities, listings and relations
-//! - `data`, `bulk_data`, `log`: the served resource collections
+//! - `data`, `faults`, `bulk_data`, `log`: the served resource collections
 //! - `stubs`: the routers of collections that are not served yet
 //! - `version`: `GET /version-info`, outside the versioned API
 
@@ -32,6 +32,7 @@ mod discovery;
 mod entity;
 mod error;
 pub(crate) mod extract;
+mod faults;
 mod log;
 mod stubs;
 mod updates;
@@ -153,6 +154,7 @@ fn versioned() -> Router<Topology> {
 fn collections() -> Router<Topology> {
     Router::new()
         .merge(data::routes())
+        .merge(faults::routes())
         .merge(bulk_data::routes())
         .merge(log::routes())
         .merge(updates::routes())

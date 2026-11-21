@@ -74,7 +74,6 @@ async fn routes_not_served_yet_answer_resource_not_found() {
         ),
         (Method::GET, "/sovd/v1/components/ecu/subcomponents"),
         (Method::GET, "/sovd/v1/components/ecu/depends-on"),
-        (Method::GET, "/sovd/v1/components/ecu/faults"),
         (Method::DELETE, "/sovd/v1/components/ecu/faults/P0300"),
         (Method::PUT, "/sovd/v1/components/ecu/status/restart"),
         (Method::GET, "/sovd/v1/apps/engine_control/depends-on"),

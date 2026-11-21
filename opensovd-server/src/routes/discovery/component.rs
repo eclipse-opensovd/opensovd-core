@@ -84,6 +84,10 @@ pub(crate) async fn component_capabilities(
         .data_provider()
         .map(|_| format!("{own}/data").into());
 
+    let faults = component
+        .fault_provider()
+        .map(|_| format!("{own}/faults").into());
+
     let updates = component.updates().map(|_| format!("{own}/updates").into());
 
     let bulk_data = component
@@ -102,6 +106,7 @@ pub(crate) async fn component_capabilities(
         hosts,
         belongs_to,
         data,
+        faults,
         updates,
         bulk_data,
         logs,
