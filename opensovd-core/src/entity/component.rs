@@ -10,6 +10,7 @@ use std::sync::Arc;
 use crate::bulkdata::BulkDataProvider;
 use crate::data::DataProvider;
 use crate::entity::EntityRef;
+use crate::faults::FaultProvider;
 use crate::log::LogProvider;
 use crate::{FromModel, ToModel, UpdateDescriptor, UpdateProvider, Updates};
 
@@ -21,6 +22,7 @@ pub struct Component {
     tags: Vec<String>,
     translation_id: Option<String>,
     data_provider: Option<Box<dyn DataProvider>>,
+    fault_provider: Option<Box<dyn FaultProvider>>,
     bulkdata_provider: Option<Arc<dyn BulkDataProvider>>,
     log_provider: Option<Arc<dyn LogProvider>>,
     update_provider: Option<Updates>,
@@ -36,6 +38,10 @@ impl fmt::Debug for Component {
             .field("tags", &self.tags)
             .field("translation_id", &self.translation_id)
             .field("data_provider", &self.data_provider.as_ref().map(|_| "..."))
+            .field(
+                "fault_provider",
+                &self.fault_provider.as_ref().map(|_| "..."),
+            )
             .field(
                 "bulkdata_provider",
                 &self.bulkdata_provider.as_ref().map(|_| "..."),
@@ -60,6 +66,7 @@ impl Component {
             tags: Vec::new(),
             translation_id: None,
             data_provider: None,
+            fault_provider: None,
             bulkdata_provider: None,
             log_provider: None,
             update_provider: None,
@@ -87,6 +94,12 @@ impl Component {
     #[must_use]
     pub fn with_data_provider(mut self, provider: impl DataProvider) -> Self {
         self.data_provider = Some(Box::new(provider));
+        self
+    }
+
+    #[must_use]
+    pub fn with_fault_provider(mut self, provider: impl FaultProvider) -> Self {
+        self.fault_provider = Some(Box::new(provider));
         self
     }
 
@@ -157,6 +170,11 @@ impl Component {
     #[must_use]
     pub fn data_provider(&self) -> Option<&dyn DataProvider> {
         self.data_provider.as_deref()
+    }
+
+    #[must_use]
+    pub fn fault_provider(&self) -> Option<&dyn FaultProvider> {
+        self.fault_provider.as_deref()
     }
 
     #[must_use]
