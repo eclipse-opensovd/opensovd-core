@@ -93,12 +93,21 @@ async fn bulk_data_categories(
     }))
 }
 
-fn category_filter(query: &BulkDataDescriptorsQuery) -> CategoryFilter {
-    CategoryFilter {
+fn category_filter(query: &BulkDataDescriptorsQuery) -> Result<CategoryFilter> {
+    if let (Some(after), Some(before)) = (&query.created_after, &query.created_before)
+        && after >= before
+    {
+        return Err(BulkDataError::InvalidRequest(
+            "created-after must be earlier than created-before".into(),
+        )
+        .into());
+    }
+
+    Ok(CategoryFilter {
         created_before: query.created_before,
         created_after: query.created_after,
         tags: query.tags.clone(),
-    }
+    })
 }
 
 /// GET /{entity_path}/bulk-data/{category} - Retrieve the bulk data of a category.
@@ -111,11 +120,12 @@ async fn bulk_data_descriptors(
     Path(Category { category }): Path<Category>,
     Query(query): Query<BulkDataDescriptorsQuery>,
 ) -> Result<Json<BulkDataMetadata>> {
+    let filter = category_filter(&query)?;
     let provider = entity.bulk_data_provider(&topology.read().await)?;
 
     Ok(Json(BulkDataMetadata {
         items: provider
-            .bulk_list(&category, category_filter(&query))
+            .bulk_list(&category, filter)
             .await?
             .iter()
             .map(|metadata| BulkDataDescriptor {
