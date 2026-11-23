@@ -13,6 +13,15 @@ use clap::{Args, CommandFactory, FromArgMatches, Parser};
 pub const ABOUT: &str = "OpenSOVD Gateway Server";
 const DEFAULT_URL: &str = "http://localhost:7690/sovd";
 
+fn parse_url(value: &str) -> anyhow::Result<http::Uri> {
+    let url: http::Uri = value.parse()?;
+    anyhow::ensure!(
+        url.authority().is_some(),
+        "must include host:port (e.g., http://localhost:7690/sovd)"
+    );
+    Ok(url)
+}
+
 const VERSION_STRING: &str = concat!(
     env!("VERSION"),
     " (",
@@ -50,8 +59,8 @@ pub struct Cli {
     /// or systemd socket activation). The path is used as the base URI for all
     /// API routes. An https:// scheme is required with --tls-cert and is
     /// otherwise only advertised, e.g. behind a TLS-terminating proxy.
-    #[arg(long, env = "SOVD_URL", default_value = DEFAULT_URL)]
-    pub url: String,
+    #[arg(long, env = "SOVD_URL", default_value = DEFAULT_URL, value_parser = parse_url)]
+    pub url: http::Uri,
 
     /// Path to a Unix socket to listen on. Use '@' prefix for abstract sockets.
     /// When specified, the host:port from --url is ignored.

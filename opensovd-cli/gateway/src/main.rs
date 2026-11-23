@@ -127,16 +127,8 @@ fn create_rego_authorizer(auth: &mut cli::AuthArgs) -> anyhow::Result<RegorusAut
 }
 
 async fn serve(cli: cli::Cli, auth: Option<Auth>) -> anyhow::Result<()> {
-    let uri: http::Uri = cli
-        .url
-        .parse()
-        .with_context(|| format!("invalid --url {:?}", cli.url))?;
-    let authority = uri
-        .authority()
-        .ok_or_else(|| {
-            anyhow::anyhow!("--url must include host:port (e.g., http://localhost:7690/sovd)")
-        })?
-        .as_str();
+    let uri = cli.url.clone();
+    let authority = uri.authority().map_or("", http::uri::Authority::as_str);
 
     let builder = Server::builder();
     let builder = match auth {
