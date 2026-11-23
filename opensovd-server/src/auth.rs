@@ -16,7 +16,9 @@ use axum::extract::{
 use axum::http::{HeaderValue, Method, StatusCode, header};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
+use axum::routing::MethodRouter;
 use http::request::Parts;
+use opensovd_core::Topology;
 use opensovd_models::{ErrorCode, GenericError};
 use serde::Serialize;
 
@@ -120,6 +122,7 @@ impl IntoResponse for AuthError {
 pub struct Auth {
     authenticator: Arc<dyn Authenticator>,
     authorizer: Arc<dyn Authorizer>,
+    authorize: Option<MethodRouter<Topology>>,
 }
 
 impl Auth {
@@ -127,7 +130,26 @@ impl Auth {
         Self {
             authenticator: Arc::new(authenticator),
             authorizer: Arc::new(authorizer),
+            authorize: None,
         }
+    }
+
+    /// Serves `route` as the server-level `/authorize` (ISO 17978-3 7.23.4)
+    /// where this authentication issues tokens, instead of the stub that
+    /// answers `resource-not-found`.
+    ///
+    /// The route is authorized like any other, as `/v1/authorize`: the
+    /// [`Authorizer`] decides whether a client without a token may call it.
+    /// An `--upstream-authorize-url` upstream is not supported together with it:
+    /// both would answer `/authorize`.
+    #[must_use]
+    pub fn with_authorize(mut self, route: MethodRouter<Topology>) -> Self {
+        self.authorize = Some(route);
+        self
+    }
+
+    pub(crate) fn authorize_route(&self) -> Option<MethodRouter<Topology>> {
+        self.authorize.clone()
     }
 
     pub(crate) fn apply(self, router: Router, base: Option<&str>) -> Router {

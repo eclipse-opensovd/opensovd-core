@@ -41,7 +41,7 @@ use axum::{
     Router,
     extract::OriginalUri,
     http::{Uri, request::Parts},
-    routing::get,
+    routing::{MethodRouter, get},
 };
 pub use discovery::encode_path_segment;
 use discovery::{app, area, component};
@@ -76,7 +76,7 @@ pub(crate) fn test_router(topology: Topology) -> Router {
         path: "/sovd".to_string(),
     };
     Router::new()
-        .nest("/sovd", router::<()>(None, topology))
+        .nest("/sovd", router::<()>(None, topology, None))
         .fallback(not_found)
         .layer(axum::Extension(base_uri))
 }
@@ -158,14 +158,22 @@ pub(crate) fn api_path(parts: &Parts) -> &str {
         .unwrap_or(path)
 }
 
-/// The API routes. The caller layers the [`BaseUri`] extension.
-pub fn router<V>(vendor_info: Option<V>, topology: Topology) -> Router
+/// The API routes, with `authorize` serving the server-level `/authorize`
+/// instead of its stub. The caller layers the [`BaseUri`] extension.
+pub fn router<V>(
+    vendor_info: Option<V>,
+    topology: Topology,
+    authorize: Option<MethodRouter<Topology>>,
+) -> Router
 where
     V: Serialize + Clone + Send + Sync + 'static,
     VersionInfo<V>: JsonSchema,
 {
     Router::new()
-        .nest(&format!("/{API_VERSION}"), versioned().with_state(topology))
+        .nest(
+            &format!("/{API_VERSION}"),
+            versioned(authorize).with_state(topology),
+        )
         .merge(version::routes::<V>())
         .method_not_allowed_fallback(method_not_allowed)
         .with_state(vendor_info)
@@ -173,9 +181,9 @@ where
 
 /// The routes below `/{API_VERSION}`: each entity kind at every level it is
 /// served on, one level below the top-level areas and components.
-fn versioned() -> Router<Topology> {
+fn versioned(authorize: Option<MethodRouter<Topology>>) -> Router<Topology> {
     Router::new()
-        .merge(server())
+        .merge(server(authorize))
         .nest("/areas/{area_id}", areas())
         .nest("/areas/{area_id}/subareas/{subarea_id}", subareas())
         .nest("/components/{component_id}", components())
@@ -207,7 +215,7 @@ fn collections() -> Router<Topology> {
         .merge(stubs::triggers())
 }
 
-fn server() -> Router<Topology> {
+fn server(authorize: Option<MethodRouter<Topology>>) -> Router<Topology> {
     Router::new()
         .route("/", get(discovery::server_capabilities))
         .route("/areas", get(area::area_list))
@@ -215,7 +223,7 @@ fn server() -> Router<Topology> {
         .route("/apps", get(app::app_list))
         .route("/functions", get(stub))
         .route("/depends-on", get(stub))
-        .merge(stubs::auth())
+        .merge(stubs::auth(authorize))
         .merge(collections())
 }
 

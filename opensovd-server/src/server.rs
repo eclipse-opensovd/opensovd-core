@@ -419,7 +419,11 @@ where
         let router = build_router(
             base.as_deref(),
             advertised,
-            crate::routes::router(self.vendor_info, self.topology),
+            crate::routes::router(
+                self.vendor_info,
+                self.topology,
+                self.auth.as_ref().and_then(Auth::authorize_route),
+            ),
             self.auth,
             self.inner_layers,
             self.layer,
