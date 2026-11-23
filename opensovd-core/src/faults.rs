@@ -58,9 +58,9 @@ pub struct FaultDataError {
 /// Filters accepted when listing faults.
 #[derive(Debug, Clone, Default)]
 pub struct FaultFilter {
-    /// Status predicates are OR-combined. A string value must equal the
-    /// predicate. Any other JSON value matches its exact compact JSON
-    /// representation, so `1` matches and `1.0` does not.
+    /// Pairs of a status attribute and the value it must have, OR-combined.
+    /// A string attribute must equal the value. Any other attribute is
+    /// compared as compact JSON, so the number `1` matches `1` and not `1.0`.
     pub status: Vec<(String, String)>,
     /// Include faults at this severity and all more severe levels. Faults
     /// without a severity are excluded.
