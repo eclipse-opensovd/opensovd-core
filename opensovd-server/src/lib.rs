@@ -14,6 +14,7 @@ mod tls;
 
 pub use ::http::request::Parts;
 pub use auth::{Access, Auth, AuthError, Authenticated, Authenticator, Authorizer, Principal};
+pub use axum::routing::MethodRouter;
 pub use body::Body;
 #[cfg(unix)]
 pub use connect_info::UdsConnectInfo;
