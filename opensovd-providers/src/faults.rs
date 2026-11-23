@@ -44,9 +44,9 @@ impl FaultProviderBuilder {
 
     /// Configures environment data for the last added fault.
     #[must_use]
-    pub fn environment_data(mut self, environment_data: Value) -> Self {
+    pub fn environment_data(mut self, environment_data: impl Into<Value>) -> Self {
         if let Some(last) = self.faults.last_mut() {
-            last.environment_data = Some(environment_data);
+            last.environment_data = Some(environment_data.into());
         }
         self
     }
@@ -83,7 +83,7 @@ pub struct BuiltFaultProvider {
 }
 
 impl BuiltFaultProvider {
-    fn matches(fault: &Fault, filter: &FaultFilter, status_values: &[Option<Value>]) -> bool {
+    fn matches(fault: &Fault, filter: &FaultFilter) -> bool {
         let severity_matches = filter
             .severity
             .is_none_or(|maximum| fault.severity.is_some_and(|severity| severity <= maximum));
@@ -93,26 +93,22 @@ impl BuiltFaultProvider {
             .is_none_or(|scope| fault.scope.as_ref() == Some(scope));
         let tags_match =
             filter.tags.is_empty() || filter.tags.iter().any(|tag| fault.tags.contains(tag));
-        let status_filter_matches = filter.status.is_empty()
-            || fault.status.as_ref().is_some_and(|status| {
-                filter
-                    .status
-                    .iter()
-                    .zip(status_values)
-                    .any(|((key, value), expected_json)| {
-                        status.get(key).is_some_and(|actual| {
-                            Self::status_matches(actual, value, expected_json.as_ref())
-                        })
-                    })
-            });
+        let status_matches = filter.status.is_empty()
+            || filter
+                .status
+                .iter()
+                .any(|(key, expected)| Self::has_status(fault, key, expected));
 
-        severity_matches && scope_matches && tags_match && status_filter_matches
+        severity_matches && scope_matches && tags_match && status_matches
     }
 
-    fn status_matches(actual: &Value, expected: &str, expected_json: Option<&Value>) -> bool {
-        match actual {
-            Value::String(actual) => actual == expected,
-            other => expected_json == Some(other),
+    /// Whether the fault has the status attribute `key` with the `expected`
+    /// value. A string must equal it, any other value its compact JSON.
+    fn has_status(fault: &Fault, key: &str, expected: &str) -> bool {
+        match fault.status.as_ref().and_then(|status| status.get(key)) {
+            Some(Value::String(actual)) => actual == expected,
+            Some(actual) => serde_json::to_string(actual).is_ok_and(|json| json == expected),
+            None => false,
         }
     }
 }
@@ -120,19 +116,10 @@ impl BuiltFaultProvider {
 #[async_trait]
 impl FaultProvider for BuiltFaultProvider {
     async fn fault_list(&self, filter: FaultFilter) -> Result<Vec<Fault>, FaultError> {
-        let status_values: Vec<_> = filter
-            .status
-            .iter()
-            .map(|(_, expected)| {
-                let value = serde_json::from_str::<Value>(expected).ok()?;
-                let serialized = serde_json::to_vec(&value).ok()?;
-                (serialized == expected.as_bytes()).then_some(value)
-            })
-            .collect();
         Ok(self
             .faults
             .values()
-            .filter(|detail| Self::matches(&detail.fault, &filter, &status_values))
+            .filter(|detail| Self::matches(&detail.fault, &filter))
             .map(|detail| detail.fault.clone())
             .collect())
     }
@@ -210,11 +197,14 @@ mod tests {
             .unwrap()
     }
 
+    fn codes(faults: &[Fault]) -> Vec<&str> {
+        faults.iter().map(|fault| fault.code.as_str()).collect()
+    }
+
     #[tokio::test]
     async fn lists_all_faults_in_registration_order_without_filters() {
         let faults = provider().fault_list(FaultFilter::default()).await.unwrap();
-        let codes: Vec<_> = faults.iter().map(|fault| fault.code.as_str()).collect();
-        assert_eq!(codes, ["active", "pending", "unknown-severity"]);
+        assert_eq!(codes(&faults), ["active", "pending", "unknown-severity"]);
     }
 
     #[tokio::test]
@@ -226,13 +216,7 @@ mod tests {
             })
             .await
             .unwrap();
-        assert_eq!(
-            faults
-                .iter()
-                .map(|fault| fault.code.as_str())
-                .collect::<Vec<_>>(),
-            ["pending"]
-        );
+        assert_eq!(codes(&faults), ["pending"]);
     }
 
     #[tokio::test]
@@ -244,13 +228,7 @@ mod tests {
             })
             .await
             .unwrap();
-        assert_eq!(
-            faults
-                .iter()
-                .map(|fault| fault.code.as_str())
-                .collect::<Vec<_>>(),
-            ["active", "pending"]
-        );
+        assert_eq!(codes(&faults), ["active", "pending"]);
 
         let faults = provider()
             .fault_list(FaultFilter {
@@ -259,13 +237,7 @@ mod tests {
             })
             .await
             .unwrap();
-        assert_eq!(
-            faults
-                .iter()
-                .map(|fault| fault.code.as_str())
-                .collect::<Vec<_>>(),
-            ["active"]
-        );
+        assert_eq!(codes(&faults), ["active"]);
     }
 
     #[tokio::test]
@@ -281,13 +253,19 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(
-            faults
-                .iter()
-                .map(|fault| fault.code.as_str())
-                .collect::<Vec<_>>(),
-            ["active", "pending"]
-        );
+        assert_eq!(codes(&faults), ["active", "pending"]);
+    }
+
+    #[tokio::test]
+    async fn string_status_must_equal_the_predicate() {
+        let faults = provider()
+            .fault_list(FaultFilter {
+                status: vec![("state".into(), "act".into())],
+                ..FaultFilter::default()
+            })
+            .await
+            .unwrap();
+        assert!(faults.is_empty());
     }
 
     #[tokio::test]
@@ -346,13 +324,7 @@ mod tests {
             })
             .await
             .unwrap();
-        assert_eq!(
-            faults
-                .iter()
-                .map(|fault| fault.code.as_str())
-                .collect::<Vec<_>>(),
-            ["active"]
-        );
+        assert_eq!(codes(&faults), ["active"]);
     }
 
     #[tokio::test]
