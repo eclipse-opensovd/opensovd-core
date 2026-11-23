@@ -6,14 +6,15 @@
 //! serves. Replace a router here with a real one as it lands.
 
 use axum::Router;
-use axum::routing::{get, post, put};
+use axum::routing::{MethodRouter, get, post, put};
 use opensovd_core::Topology;
 
 use super::entity::stub;
 
-pub(super) fn auth() -> Router<Topology> {
+/// `/authorize` is `authorize` where the server serves it, the stub otherwise.
+pub(super) fn auth(authorize: Option<MethodRouter<Topology>>) -> Router<Topology> {
     Router::new()
-        .route("/authorize", post(stub))
+        .route("/authorize", authorize.unwrap_or_else(|| post(stub)))
         .route("/token", post(stub))
 }
 
