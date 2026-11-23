@@ -368,7 +368,7 @@ fn configure_mdns(
 #[cfg_attr(not(feature = "mock"), expect(clippy::unused_async))]
 async fn configure_topology<Vendor, Layer>(
     builder: opensovd_server::ServerBuilder<Vendor, Layer>,
-    #[cfg_attr(not(feature = "mock"), expect(unused_variables))] cli: &cli::Cli,
+    cli: &cli::Cli,
 ) -> opensovd_server::ServerBuilder<Vendor, Layer> {
     #[cfg(feature = "mock")]
     let topology = if cli.mock {
