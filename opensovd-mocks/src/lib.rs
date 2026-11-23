@@ -28,33 +28,40 @@ pub use updates::{MockFeedback, MockUpdate, MockUpdateProvider};
 fn mock_fault_provider() -> BuiltFaultProvider {
     FaultProviderBuilder::new()
         .fault(Fault {
-            code: "P0001".into(),
+            code: "fuelPressureLow".into(),
             scope: Some("powertrain".into()),
-            display_code: Some("P0001".into()),
-            fault_name: "Fuel Volume Regulator Control Circuit/Open".into(),
-            fault_translation_id: Some("fault.fuel-volume-regulator-open".into()),
+            display_code: None,
+            fault_name: "Fuel rail pressure below limit".into(),
+            fault_translation_id: Some("fault.fuel-pressure-low".into()),
             severity: Some(2),
-            status: Some(Map::from_iter([
-                ("testFailed".into(), Value::from("1")),
-                ("confirmedDTC".into(), Value::from("1")),
-                ("aggregatedStatus".into(), Value::from("active")),
-            ])),
-            tags: vec!["powertrain".into()],
-            symptom: Some("Fuel volume regulator control circuit is open".into()),
+            status: Some(Map::from_iter([(
+                "aggregatedStatus".into(),
+                Value::from("active"),
+            )])),
+            symptom: Some("Rail pressure stays below the commanded value".into()),
             symptom_translation_id: None,
+            tags: vec!["powertrain".into()],
         })
         .environment_data(json!({ "engineTemperature": 93 }))
+        .environment_data_schema(json!({
+            "type": "object",
+            "properties": { "engineTemperature": { "type": "integer" } },
+            "required": ["engineTemperature"]
+        }))
         .fault(Fault {
-            code: "P0002".into(),
+            code: "coolantSensorSignalLost".into(),
             scope: Some("powertrain".into()),
-            display_code: Some("P0002".into()),
-            fault_name: "Fuel Volume Regulator Control Circuit Range/Performance".into(),
-            fault_translation_id: Some("fault.fuel-volume-regulator-range-performance".into()),
+            display_code: None,
+            fault_name: "No signal from coolant temperature sensor".into(),
+            fault_translation_id: Some("fault.coolant-sensor-signal-lost".into()),
             severity: Some(4),
-            status: Some(Map::from_iter([("pendingDTC".into(), Value::from("1"))])),
-            tags: vec!["emissions".into()],
+            status: Some(Map::from_iter([(
+                "aggregatedStatus".into(),
+                Value::from("passive"),
+            )])),
             symptom: None,
             symptom_translation_id: None,
+            tags: vec!["emissions".into()],
         })
         .build()
         .unwrap()
