@@ -120,10 +120,7 @@ mod tests {
     fn detail_keeps_environment_data_outside_the_fault_item() {
         let detail = FaultDetail {
             item: fault(),
-            environment_data: Some(Value::Object(Map::from_iter([(
-                "temperature".into(),
-                Value::from(93),
-            )]))),
+            environment_data: Some(serde_json::json!({ "temperature": 93 })),
             errors: Vec::new(),
             schema: None,
         };
