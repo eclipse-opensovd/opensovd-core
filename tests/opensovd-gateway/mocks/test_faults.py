@@ -39,7 +39,7 @@ def test_fault_list_filters(client, params, expected):
 
 
 def test_fault_detail_includes_environment_data(client):
-    """The detail response includes environment data beside the fault item."""
+    """The detail response carries environment data and validates against its schema."""
     response = client.get(f"{FAULTS}/fuelPressureLow", params={"include-schema": "true"})
     assert response.status_code == 200
     body = response.json()
