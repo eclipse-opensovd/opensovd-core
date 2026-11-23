@@ -264,12 +264,17 @@ impl State {
                     self.skipped.insert(server.fullname.clone(), server);
                     return;
                 }
-                if self.known.get(&server.fullname) == Some(&server)
-                    || self
-                        .pending
-                        .get(&server.fullname)
-                        .is_some_and(|pending| pending.server == server)
-                {
+                if let Some(pending) = self.pending.get(&server.fullname) {
+                    if pending.server == server {
+                        return;
+                    }
+                    // Even an announcement matching the registered server
+                    // supersedes a different probe already in flight.
+                    if let Some(pending) = self.pending.remove(&server.fullname) {
+                        pending.handle.abort();
+                    }
+                }
+                if self.known.get(&server.fullname) == Some(&server) {
                     return;
                 }
                 self.probe(server, Duration::ZERO);
@@ -734,6 +739,44 @@ mod tests {
 
         assert!(!harness.take(SERVER));
         assert!(harness.calls().iter().skip(1).all(|call| call.port == 2));
+    }
+
+    #[tokio::test]
+    async fn an_announcement_returning_to_the_known_server_cancels_a_newer_probe() {
+        let federation = Arc::new(Federation::new(Vec::new(), Topology::default()).unwrap());
+        let probe: Probe = Arc::new(|_, _| Box::pin(std::future::pending()));
+        let timeouts = Timeouts {
+            connect: Duration::from_secs(1),
+            discovery: Duration::from_secs(1),
+        };
+        let mut state = State::new(
+            Arc::clone(&federation),
+            None,
+            timeouts,
+            probe,
+            Pace::DEFAULT,
+        );
+        let original = server(SERVER, 1);
+        let api: Uri = "http://192.0.2.1:1/sovd/v1".parse().unwrap();
+        let proxy = UpstreamProxy::new(&api, Duration::from_secs(1)).unwrap();
+        federation.add_discovered(SERVER, Upstream::new(proxy.into_service()));
+        state.known.insert(SERVER.to_owned(), original.clone());
+
+        state.event(BrowseEvent::Resolved(server(SERVER, 2)));
+        let seq = state.pending.get(SERVER).unwrap().seq;
+        state.event(BrowseEvent::Resolved(original.clone()));
+
+        assert!(!state.pending.contains_key(SERVER));
+        // Even a result already queued before cancellation is ignored.
+        let proxy = UpstreamProxy::new(&api, Duration::from_secs(1)).unwrap();
+        state.probed(Probed {
+            name: SERVER.to_owned(),
+            seq,
+            server: server(SERVER, 2),
+            result: Ok((api, Upstream::new(proxy.into_service()))),
+        });
+        assert_eq!(state.known.get(SERVER), Some(&original));
+        assert!(federation.remove_discovered(SERVER));
     }
 
     #[tokio::test]
