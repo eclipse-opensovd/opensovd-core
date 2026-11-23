@@ -96,8 +96,6 @@ def binary_args(request, mock_cda):
         "--mock",
         "--upstream-url",
         url,
-        "--upstream-authorize-url",
-        url,
     )
 
 
@@ -126,7 +124,6 @@ def test_held_component_is_served_by_the_gateway(client):
             "/v1/components/flxc1000/genericservice",
             "/vehicle/v15/components/flxc1000/genericservice",
         ),
-        ("POST", "/v1/authorize", "/vehicle/v15/authorize"),
         ("GET", "/v1/functions/functionalgroups/fg", "/vehicle/v15/functions/functionalgroups/fg"),
         ("GET", "/v1/data/version", "/vehicle/v15/data/version"),
         (

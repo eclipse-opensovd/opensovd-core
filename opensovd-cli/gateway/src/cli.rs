@@ -105,17 +105,6 @@ pub struct UpstreamArgs {
     )]
     pub upstream_url: Vec<String>,
 
-    /// The --upstream-url that takes `/authorize`, if that upstream issues
-    /// tokens. Unset or empty, the gateway answers it, and clients get tokens
-    /// from the provider that issues them.
-    #[arg(
-        help_heading = UPSTREAM_HEADING,
-        long = "upstream-authorize-url",
-        value_name = "URL",
-        env = "SOVD_UPSTREAM_AUTHORIZE_URL"
-    )]
-    pub authorize_url: Option<String>,
-
     /// Timeout for connecting to the upstream.
     #[arg(
         help_heading = UPSTREAM_HEADING,
@@ -159,9 +148,6 @@ pub struct UpstreamConfig {
 pub struct UpstreamUrl {
     /// Where the upstream's API is.
     pub endpoint: Endpoint,
-    /// Whether this upstream takes `/authorize`, as named by
-    /// `--upstream-authorize-url`.
-    pub authorize: bool,
 }
 
 /// Where an upstream's API is, by how the gateway connects to it.
@@ -198,10 +184,8 @@ impl UpstreamArgs {
     ///
     /// Returns an error naming the option whose value is invalid.
     pub fn config(&self) -> anyhow::Result<UpstreamConfig> {
-        let authorize = authorize_url(self.authorize_url.as_deref())?;
         let urls = upstream_urls(&self.upstream_url)?;
-        // The same upstream twice would take a vehicle lock twice, and
-        // `/authorize` twice.
+        // The same upstream twice would take a vehicle lock twice.
         for (at, url) in urls.iter().enumerate() {
             anyhow::ensure!(
                 !urls.iter().take(at).any(|before| same_url(before, url)),
@@ -210,17 +194,8 @@ impl UpstreamArgs {
         }
         let upstreams = urls
             .into_iter()
-            .map(|url| UpstreamUrl {
-                authorize: authorize.as_ref().is_some_and(|name| same_url(&url, name)),
-                endpoint: url,
-            })
+            .map(|url| UpstreamUrl { endpoint: url })
             .collect::<Vec<_>>();
-        if let Some(name) = &authorize {
-            anyhow::ensure!(
-                upstreams.iter().any(|upstream| upstream.authorize),
-                "--upstream-authorize-url {name} is not an --upstream-url"
-            );
-        }
         Ok(UpstreamConfig {
             upstreams,
             connect_timeout: Duration::from_secs(self.upstream_connect_timeout),
@@ -331,16 +306,6 @@ fn socket_address(socket: &str) -> std::io::Result<std::os::unix::net::SocketAdd
     std::os::unix::net::SocketAddr::from_pathname(socket)
 }
 
-/// The value of `--upstream-authorize-url`. An empty value means none, as for
-/// `--upstream-url`.
-fn authorize_url(url: Option<&str>) -> anyhow::Result<Option<Endpoint>> {
-    url.filter(|url| !url.is_empty())
-        .map(|url| {
-            upstream_url(url).with_context(|| format!("invalid --upstream-authorize-url {url}"))
-        })
-        .transpose()
-}
-
 /// Whether `a` and `b` are the same upstream: the scheme and the host ignore
 /// case (RFC 3986 6.2.2.1), the default port of `http` is the same as none, and
 /// a `/` at the end of the path does not count. Sockets are the same by their
@@ -398,30 +363,6 @@ mod tests {
         ] {
             assert!(upstream_url(url).is_err(), "{url}");
         }
-    }
-
-    #[test]
-    fn the_upstream_of_authorize_has_to_be_an_upstream() {
-        let args = |authorize: Option<&str>| UpstreamArgs {
-            upstream_url: vec!["http://a:1/x".to_owned(), "http://b:1/x".to_owned()],
-            authorize_url: authorize.map(str::to_owned),
-            upstream_connect_timeout: 5,
-            upstream_discovery_timeout: 5,
-        };
-        let authorized = |authorize: Option<&str>| -> Vec<bool> {
-            let config = args(authorize).config().unwrap();
-            config.upstreams.iter().map(|u| u.authorize).collect()
-        };
-
-        assert_eq!(authorized(None), [false, false]);
-        assert_eq!(authorized(Some("")), [false, false]);
-        assert_eq!(authorized(Some("http://b:1/x/")), [false, true]);
-        assert_eq!(authorized(Some("HTTP://B:1/x")), [false, true]);
-        let error = args(Some("http://c:1/x")).config().err().unwrap();
-        assert_eq!(
-            error.to_string(),
-            "--upstream-authorize-url http://c:1/x is not an --upstream-url"
-        );
     }
 
     #[test]
@@ -532,7 +473,6 @@ mod tests {
         let config = |urls: &[&str]| {
             UpstreamArgs {
                 upstream_url: urls.iter().map(ToString::to_string).collect(),
-                authorize_url: None,
                 upstream_connect_timeout: 5,
                 upstream_discovery_timeout: 5,
             }
