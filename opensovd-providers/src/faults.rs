@@ -36,6 +36,8 @@ impl FaultProviderBuilder {
         self.faults.push(FaultDetail {
             fault,
             environment_data: None,
+            errors: Vec::new(),
+            schema: None,
         });
         self
     }
@@ -45,6 +47,15 @@ impl FaultProviderBuilder {
     pub fn environment_data(mut self, environment_data: Value) -> Self {
         if let Some(last) = self.faults.last_mut() {
             last.environment_data = Some(environment_data);
+        }
+        self
+    }
+
+    /// Configures the environment data schema for the last added fault.
+    #[must_use]
+    pub fn environment_data_schema(mut self, schema: impl Into<Value>) -> Self {
+        if let Some(last) = self.faults.last_mut() {
+            last.schema = Some(schema.into());
         }
         self
     }
@@ -126,11 +137,20 @@ impl FaultProvider for BuiltFaultProvider {
             .collect())
     }
 
-    async fn fault_read(&self, fault_code: &str) -> Result<FaultDetail, FaultError> {
-        self.faults
+    async fn fault_read(
+        &self,
+        fault_code: &str,
+        include_schema: bool,
+    ) -> Result<FaultDetail, FaultError> {
+        let mut detail = self
+            .faults
             .get(fault_code)
             .cloned()
-            .ok_or_else(|| FaultError::NotFound(fault_code.to_owned()))
+            .ok_or_else(|| FaultError::NotFound(fault_code.to_owned()))?;
+        if !include_schema {
+            detail.schema = None;
+        }
+        Ok(detail)
     }
 }
 
@@ -171,6 +191,7 @@ mod tests {
                 &["engine"],
             ))
             .environment_data(serde_json::json!({"temp": 93}))
+            .environment_data_schema(serde_json::json!({"type": "object"}))
             .fault(fault(
                 "pending",
                 "body",
@@ -270,6 +291,23 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn status_predicate_does_not_match_another_key_with_the_same_value() {
+        let provider = FaultProviderBuilder::new()
+            .fault(fault("only-a", "ecu", Some(2), Some(("a", "same")), &[]))
+            .build()
+            .unwrap();
+        let faults = provider
+            .fault_list(FaultFilter {
+                status: vec![("b".into(), "same".into())],
+                ..FaultFilter::default()
+            })
+            .await
+            .unwrap();
+
+        assert!(faults.is_empty());
+    }
+
+    #[tokio::test]
     async fn matches_non_string_status_by_its_exact_json_representation() {
         let numeric_fault = Fault {
             status: Some(Map::from_iter([("count".into(), Value::from(1))])),
@@ -332,8 +370,22 @@ mod tests {
 
     #[tokio::test]
     async fn reading_unknown_fault_returns_not_found() {
-        let result = provider().fault_read("missing").await;
+        let result = provider().fault_read("missing", false).await;
         assert!(matches!(result, Err(FaultError::NotFound(code)) if code == "missing"));
+    }
+
+    #[tokio::test]
+    async fn returns_environment_data_schema_only_when_requested() {
+        let provider = provider();
+
+        let without_schema = provider.fault_read("active", false).await.unwrap();
+        assert!(without_schema.schema.is_none());
+
+        let with_schema = provider.fault_read("active", true).await.unwrap();
+        assert_eq!(
+            with_schema.schema,
+            Some(serde_json::json!({"type": "object"}))
+        );
     }
 
     #[test]
