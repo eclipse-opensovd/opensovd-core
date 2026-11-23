@@ -163,7 +163,6 @@ fn collections() -> Router<Topology> {
         .merge(stubs::configurations())
         .merge(stubs::cyclic_subscriptions())
         .merge(stubs::data_lists())
-        .merge(stubs::faults())
         .merge(stubs::locks())
         .merge(stubs::modes())
         .merge(stubs::operations())

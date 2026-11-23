@@ -261,6 +261,11 @@ impl IntoResponse for Error {
                     e,
                     GenericError::with_vendor_code("resource-not-found", e.to_string()).into(),
                 ),
+                FaultError::NotSupported(_) => provider_error(
+                    StatusCode::NOT_IMPLEMENTED,
+                    e,
+                    GenericError::new(ErrorCode::ErrorResponse, e.to_string()).into(),
+                ),
                 FaultError::Internal(message) => provider_error(
                     StatusCode::INTERNAL_SERVER_ERROR,
                     e,
@@ -395,6 +400,20 @@ mod tests {
         let json = json_body(response).await;
         assert_eq!(json["vendor_code"], "resource-not-found");
         assert_eq!(json["message"], "fault not found: P0001");
+    }
+
+    #[tokio::test]
+    async fn test_error_fault_not_supported() {
+        let error = Error::Fault(FaultError::NotSupported("deletion".into()));
+        let response = error.into_response();
+
+        assert_eq!(response.status(), StatusCode::NOT_IMPLEMENTED);
+        let json = json_body(response).await;
+        assert_eq!(json["error_code"], "error-response");
+        assert_eq!(
+            json["message"],
+            "fault provider does not support this operation: deletion"
+        );
     }
 
     #[tokio::test]

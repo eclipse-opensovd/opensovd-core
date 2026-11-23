@@ -154,10 +154,10 @@ impl Entity {
     }
 
     /// The fault provider of a component or app, see [`Entity::provider`].
-    pub(crate) fn fault_provider<'t>(
+    pub(crate) fn fault_provider(
         &self,
-        topo: &'t TopologyReadGuard<'_>,
-    ) -> Result<&'t dyn FaultProvider> {
+        topo: &TopologyReadGuard<'_>,
+    ) -> Result<Arc<dyn FaultProvider>> {
         self.provider(topo, Component::fault_provider, App::fault_provider)
     }
 

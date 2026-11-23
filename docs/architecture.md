@@ -79,7 +79,7 @@ classDiagram
         -tags: Vec~String~
         -translation_id: Option~String~
         -data_provider: Option~Arc~DataProvider~~
-        -fault_provider: Option~Box~FaultProvider~~
+        -fault_provider: Option~Arc~FaultProvider~~
         -bulkdata_provider: Option~Arc~BulkDataProvider~~
         -log_provider: Option~Arc~LogProvider~~
         -update_provider: Option~Updates~
@@ -94,7 +94,7 @@ classDiagram
         -tags: Vec~String~
         -translation_id: Option~String~
         -data_provider: Option~Arc~DataProvider~~
-        -fault_provider: Option~Box~FaultProvider~~
+        -fault_provider: Option~Arc~FaultProvider~~
         -bulkdata_provider: Option~Arc~BulkDataProvider~~
         -log_provider: Option~Arc~LogProvider~~
         -update_provider: Option~Updates~
