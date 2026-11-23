@@ -8,8 +8,8 @@ use opensovd_extra::{ForwardRoute, Upstream, UpstreamProxy};
 use crate::cli::{Endpoint, UpstreamConfig, UpstreamUrl};
 
 /// The upstreams of `config`. All serve their entities and take part in vehicle
-/// locks. Only the first takes what has a single answer, but for authorize,
-/// which stays with the gateway unless `config` names its upstream.
+/// locks. Only the first takes what has a single answer. `/authorize` always
+/// stays with the gateway.
 ///
 /// # Errors
 ///
@@ -20,11 +20,8 @@ pub fn configured(config: &UpstreamConfig) -> anyhow::Result<Vec<Upstream>> {
         .iter()
         .enumerate()
         .map(|(index, upstream)| {
-            let UpstreamUrl {
-                endpoint,
-                authorize,
-            } = upstream;
-            let routes = routes(index == 0, *authorize);
+            let UpstreamUrl { endpoint } = upstream;
+            let routes = routes(index == 0);
             tracing::debug!(target: "forwarding", ?routes, "{endpoint}");
             let proxy = match endpoint {
                 Endpoint::Tcp(url) => UpstreamProxy::new(url, config.connect_timeout)?,
@@ -40,9 +37,8 @@ pub fn configured(config: &UpstreamConfig) -> anyhow::Result<Vec<Upstream>> {
         .collect()
 }
 
-/// The routes of an upstream: the `first` takes what has a single answer, and
-/// `authorize` says whether it takes `/authorize`.
-fn routes(first: bool, authorize: bool) -> Vec<ForwardRoute> {
+/// The routes of an upstream: the `first` takes what has a single answer.
+fn routes(first: bool) -> Vec<ForwardRoute> {
     let mut routes = vec![ForwardRoute::Entities, ForwardRoute::Locks];
     if first {
         routes.extend([
@@ -50,9 +46,6 @@ fn routes(first: bool, authorize: bool) -> Vec<ForwardRoute> {
             ForwardRoute::Collections,
             ForwardRoute::CustomCollections,
         ]);
-    }
-    if authorize {
-        routes.push(ForwardRoute::Authorize);
     }
     routes
 }
@@ -63,37 +56,26 @@ mod tests {
 
     #[test]
     fn all_upstreams_take_locks() {
-        assert!(routes(true, false).contains(&ForwardRoute::Locks));
-        assert_eq!(
-            routes(false, false),
-            [ForwardRoute::Entities, ForwardRoute::Locks]
-        );
+        assert!(routes(true).contains(&ForwardRoute::Locks));
+        assert_eq!(routes(false), [ForwardRoute::Entities, ForwardRoute::Locks]);
     }
 
     #[test]
-    fn authorize_stays_with_the_gateway_unless_an_upstream_is_named() {
-        assert!(!routes(true, false).contains(&ForwardRoute::Authorize));
-        assert!(routes(false, true).contains(&ForwardRoute::Authorize));
+    fn authorize_stays_with_the_gateway() {
+        assert!(!routes(true).contains(&ForwardRoute::Authorize));
+        assert!(!routes(false).contains(&ForwardRoute::Authorize));
     }
 
     #[test]
     fn only_the_first_upstream_takes_routes_with_a_single_answer() {
         assert_eq!(
-            routes(true, false),
+            routes(true),
             [
                 ForwardRoute::Entities,
                 ForwardRoute::Locks,
                 ForwardRoute::Functions,
                 ForwardRoute::Collections,
                 ForwardRoute::CustomCollections,
-            ]
-        );
-        assert_eq!(
-            routes(false, true),
-            [
-                ForwardRoute::Entities,
-                ForwardRoute::Locks,
-                ForwardRoute::Authorize
             ]
         );
     }
