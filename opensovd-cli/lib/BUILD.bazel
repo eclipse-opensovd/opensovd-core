@@ -8,12 +8,27 @@ workspace_rust_library(
     name = "libcli",
     srcs = glob(["src/**/*.rs"]),
     crate_deps = [
+        "anyhow",
+        "clap",
+        "http",
         "jiff",
+        "rustls",
+        "sd-notify",
+        "serde_json",
         "tokio",
+        "tower-http",
         "tracing",
         "tracing-subscriber",
+    ],
+    crate_features = [
+        "server",
+        "tls",
     ],
     crate_name = "libcli",
     crate_root = "src/lib.rs",
     version = "0.1.1",
+    deps = [
+        "//opensovd-extra:opensovd_extra",
+        "//opensovd-server:opensovd_server",
+    ],
 )

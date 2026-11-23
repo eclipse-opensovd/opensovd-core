@@ -1330,9 +1330,19 @@ checksum = "65cd87c9a6d60536580b316ad985726104730a5151c99845f2490428ef91240a"
 name = "libcli"
 version = "0.1.1"
 dependencies = [
+ "anyhow",
+ "clap",
+ "http",
  "jiff",
  "libc",
+ "opensovd-extra",
+ "opensovd-server",
+ "rustls",
+ "sd-notify",
+ "serde_json",
+ "socket2",
  "tokio",
+ "tower-http",
  "tracing",
  "tracing-subscriber",
 ]
@@ -1756,7 +1766,6 @@ version = "0.1.1"
 dependencies = [
  "anyhow",
  "clap",
- "http",
  "libcli",
  "libcli-build",
  "opensovd-core",
@@ -1764,13 +1773,9 @@ dependencies = [
  "opensovd-mocks",
  "opensovd-server",
  "schemars",
- "sd-notify",
  "serde",
- "serde_json",
- "socket2",
  "tokio",
  "tower",
- "tower-http",
  "tracing",
 ]
 

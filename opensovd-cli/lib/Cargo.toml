@@ -12,11 +12,38 @@ repository.workspace = true
 keywords.workspace = true
 categories.workspace = true
 
+[features]
+server = [
+    "dep:anyhow",
+    "dep:clap",
+    "dep:http",
+    "dep:opensovd-extra",
+    "dep:opensovd-server",
+    "dep:sd-notify",
+    "dep:serde_json",
+    "dep:tower-http",
+    "tokio/net",
+]
+tls = ["server", "dep:rustls", "opensovd-extra/tls", "opensovd-server/tls"]
+mdns = ["server", "dep:socket2", "opensovd-extra/mdns"]
+
 [dependencies]
+anyhow = { workspace = true, optional = true }
+clap = { workspace = true, optional = true, features = ["derive", "env", "std"] }
+http = { workspace = true, optional = true }
 jiff = { workspace = true }
+opensovd-extra = { workspace = true, optional = true, features = ["auth"] }
+opensovd-server = { workspace = true, optional = true }
+rustls = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true, features = ["std"] }
+socket2 = { workspace = true, optional = true }
 tokio = { workspace = true, features = ["macros", "signal"] }
+tower-http = { workspace = true, optional = true, features = ["cors", "fs"] }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["fmt", "env-filter"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+sd-notify = { workspace = true, optional = true }
 
 [dev-dependencies]
 libc = { workspace = true }
