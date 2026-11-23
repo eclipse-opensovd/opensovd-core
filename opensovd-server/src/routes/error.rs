@@ -407,7 +407,7 @@ mod tests {
         let error = Error::Fault(FaultError::NotSupported("deletion".into()));
         let response = error.into_response();
 
-        assert_eq!(response.status(), StatusCode::NOT_IMPLEMENTED);
+        assert_eq!(response.status(), 501);
         let json = json_body(response).await;
         assert_eq!(json["error_code"], "error-response");
         assert_eq!(

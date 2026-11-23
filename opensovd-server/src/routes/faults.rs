@@ -47,18 +47,19 @@ impl TryFrom<Vec<(String, String)>> for StatusPredicates {
     type Error = String;
 
     fn try_from(pairs: Vec<(String, String)>) -> std::result::Result<Self, Self::Error> {
-        pairs
-            .into_iter()
-            .filter(|(key, _)| key.starts_with("status["))
-            .map(|(key, value)| {
-                key.strip_prefix("status[")
-                    .and_then(|key| key.strip_suffix(']'))
-                    .filter(|key| !key.is_empty() && !key.contains(['[', ']']))
-                    .map(|key| (key.to_owned(), value))
-                    .ok_or_else(|| format!("malformed status filter: {key}"))
-            })
-            .collect::<std::result::Result<_, _>>()
-            .map(Self)
+        let mut predicates = Vec::new();
+        for (param, value) in pairs {
+            let Some(key) = param.strip_prefix("status[") else {
+                continue;
+            };
+            match key.strip_suffix(']') {
+                Some(key) if !key.is_empty() && !key.contains(['[', ']']) => {
+                    predicates.push((key.to_owned(), value));
+                }
+                _ => return Err(format!("malformed status filter: {param}")),
+            }
+        }
+        Ok(Self(predicates))
     }
 }
 

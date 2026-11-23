@@ -82,17 +82,11 @@ async fn server_with(provider: impl FaultProvider) -> common::TestServer {
         .await
 }
 
-async fn server_with_provider(
-    fail_list: bool,
-) -> (common::TestServer, Arc<Mutex<Option<FaultFilter>>>) {
-    let seen = Arc::new(Mutex::new(None));
-    let server = server_with(RecordingFaultProvider {
-        seen: Arc::clone(&seen),
-        fail_list,
-        ..RecordingFaultProvider::default()
-    })
-    .await;
-    (server, seen)
+/// A server and the filter its provider was last listed with.
+async fn recording_server() -> (common::TestServer, Arc<Mutex<Option<FaultFilter>>>) {
+    let provider = RecordingFaultProvider::default();
+    let seen = Arc::clone(&provider.seen);
+    (server_with(provider).await, seen)
 }
 
 fn recorded_filter(seen: &Mutex<Option<FaultFilter>>) -> Option<FaultFilter> {
@@ -182,7 +176,7 @@ async fn mock_list_and_detail_return_fault_data() {
 
 #[tokio::test]
 async fn list_query_passes_repeated_status_and_all_filters_to_provider() {
-    let (server, seen) = server_with_provider(false).await;
+    let (server, seen) = recording_server().await;
     let (status, _) = common::send(
         &server,
         Method::GET,
@@ -209,7 +203,7 @@ async fn list_query_passes_repeated_status_and_all_filters_to_provider() {
 
 #[tokio::test]
 async fn list_without_query_passes_the_default_filter() {
-    let (server, seen) = server_with_provider(false).await;
+    let (server, seen) = recording_server().await;
     let (status, _) = common::send(&server, Method::GET, "/sovd/v1/components/ecu/faults").await;
     assert_eq!(status, 200);
 
@@ -221,24 +215,8 @@ async fn list_without_query_passes_the_default_filter() {
 }
 
 #[tokio::test]
-async fn list_query_passes_tags_to_provider() {
-    let (server, seen) = server_with_provider(false).await;
-    let (status, _) = common::send(
-        &server,
-        Method::GET,
-        "/sovd/v1/components/ecu/faults?tags=powertrain",
-    )
-    .await;
-    assert_eq!(status, 200);
-    assert_eq!(
-        recorded_filter(&seen).map(|filter| filter.tags),
-        Some(vec!["powertrain".into()])
-    );
-}
-
-#[tokio::test]
 async fn empty_tags_parameter_passes_no_tag_filter() {
-    let (server, seen) = server_with_provider(false).await;
+    let (server, seen) = recording_server().await;
     let (status, _) =
         common::send(&server, Method::GET, "/sovd/v1/components/ecu/faults?tags=").await;
     assert_eq!(status, 200);
@@ -250,7 +228,7 @@ async fn empty_tags_parameter_passes_no_tag_filter() {
 
 #[tokio::test]
 async fn malformed_list_query_is_rejected_before_provider_call() {
-    let (server, seen) = server_with_provider(false).await;
+    let (server, seen) = recording_server().await;
     let (status, error) = common::send(
         &server,
         Method::GET,
@@ -264,7 +242,7 @@ async fn malformed_list_query_is_rejected_before_provider_call() {
 
 #[tokio::test]
 async fn malformed_status_filter_keys_are_rejected_before_provider_call() {
-    let (server, seen) = server_with_provider(false).await;
+    let (server, seen) = recording_server().await;
     for query in [
         "status%5BtestFailed=1",
         "status%5B%5D=1",
@@ -285,7 +263,7 @@ async fn malformed_status_filter_keys_are_rejected_before_provider_call() {
 
 #[tokio::test]
 async fn detail_query_ignores_list_parameters() {
-    let (server, _) = server_with_provider(false).await;
+    let server = server_with(RecordingFaultProvider::default()).await;
     let (status, detail) = common::send(
         &server,
         Method::GET,
@@ -311,7 +289,7 @@ async fn detail_schema_is_omitted_when_not_requested() {
 
 #[tokio::test]
 async fn detail_schema_uses_true_when_provider_has_no_schema() {
-    let (server, _) = server_with_provider(false).await;
+    let server = server_with(RecordingFaultProvider::default()).await;
     let (status, detail) = common::send(
         &server,
         Method::GET,
@@ -344,7 +322,11 @@ async fn detail_maps_environment_data_errors_to_model_errors() {
 
 #[tokio::test]
 async fn internal_provider_error_is_sanitized() {
-    let (server, _) = server_with_provider(true).await;
+    let server = server_with(RecordingFaultProvider {
+        fail_list: true,
+        ..RecordingFaultProvider::default()
+    })
+    .await;
     let (status, error) =
         common::send(&server, Method::GET, "/sovd/v1/components/ecu/faults").await;
     assert_eq!(status, 500);
@@ -354,7 +336,7 @@ async fn internal_provider_error_is_sanitized() {
 
 #[tokio::test]
 async fn deleting_all_faults_of_a_supported_entity_answers_not_implemented() {
-    let (server, _) = server_with_provider(false).await;
+    let server = server_with(RecordingFaultProvider::default()).await;
     let (status, error) =
         common::send(&server, Method::DELETE, "/sovd/v1/components/ecu/faults").await;
     assert_eq!(status, 501);
@@ -363,7 +345,7 @@ async fn deleting_all_faults_of_a_supported_entity_answers_not_implemented() {
 
 #[tokio::test]
 async fn deleting_an_existing_fault_answers_not_implemented() {
-    let (server, _) = server_with_provider(false).await;
+    let server = server_with(RecordingFaultProvider::default()).await;
     let (status, error) = common::send(
         &server,
         Method::DELETE,
@@ -376,7 +358,7 @@ async fn deleting_an_existing_fault_answers_not_implemented() {
 
 #[tokio::test]
 async fn deleting_an_unknown_fault_answers_resource_not_found() {
-    let (server, _) = server_with_provider(false).await;
+    let server = server_with(RecordingFaultProvider::default()).await;
     let (status, error) = common::send(
         &server,
         Method::DELETE,
