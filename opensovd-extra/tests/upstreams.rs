@@ -39,6 +39,8 @@ struct Backend {
     seen: Arc<Mutex<Vec<String>>>,
     /// The paths of the requests with the [`DISCOVERED_HOP`] header.
     hops: Arc<Mutex<Vec<String>>>,
+    /// Requests carrying a test connection-scoped header.
+    private: Arc<Mutex<Vec<String>>>,
     /// The requests with an `Authorization` header, such as `GET /components`.
     authorized: Arc<Mutex<Vec<String>>>,
 }
@@ -157,6 +159,9 @@ impl Backend {
                         .push(format!("{method} {path}"));
                     if request.headers().contains_key(DISCOVERED_HOP) {
                         backend.hops.lock().unwrap().push(path.clone());
+                    }
+                    if request.headers().contains_key("x-private") {
+                        backend.private.lock().unwrap().push(path.clone());
                     }
                     if request.headers().contains_key("authorization") {
                         backend
@@ -974,10 +979,57 @@ async fn a_look_for_the_owner_keeps_the_discovered_hop_marker() {
     assert!(second.hops().contains(&"/components/flxc2000".to_owned()));
 }
 
+#[cfg(feature = "http-proxy")]
+#[rstest]
+#[case(false)]
+#[case(true)]
+#[timeout(std::time::Duration::from_secs(10))]
+#[tokio::test]
+async fn connection_header_cannot_strip_the_discovery_marker(#[case] discovered: bool) {
+    let remote_backend = Backend::new("remote", &["hovr4000"]);
+    let (remote, _) = start_federation(vec![remote_backend.upstream()]).await;
+    let uri = format!("http://{}/sovd/v1", remote.addr).parse().unwrap();
+    let proxy =
+        opensovd_extra::UpstreamProxy::new(&uri, std::time::Duration::from_secs(1)).unwrap();
+    let upstream = Upstream::new(proxy.into_service());
+    let (server, federation) = if discovered {
+        let pair = start_federation(Vec::new()).await;
+        pair.1.add_discovered("remote", upstream);
+        pair
+    } else {
+        start_federation(vec![upstream]).await
+    };
+    let mut headers = vec![
+        ("connection", "X-OpenSovd-Discovered-Hop, x-private"),
+        ("x-private", "secret"),
+    ];
+    if !discovered {
+        headers.push((DISCOVERED_HOP, "1"));
+    }
+
+    let (status, json) = send_with(
+        &server,
+        Method::PUT,
+        "/components/hovr4000/data/x",
+        b"{}",
+        &headers,
+    )
+    .await;
+
+    assert_eq!((status, backend(json)), (200, "remote".to_owned()));
+    assert!(
+        remote_backend
+            .hops()
+            .contains(&"/components/hovr4000/data/x".to_owned())
+    );
+    assert!(remote_backend.private.lock().unwrap().is_empty());
+    drop(federation);
+}
+
 #[rstest]
 #[timeout(std::time::Duration::from_secs(10))]
 #[tokio::test]
-async fn a_remembered_discovered_owner_is_not_used_for_a_request_with_the_hop_marker() {
+async fn a_previously_found_discovered_owner_is_not_used_for_a_request_with_the_hop_marker() {
     let first = Backend::new("first", &[]);
     let second = Backend::new("second", &[]);
     let found = Backend::new("found", &["hovr4000"]);
@@ -1093,6 +1145,7 @@ async fn authorized_requests(forward: bool) -> (Vec<String>, Vec<String>) {
             "GET /components",
             "GET /components/hovr4000",
             "GET /components/hovr4000",
+            "GET /components/hovr4000",
             "PUT /components/hovr4000/data/x",
         ]
     );
@@ -1122,6 +1175,7 @@ async fn a_discovered_upstream_gets_the_token_if_the_federation_allows_it() {
             "GET /components",
             "GET /components/hovr4000",
             "GET /components/hovr4000",
+            "GET /components/hovr4000",
             "PUT /components/hovr4000/data/x",
         ]
     );
@@ -1149,4 +1203,90 @@ async fn a_discovered_upstream_that_refuses_or_fails_claims_no_entity(#[case] st
     );
     let (status, _) = send(&server, Method::GET, "/components/unknown", b"").await;
     assert_eq!(status, 404);
+}
+
+#[rstest]
+#[case(401)]
+#[case(403)]
+#[case(503)]
+#[timeout(std::time::Duration::from_secs(10))]
+#[tokio::test]
+async fn a_single_discovered_upstream_must_prove_ownership(#[case] status: u16) {
+    let refusing = Backend::new("refusing", &[]);
+    refusing.set_status(status);
+    let (server, federation) = start_federation(Vec::new()).await;
+    let local = send_with(
+        &server,
+        Method::PUT,
+        "/components/unknown/data/x",
+        b"{}",
+        &[("content-type", "application/json")],
+    )
+    .await;
+    federation.add_discovered("refusing", refusing.upstream());
+
+    let (status, _) = get(&server, "/components/unknown").await;
+    assert_eq!(status, 404);
+    let answer = send_with(
+        &server,
+        Method::PUT,
+        "/components/unknown/data/x",
+        b"{}",
+        &[("content-type", "application/json")],
+    )
+    .await;
+
+    assert_eq!(answer, local);
+    assert_eq!(
+        refusing.seen(),
+        ["GET /components/unknown", "GET /components/unknown"]
+    );
+}
+
+#[rstest]
+#[case(401)]
+#[case(403)]
+#[case(503)]
+#[timeout(std::time::Duration::from_secs(10))]
+#[tokio::test]
+async fn a_discovered_owner_is_rechecked_when_it_stops_answering(#[case] status: u16) {
+    let first = Backend::new("first", &["hovr4000"]);
+    let second = Backend::new("second", &["hovr4000"]);
+    let (server, federation) = start_federation(Vec::new()).await;
+    federation.add_discovered("first", first.upstream());
+    federation.add_discovered("second", second.upstream());
+    assert_eq!(
+        get(&server, "/components/hovr4000").await,
+        (200, "first".to_owned())
+    );
+
+    first.set_status(status);
+
+    assert_eq!(
+        get(&server, "/components/hovr4000").await,
+        (200, "second".to_owned())
+    );
+}
+
+#[rstest]
+#[timeout(std::time::Duration::from_secs(10))]
+#[tokio::test]
+async fn a_replaced_earlier_discovered_upstream_can_take_ownership() {
+    let earlier = Backend::new("earlier", &[]);
+    let replacement = Backend::new("replacement", &["hovr4000"]);
+    let later = Backend::new("later", &["hovr4000"]);
+    let (server, federation) = start_federation(Vec::new()).await;
+    federation.add_discovered("earlier", earlier.upstream());
+    federation.add_discovered("later", later.upstream());
+    assert_eq!(
+        get(&server, "/components/hovr4000").await,
+        (200, "later".to_owned())
+    );
+
+    federation.add_discovered("earlier", replacement.upstream());
+
+    assert_eq!(
+        get(&server, "/components/hovr4000").await,
+        (200, "replacement".to_owned())
+    );
 }

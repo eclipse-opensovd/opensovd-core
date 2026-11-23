@@ -19,8 +19,8 @@
 //! answer. Functional locks stay with the upstream of the function.
 //!
 //! The upstream receives the request with its URI relative to the API version,
-//! such as `/components/ecu/faults?status=x`, and with the method, headers and
-//! body unchanged, and with the [`ServerUri`] extension. The response is what
+//! such as `/components/ecu/faults?status=x`, and with the method, end-to-end
+//! headers and body, and with the [`ServerUri`] extension. The response is what
 //! the upstream service answers, which is not verbatim what a remote server
 //! sent: a proxy such as the gateway's replaces the server's references to
 //! itself with the [`ServerUri`].
@@ -57,8 +57,9 @@ use axum::response::IntoResponse;
 use bytes::Bytes;
 use futures::future::{BoxFuture, join_all};
 use http::header::{
-    AUTHORIZATION, CONTENT_ENCODING, CONTENT_LENGTH, CONTENT_TYPE, HeaderMap, IF_MATCH,
-    IF_MODIFIED_SINCE, IF_NONE_MATCH, IF_RANGE, IF_UNMODIFIED_SINCE, RANGE, TRANSFER_ENCODING,
+    self, AUTHORIZATION, CONTENT_ENCODING, CONTENT_LENGTH, CONTENT_TYPE, HeaderMap, HeaderName,
+    IF_MATCH, IF_MODIFIED_SINCE, IF_NONE_MATCH, IF_RANGE, IF_UNMODIFIED_SINCE, RANGE,
+    TRANSFER_ENCODING,
 };
 use http::request::Parts;
 use http::{Extensions, Method, StatusCode, Uri};
@@ -137,6 +138,32 @@ const UPDATES: &str = "updates";
 /// A server does not send a request with it on to the upstreams it
 /// discovered itself, as these may include the sender.
 pub const DISCOVERED_HOP: &str = "x-opensovd-discovered-hop";
+
+/// Headers that apply to a single connection, which must not be forwarded.
+const HOP_BY_HOP: [HeaderName; 8] = [
+    header::CONNECTION,
+    HeaderName::from_static("keep-alive"),
+    header::PROXY_AUTHENTICATE,
+    header::PROXY_AUTHORIZATION,
+    header::TE,
+    header::TRAILER,
+    TRANSFER_ENCODING,
+    header::UPGRADE,
+];
+
+/// Drops hop-by-hop headers and those named by the `Connection` header.
+pub(crate) fn strip_hop_by_hop_headers(headers: &mut HeaderMap) {
+    let named: Vec<HeaderName> = headers
+        .get_all(header::CONNECTION)
+        .iter()
+        .filter_map(|value| value.to_str().ok())
+        .flat_map(|value| value.split(','))
+        .filter_map(|name| HeaderName::try_from(name.trim()).ok())
+        .collect();
+    for name in HOP_BY_HOP.iter().chain(&named) {
+        headers.remove(name);
+    }
+}
 
 /// The resources of the `SOVDServer` that are not plain
 /// [`COLLECTIONS`], and how each is handled. This is the one place that names
@@ -312,6 +339,14 @@ impl Upstream {
         let server = parts.extensions.get::<ApiRequest>().cloned();
         if let Some(api) = server {
             parts.extensions.insert(ServerUri(api.server_uri));
+        }
+        // A client may name the marker in Connection. Remove connection-scoped
+        // headers before restoring the marker or adding our own, so the proxy
+        // cannot strip it on the next hop.
+        let hop = parts.headers.get(DISCOVERED_HOP).cloned();
+        strip_hop_by_hop_headers(&mut parts.headers);
+        if let Some(hop) = hop {
+            parts.headers.insert(DISCOVERED_HOP, hop);
         }
         if self.discovered.is_some() {
             parts
@@ -664,7 +699,7 @@ impl Federation {
     /// Where a request goes that names an entity the server does not hold,
     /// `id` as it stands in the path, for the client of `parts`.
     ///
-    /// A single upstream takes it without asking. Of several, entities come
+    /// A single configured upstream takes it without asking. Otherwise, entities come
     /// and go at runtime, and only a look tells whose it is, one that is safe
     /// for any request. The first upstream in order that has the entity owns
     /// it, so a later one only does if every one before it answered that it
@@ -674,11 +709,10 @@ impl Federation {
     /// failed, or did not answer in time, may have it as well, so its failure
     /// is the answer. A discovered upstream is the exception: any server on
     /// the network may announce itself, and get no token, so it owns only
-    /// what it answers with success for. The owner is remembered for all
-    /// clients.
+    /// what it answers with success for. Configured owners are remembered for
+    /// all clients; discovered owners are checked on each request.
     async fn find_owner(&self, parts: &Parts, collection: &str, id: &str) -> Destination {
         let key = format!("{collection}/{id}");
-        let hop = parts.headers.contains_key(DISCOVERED_HOP);
         // Take the list and cached owner together with respect to registration
         // changes, which update both while holding the upstreams write lock.
         let (generation, all, remembered) = {
@@ -687,16 +721,18 @@ impl Federation {
                 .read()
                 .unwrap_or_else(PoisonError::into_inner);
             let generation = self.generation.load(Ordering::SeqCst);
-            // A request with the hop marker cannot use a discovered owner.
+            // Discovered owners need a fresh ordered lookup for every request.
             let remembered = self
                 .owners()
                 .get(&key)
-                .filter(|owner| !hop || owner.discovered.is_none())
+                .filter(|owner| owner.discovered.is_none())
                 .cloned();
             (generation, Arc::clone(&upstreams), remembered)
         };
         let candidates = Self::entity_upstreams(&all, parts);
-        if let [only] = candidates.as_slice() {
+        if let [only] = candidates.as_slice()
+            && only.discovered.is_none()
+        {
             return Destination::Upstream((*only).clone());
         }
         if let Some(owner) = remembered {
@@ -714,7 +750,9 @@ impl Federation {
                 let mut owners = self.owners_mut();
                 // Not if upstreams changed during the look: it may have
                 // asked one that is gone.
-                if self.generation.load(Ordering::SeqCst) == generation {
+                if upstream.discovered.is_none()
+                    && self.generation.load(Ordering::SeqCst) == generation
+                {
                     owners.insert(key, upstream.clone());
                 }
                 drop(owners);

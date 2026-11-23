@@ -58,7 +58,7 @@ use std::ops::Range;
 use std::time::Duration;
 
 use anyhow::Context;
-use http::header::{self, HeaderMap, HeaderName};
+use http::header::{self, HeaderMap};
 use http::response::Parts;
 use http::{HeaderValue, Request, Response, StatusCode, Uri};
 use http_body_util::{BodyExt, Full, Limited};
@@ -68,6 +68,7 @@ use hyper_util::rt::TokioExecutor;
 use opensovd_server::Body;
 
 use crate::ServerUri;
+use crate::federation::strip_hop_by_hop_headers;
 
 /// The largest JSON body whose references to the upstream are rewritten, as
 /// the upstream sends it and decoded.
@@ -76,18 +77,6 @@ const JSON_LIMIT: usize = 64 * 1024 * 1024;
 /// The content codings the proxy decodes: those of RFC 9110 8.4.1 but
 /// `compress`, and Brotli (RFC 7932).
 const DECODED: [&str; 4] = ["gzip", "x-gzip", "deflate", "br"];
-
-/// Headers that apply to a single connection, which a proxy must not pass on.
-const HOP_BY_HOP: [HeaderName; 8] = [
-    header::CONNECTION,
-    HeaderName::from_static("keep-alive"),
-    header::PROXY_AUTHENTICATE,
-    header::PROXY_AUTHORIZATION,
-    header::TE,
-    header::TRAILER,
-    header::TRANSFER_ENCODING,
-    header::UPGRADE,
-];
 
 /// An HTTP proxy to an upstream API, for use with [`crate::Upstream`] and
 /// [`crate::Federation`]. Available with the `http-proxy` feature, which also
@@ -600,20 +589,6 @@ fn decode(headers: &HeaderMap, body: &[u8]) -> Option<bytes::Bytes> {
     Some(decoded.into())
 }
 
-/// Drops the hop-by-hop headers and those the `Connection` header names.
-fn strip_hop_by_hop_headers(headers: &mut HeaderMap) {
-    let named: Vec<HeaderName> = headers
-        .get_all(header::CONNECTION)
-        .iter()
-        .filter_map(|value| value.to_str().ok())
-        .flat_map(|value| value.split(','))
-        .filter_map(|name| HeaderName::try_from(name.trim()).ok())
-        .collect();
-    for name in HOP_BY_HOP.iter().chain(&named) {
-        headers.remove(name);
-    }
-}
-
 /// The answer when the upstream cannot be reached: the only one the proxy makes
 /// itself, as a SOVD `GenericError`.
 fn bad_gateway(message: &str) -> Response<Body> {
@@ -625,6 +600,7 @@ mod tests {
     use std::sync::{Arc, Mutex};
 
     use bytes::Bytes;
+    use http::header::HeaderName;
     use serde_json::Value;
     use tokio::net::TcpListener;
     use tower::ServiceExt;
