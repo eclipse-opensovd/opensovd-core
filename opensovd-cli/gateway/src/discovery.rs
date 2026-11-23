@@ -662,6 +662,64 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn a_slow_probe_does_not_delay_other_removals() {
+        let harness = Harness::start(|server, _| {
+            if server.port == 1 {
+                (Duration::ZERO, true)
+            } else {
+                (Duration::from_secs(30), true)
+            }
+        });
+        harness.send(BrowseEvent::Resolved(server(SERVER, 1)));
+        assert!(eventually(|| !harness.calls().is_empty()).await);
+        // A second probe starts while the first registration is available.
+        harness.send(BrowseEvent::Resolved(server("slow._sovd._tcp.local.", 2)));
+        assert!(eventually(|| harness.calls().len() == 2).await);
+        harness.send(BrowseEvent::Removed(SERVER.to_owned()));
+        // A following event is processed after the removal.
+        harness.send(BrowseEvent::Resolved(server("fast._sovd._tcp.local.", 1)));
+        assert!(harness.takes("fast._sovd._tcp.local.").await);
+        assert!(!harness.take(SERVER));
+    }
+
+    #[tokio::test]
+    async fn a_failed_changed_announcement_removes_the_old_upstream() {
+        for port in [0, 2] {
+            let federation = Arc::new(Federation::new(Vec::new(), Topology::default()).unwrap());
+            let probe: Probe = Arc::new(|server, _| {
+                Box::pin(async move {
+                    if server.port == 0 {
+                        return Err(Unusable("unusable".to_owned()).into());
+                    }
+                    anyhow::bail!("probe failed")
+                })
+            });
+            let timeouts = Timeouts {
+                connect: Duration::from_secs(1),
+                discovery: Duration::from_secs(1),
+            };
+            let mut state = State::new(
+                Arc::clone(&federation),
+                None,
+                timeouts,
+                probe,
+                Pace::DEFAULT,
+            );
+            let old = server(SERVER, 1);
+            let api: Uri = "http://192.0.2.1:1/sovd/v1".parse().unwrap();
+            let proxy = UpstreamProxy::new(&api, Duration::from_secs(1)).unwrap();
+            federation.add_discovered(SERVER, Upstream::new(proxy.into_service()));
+            state.known.insert(SERVER.to_owned(), old);
+
+            state.event(BrowseEvent::Resolved(server(SERVER, port)));
+            let done = state.probes.join_next().await.unwrap().unwrap();
+            state.probed(done);
+            assert!(!federation.remove_discovered(SERVER), "port {port}");
+            assert!(!state.known.contains_key(SERVER));
+        }
+    }
+
+    #[tokio::test]
     async fn a_newer_announcement_replaces_the_probe_under_way() {
         // The old announcement would be usable, the new one is not.
         let harness = Harness::start(|server, _| (ms(100), server.port == 1));
