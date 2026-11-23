@@ -4,7 +4,15 @@
 use std::sync::Arc;
 use std::{any::Any, collections::HashMap};
 
+use bytes::{Bytes, BytesMut};
+use futures::StreamExt;
+use futures_core::future::BoxFuture;
+use futures_core::stream::BoxStream;
 use tokio::sync::{RwLock, watch};
+
+/// Limit the size of JSON bodies to prevent excessive memory usage.
+/// This defaults to Axum's current default limit of 2 MiB.
+const JSON_BODY_MAX_SIZE: usize = 2 * 1024 * 1024;
 
 #[derive(Debug, thiserror::Error, Clone)]
 pub enum UpdateError {
@@ -28,6 +36,14 @@ pub enum UpdateError {
     IncompatibleModel,
     #[error("Update not found: {0}")]
     UpdateNotFound(String),
+    #[error("Invalid body format")]
+    MalformedUpdate,
+    #[error("Unsupported media type")]
+    UnsupportedMediaType,
+    #[error("The body is too large and cannot be handled by the server")]
+    BodyTooLarge,
+    #[error("Received more data than expected")]
+    BodyOverflow,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -59,8 +75,11 @@ impl PartialEq for Status {
 
 type FeedbackSender = watch::Sender<Option<Arc<dyn UpdateFeedback>>>;
 type FeedbackReceiver = watch::Receiver<Option<Arc<dyn UpdateFeedback>>>;
-type Model2Update =
-    Arc<dyn Fn(&dyn Any) -> Result<Arc<dyn UpdateDescriptor>, UpdateError> + Send + Sync>;
+type Request2Update = Arc<
+    dyn Fn(UpdateRequest) -> BoxFuture<'static, Result<Arc<dyn UpdateDescriptor>, UpdateError>>
+        + Send
+        + Sync,
+>;
 type Feedback2Model =
     Arc<dyn Fn(&dyn UpdateFeedback) -> Result<Arc<dyn Any>, UpdateError> + Send + Sync>;
 
@@ -87,7 +106,7 @@ struct UpdatesInner {
     // model2update stores the method UpdateModel -> UpdateImpl from the
     // UpdateDescriptor trait as a workaround since the actual UpdateImpl type
     // implementing it is erased from Updates.
-    model2update: Model2Update,
+    request2update: Request2Update,
     feedback2model: Feedback2Model,
 }
 
@@ -98,13 +117,12 @@ pub struct Updates {
 
 impl Updates {
     #[must_use]
-    pub fn new<UpdateImpl, UpdateModel, FeedbackImpl, FeedbackModel>(
+    pub fn new<UpdateImpl, FeedbackImpl, FeedbackModel>(
         provider: impl UpdateProvider + 'static,
     ) -> Self
     where
-        UpdateImpl: UpdateDescriptor + FromModel<UpdateModel> + 'static,
+        UpdateImpl: UpdateDescriptor + FromRequest + 'static,
         FeedbackImpl: ToModel<FeedbackModel> + 'static,
-        UpdateModel: 'static,
         FeedbackModel: 'static,
     {
         Self {
@@ -113,11 +131,11 @@ impl Updates {
                 available: Vec::new(),
                 feedback: HashMap::new(),
                 active: None,
-                model2update: Arc::new(|model| {
-                    let model = model
-                        .downcast_ref::<UpdateModel>()
-                        .ok_or(UpdateError::IncompatibleModel)?;
-                    Ok(Arc::new(UpdateImpl::from_model(model)))
+                request2update: Arc::new(|stream| {
+                    Box::pin(async move {
+                        let update = UpdateImpl::from_request(stream).await?;
+                        Ok::<Arc<dyn UpdateDescriptor>, _>(Arc::new(update))
+                    })
                 }),
                 feedback2model: Arc::new(|feedback| {
                     let feedback = feedback
@@ -130,24 +148,46 @@ impl Updates {
         }
     }
 
+    /// Tries to register an update from an incoming request.
+    ///
+    /// # Errors
+    ///
+    /// Returns both the same errors as [Self::push] and any errors returned
+    /// by [FromRequest::from_request] while handling the request.
+    pub async fn push_from_request(&self, request: UpdateRequest) -> Result<String, UpdateError> {
+        let request2update = { self.inner.read().await.request2update.clone() };
+
+        let update = (request2update)(request).await?;
+        let mut inner = self.inner.write().await;
+        Self::push_impl(&mut inner, update)
+    }
+
     /// Adds an update to the list of available updates.
     ///
     /// # Errors
     ///
     /// Returns `UpdateProviderNotConfigured` if no update provider is
     /// configured.
-    pub async fn push<UpdateModel: Any>(
+    pub async fn push<UpdateImpl: UpdateDescriptor + 'static>(
         &self,
-        update: &UpdateModel,
+        update: UpdateImpl,
     ) -> Result<String, UpdateError> {
         let mut inner = self.inner.write().await;
-        let item = (inner.model2update)(update)?;
-        let id = item.id().clone();
+        if inner.provider.is_none() {
+            return Err(UpdateError::UpdateProviderNotConfigured);
+        }
+        Self::push_impl(&mut inner, Arc::new(update))
+    }
+
+    fn push_impl(
+        inner: &mut UpdatesInner,
+        update: Arc<dyn UpdateDescriptor>,
+    ) -> Result<String, UpdateError> {
+        let id = update.id().clone();
         if inner.available.iter().any(|u| u.id() == id) {
-            // the update id already exists
             return Err(UpdateError::UpdateIdConflict(id));
         }
-        inner.available.push(item);
+        inner.available.push(update);
         Ok(id)
     }
 
@@ -409,7 +449,9 @@ impl Default for Updates {
         Self {
             inner: Arc::new(RwLock::new(UpdatesInner {
                 active: None,
-                model2update: Arc::new(|_model| Err(UpdateError::UpdateProviderNotConfigured)),
+                request2update: Arc::new(|_stream| {
+                    Box::pin(async { Err(UpdateError::UpdateProviderNotConfigured) })
+                }),
                 feedback2model: Arc::new(|_feedback| Err(UpdateError::UpdateProviderNotConfigured)),
                 provider: None,
                 available: Vec::new(),
@@ -419,10 +461,78 @@ impl Default for Updates {
     }
 }
 
-pub trait FromModel<Model> {
-    fn from_model(model: &Model) -> Self
+pub struct UpdateRequest {
+    pub stream: BoxStream<'static, Result<Bytes, Box<dyn std::error::Error + Send + Sync>>>,
+    pub content_type: String,
+    pub content_length: u64,
+}
+
+impl UpdateRequest {
+    /// Attempts to collect the entire request body into a `BytesMut` buffer.
+    ///
+    /// # Errors
+    ///
+    /// Return an error when the request returns an error, or when the request body
+    /// exceeds the specified `max_size`.
+    pub async fn try_collect_with_max_size(
+        mut self,
+        max_size: usize,
+    ) -> Result<Bytes, UpdateError> {
+        if self.content_length > max_size as u64 {
+            return Err(UpdateError::BodyTooLarge);
+        }
+
+        let mut remaining_bytes = max_size;
+
+        let mut collected = BytesMut::new();
+        while let Some(chunk) = self.stream.next().await {
+            let chunk = chunk.map_err(|e| UpdateError::ProviderError(e.to_string()))?;
+
+            remaining_bytes = remaining_bytes
+                .checked_sub(chunk.len())
+                .ok_or(UpdateError::BodyOverflow)?;
+            collected.extend_from_slice(&chunk);
+        }
+        Ok(collected.freeze())
+    }
+
+    /// Attempts to collect the entire request body into a `BytesMut` buffer.
+    ///
+    /// # Errors
+    ///
+    /// Return an error when the request returns an error, or when the request body
+    /// is larger than [UpdateRequest::content_length].
+    pub async fn try_collect(self) -> Result<Bytes, UpdateError> {
+        let content_length = self.content_length()?;
+        self.try_collect_with_max_size(content_length).await
+    }
+
+    /// Attempts to parse the request body as JSON into the specified type.
+    ///
+    /// # Errors
+    /// Returns an error if the content type is not `application/json` or if parsing fails.
+    pub async fn try_json<T: serde::de::DeserializeOwned>(self) -> Result<T, UpdateError> {
+        if self.content_type != "application/json" {
+            return Err(UpdateError::UnsupportedMediaType);
+        }
+
+        let max_size = self.content_length()?.min(JSON_BODY_MAX_SIZE);
+        let bytes = self.try_collect_with_max_size(max_size).await?;
+        serde_json::from_slice(&bytes).map_err(|_| UpdateError::MalformedUpdate)
+    }
+
+    fn content_length(&self) -> Result<usize, UpdateError> {
+        self.content_length
+            .try_into()
+            .map_err(|_| UpdateError::BodyTooLarge)
+    }
+}
+
+#[async_trait::async_trait]
+pub trait FromRequest {
+    async fn from_request(data: UpdateRequest) -> Result<Self, UpdateError>
     where
-        Self: Sized;
+        Self: Sized + 'static;
 }
 
 pub trait ToModel<Model> {
@@ -551,9 +661,12 @@ mod tests {
         id: String,
     }
 
-    impl FromModel<TestUpdate> for TestUpdate {
-        fn from_model(update: &TestUpdate) -> Self {
-            update.clone()
+    #[async_trait::async_trait]
+    impl FromRequest for TestUpdate {
+        async fn from_request(_req: UpdateRequest) -> Result<Self, UpdateError> {
+            Ok(TestUpdate {
+                id: "test".to_string(),
+            })
         }
     }
 
@@ -708,10 +821,10 @@ mod tests {
     }
 
     async fn updates_with_provider(provider: impl UpdateProvider) -> Updates {
-        let updates = Updates::new::<TestUpdate, TestUpdate, TestFeedback, _>(provider);
+        let updates = Updates::new::<TestUpdate, TestFeedback, _>(provider);
         assert!(
             updates
-                .push(&TestUpdate {
+                .push(TestUpdate {
                     id: "first".to_string(),
                 })
                 .await
@@ -719,7 +832,7 @@ mod tests {
         );
         assert!(
             updates
-                .push(&TestUpdate {
+                .push(TestUpdate {
                     id: "second".to_string(),
                 })
                 .await
@@ -986,6 +1099,115 @@ mod tests {
         assert!(matches!(
             retry_updates.execute("second").await,
             Err(UpdateError::UpdateExecutionInProgress(id)) if id == "first"
+        ));
+    }
+
+    #[tokio::test]
+    async fn verify_collect_okay_less_data() {
+        let request = UpdateRequest {
+            stream: Box::pin(futures::stream::iter(vec![Ok(Bytes::from_static(
+                &[0u8; 4],
+            ))])),
+            content_type: "application/octet-stream".to_string(),
+            content_length: 5,
+        };
+
+        let collected = request.try_collect().await.unwrap();
+        assert_eq!(collected.len(), 4);
+    }
+
+    #[tokio::test]
+    async fn verify_collect_okay_exact_data() {
+        let request = UpdateRequest {
+            stream: Box::pin(futures::stream::iter(vec![Ok(Bytes::from_static(
+                &[0u8; 4],
+            ))])),
+            content_type: "application/octet-stream".to_string(),
+            content_length: 4,
+        };
+
+        let collected = request.try_collect().await.unwrap();
+        assert_eq!(collected.len(), 4);
+    }
+
+    #[tokio::test]
+    async fn verify_collect_fails_too_much_data() {
+        let request = UpdateRequest {
+            stream: Box::pin(futures::stream::iter(vec![
+                Ok(Bytes::from_static(&[0u8; 4])),
+                Ok(Bytes::from_static(&[0u8; 5])),
+            ])),
+            content_type: "application/octet-stream".to_string(),
+            content_length: 5,
+        };
+
+        assert!(matches!(
+            request.try_collect().await,
+            Err(UpdateError::BodyOverflow)
+        ));
+    }
+
+    #[tokio::test]
+    async fn verify_json_parsing() {
+        #[derive(serde::Deserialize, PartialEq, Debug)]
+        pub struct JsonData {
+            key: String,
+        }
+
+        let json_data = r#"{"key": "value"}"#;
+
+        let request = UpdateRequest {
+            stream: Box::pin(futures::stream::iter(vec![Ok(Bytes::from_static(
+                json_data.as_bytes(),
+            ))])),
+            content_type: "application/json".to_string(),
+            content_length: json_data.len() as _,
+        };
+
+        assert_eq!(
+            request.try_json::<JsonData>().await.unwrap(),
+            JsonData {
+                key: "value".to_string()
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn verify_json_parsing_with_incorrect_content() {
+        #[derive(serde::Deserialize, PartialEq, Debug)]
+        pub struct JsonData {
+            real_key: String,
+        }
+
+        let json_data = r#"{}"#;
+
+        let request = UpdateRequest {
+            stream: Box::pin(futures::stream::iter(vec![Ok(Bytes::from_static(
+                json_data.as_bytes(),
+            ))])),
+            content_type: "application/json".to_string(),
+            content_length: json_data.len() as _,
+        };
+
+        assert!(matches!(
+            request.try_json::<JsonData>().await,
+            Err(UpdateError::MalformedUpdate)
+        ));
+    }
+
+    #[tokio::test]
+    async fn verify_json_fails_when_content_type_is_incompatible() {
+        let request = UpdateRequest {
+            stream: Box::pin(futures::stream::iter(vec![Ok(Bytes::from_static(
+                &[0u8; 10],
+            ))])),
+            content_type: "application/toml".to_string(),
+            content_length: 10,
+        };
+
+        assert!(matches!(
+            request.try_json::<()>().await,
+            Err(UpdateError::UnsupportedMediaType)
         ));
     }
 }
