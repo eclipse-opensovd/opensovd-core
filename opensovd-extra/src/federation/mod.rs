@@ -548,18 +548,16 @@ impl Federation {
             forwards_authorization: self.forward_authorization,
             ..upstream
         };
+        let mut upstreams = self.upstreams_mut();
+        let mut list = upstreams.to_vec();
+        match list
+            .iter_mut()
+            .find(|known| known.discovered.as_deref() == Some(name))
         {
-            let mut upstreams = self.upstreams_mut();
-            let mut list = upstreams.to_vec();
-            match list
-                .iter_mut()
-                .find(|known| known.discovered.as_deref() == Some(name))
-            {
-                Some(known) => *known = upstream,
-                None => list.push(upstream),
-            }
-            *upstreams = list.into();
+            Some(known) => *known = upstream,
+            None => list.push(upstream),
         }
+        *upstreams = list.into();
         self.forget_owners_of(name);
     }
 
@@ -568,24 +566,22 @@ impl Federation {
     ///
     /// Returns whether there was one.
     pub fn remove_discovered(&self, name: &str) -> bool {
-        let removed = {
-            let mut upstreams = self.upstreams_mut();
-            let list: Vec<_> = upstreams
-                .iter()
-                .filter(|known| known.discovered.as_deref() != Some(name))
-                .cloned()
-                .collect();
-            let removed = list.len() != upstreams.len();
-            if removed {
-                *upstreams = list.into();
-            }
-            removed
-        };
+        let mut upstreams = self.upstreams_mut();
+        let list: Vec<_> = upstreams
+            .iter()
+            .filter(|known| known.discovered.as_deref() != Some(name))
+            .cloned()
+            .collect();
+        let removed = list.len() != upstreams.len();
+        if removed {
+            *upstreams = list.into();
+        }
         self.forget_owners_of(name);
         removed
     }
 
     /// Forgets the entities that the discovered upstream `name` answered for.
+    /// The caller holds the upstreams write lock through this operation.
     fn forget_owners_of(&self, name: &str) {
         // Before the owners are locked, so that a look that holds the lock
         // either still stores its owner, and loses it here, or sees the change.
@@ -681,21 +677,28 @@ impl Federation {
     /// what it answers with success for. The owner is remembered for all
     /// clients.
     async fn find_owner(&self, parts: &Parts, collection: &str, id: &str) -> Destination {
-        let generation = self.generation.load(Ordering::SeqCst);
-        let all = self.all_upstreams();
+        let key = format!("{collection}/{id}");
+        let hop = parts.headers.contains_key(DISCOVERED_HOP);
+        // Take the list and cached owner together with respect to registration
+        // changes, which update both while holding the upstreams write lock.
+        let (generation, all, remembered) = {
+            let upstreams = self
+                .upstreams
+                .read()
+                .unwrap_or_else(PoisonError::into_inner);
+            let generation = self.generation.load(Ordering::SeqCst);
+            // A request with the hop marker cannot use a discovered owner.
+            let remembered = self
+                .owners()
+                .get(&key)
+                .filter(|owner| !hop || owner.discovered.is_none())
+                .cloned();
+            (generation, Arc::clone(&upstreams), remembered)
+        };
         let candidates = Self::entity_upstreams(&all, parts);
         if let [only] = candidates.as_slice() {
             return Destination::Upstream((*only).clone());
         }
-        let key = format!("{collection}/{id}");
-        // A request that may not go to discovered upstreams may not go to a
-        // remembered one either.
-        let hop = parts.headers.contains_key(DISCOVERED_HOP);
-        let remembered = self
-            .owners()
-            .get(&key)
-            .filter(|owner| !hop || owner.discovered.is_none())
-            .cloned();
         if let Some(owner) = remembered {
             return Destination::Owner(owner, key);
         }

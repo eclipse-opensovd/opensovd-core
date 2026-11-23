@@ -8,6 +8,7 @@
 use std::collections::HashMap;
 use std::convert::Infallible;
 use std::future::pending;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use bytes::Bytes;
@@ -22,7 +23,7 @@ use rstest::rstest;
 use serde::Deserialize;
 use serde_json::{Map, Value};
 use tokio::net::TcpListener;
-use tokio::sync::oneshot;
+use tokio::sync::{Notify, oneshot};
 
 mod common;
 
@@ -133,7 +134,7 @@ impl Backend {
             (Some(""), None) => (
                 200,
                 format!(
-                    r#"{{"functions":"http://x/f","locks":"http://x/l","x-{name}":"http://x"}}"#
+                    r#"{{"areas":"http://x/a","functions":"http://x/f","locks":"http://x/l","x-{name}":"http://x"}}"#
                 ),
             ),
             _ => (200, format!(r#"{{"backend":"{name}"}}"#)),
@@ -903,7 +904,14 @@ async fn a_discovered_upstream_serves_its_entities_only() {
     let found = Backend::new("found", &["hovr4000"]);
     federation.add_discovered("found", found.upstream());
 
-    for path in ["/functions", "/data", "/x-found", "/locks"] {
+    for path in [
+        "/areas",
+        "/areas/area",
+        "/functions",
+        "/data",
+        "/x-found",
+        "/locks",
+    ] {
         let (_, answered_by) = get(&server, path).await;
         assert_eq!(answered_by, "", "{path}");
     }
@@ -990,6 +998,64 @@ async fn a_remembered_discovered_owner_is_not_used_for_a_request_with_the_hop_ma
 
     assert_eq!(status, 404);
     assert_eq!(found.seen().len(), before);
+}
+
+#[rstest]
+#[case(false)]
+#[case(true)]
+#[timeout(std::time::Duration::from_secs(10))]
+#[tokio::test]
+async fn an_in_flight_lookup_does_not_restore_a_removed_or_replaced_owner(#[case] replace: bool) {
+    let configured = Backend::new("configured", &[]);
+    let after = Backend::new("after", &["hovr4000"]);
+    let started = Arc::new(Notify::new());
+    let release = Arc::new(Notify::new());
+    let slow = {
+        let started = Arc::clone(&started);
+        let release = Arc::clone(&release);
+        let first = Arc::new(AtomicBool::new(true));
+        Upstream::new(tower::service_fn(
+            move |_: Request<opensovd_server::Body>| {
+                let started = Arc::clone(&started);
+                let release = Arc::clone(&release);
+                let first = Arc::clone(&first);
+                async move {
+                    if first.swap(false, Ordering::SeqCst) {
+                        started.notify_one();
+                        release.notified().await;
+                    }
+                    Ok::<_, Infallible>(Response::new(Full::new(Bytes::from_static(
+                        br#"{"backend":"before"}"#,
+                    ))))
+                }
+            },
+        ))
+    };
+    let (server, federation) = start_federation(vec![configured.upstream()]).await;
+    federation.add_discovered("found", slow);
+    let address = server.addr;
+    let pending = tokio::spawn(async move {
+        let request = Request::builder()
+            .uri(format!("http://{address}/sovd/v1/components/hovr4000"))
+            .body(Full::new(Bytes::new()))
+            .unwrap();
+        common::client().request(request).await.unwrap()
+    });
+    started.notified().await;
+    if replace {
+        federation.add_discovered("found", after.upstream());
+    } else {
+        assert!(federation.remove_discovered("found"));
+        federation.add_discovered("other", after.upstream());
+    }
+    release.notify_one();
+    // The old request may still complete against its original snapshot.
+    // The following request must not reuse it.
+    pending.await.unwrap();
+    assert_eq!(
+        get(&server, "/components/hovr4000").await,
+        (200, "after".to_owned())
+    );
 }
 
 /// The requests that a discovered upstream and a configured one get for a
