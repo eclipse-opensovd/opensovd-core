@@ -140,8 +140,9 @@ impl Auth {
     ///
     /// The route is authorized like any other, as `/v1/authorize`: the
     /// [`Authorizer`] decides whether a client without a token may call it.
-    /// An `--upstream-authorize-url` upstream is not supported together with it:
-    /// both would answer `/authorize`.
+    /// A federation that forwards `ForwardRoute::Authorize` answers `/authorize`
+    /// before this route: a direct embedding has to leave that route out of its
+    /// upstreams. The gateway runner never forwards it.
     #[must_use]
     pub fn with_authorize(mut self, route: MethodRouter<Topology>) -> Self {
         self.authorize = Some(route);

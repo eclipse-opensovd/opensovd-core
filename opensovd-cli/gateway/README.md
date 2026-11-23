@@ -100,11 +100,11 @@ URLs of the upstream's API and its path, in `Location` and in the text of JSON b
 | `/components/{id}/**`, `/apps/{id}/**` with an `id` the gateway does not hold | upstream |
 | `/functions`, `/functions/**`                                      | upstream |
 | `/locks`, `/locks/{lock_id}` (vehicle level)                       | gateway, on all upstreams |
-| `/authorize`                                                       | gateway, or the upstream of `--upstream-authorize-url` |
+| `/authorize`                                                       | gateway     |
 | `/x-*`, `/x-*/**` (custom collections)                             | upstream |
 | Everything else, including all paths below held entities           | gateway     |
 
-Without `--upstream-authorize-url`, which names one of the `--upstream-url`s, the gateway answers `/authorize` with 404, as clients get tokens from their issuer. The upstreams and their routes are logged at startup, at debug level. An unreachable upstream answers **502** with the `upstream-unreachable` vendor code. An upstream that does not answer in time, before the one that has an entity or when none has it, answers **504** with the `upstream-timeout` vendor code. With `--auth-policy`, a forwarded request on a path the gateway does not route has no `route` in the policy input.
+The gateway answers `/authorize` itself and never forwards it: with 404, as clients get tokens from their issuer, unless an embedding application serves it with `Auth::with_authorize`. The upstreams and their routes are logged at startup, at debug level. An unreachable upstream answers **502** with the `upstream-unreachable` vendor code. An upstream that does not answer in time, before the one that has an entity or when none has it, answers **504** with the `upstream-timeout` vendor code. With `--auth-policy`, a forwarded request on a path the gateway does not route has no `route` in the policy input.
 
 A vehicle lock applies to everything the gateway serves from its upstreams, so it holds on all of them. `POST /locks` acquires a lock from each upstream, in the configured order, and answers with one id of the gateway. If an upstream refuses, including one without locks, or cannot be reached, the locks acquired so far are released and its answer is the answer. Every answer about a lock is the gateway's: its id and URL, and an upstream's error with its status, code and `parameters`, with the gateway's message, or with the `upstream-error` vendor code if it is no SOVD error. `GET`, `PUT` and `DELETE` go to all parts of the lock, and upstreams decide who owns one, by the client's token. If a part is gone, `GET` and `PUT` answer **409** with `lock-broken` and release nothing: the other parts stay until the client's `DELETE`.
 
@@ -119,7 +119,6 @@ With several upstreams, by repeating `--upstream-url` or separating the URLs by 
 | Option                  | Description                                                                 |
 |-------------------------|-----------------------------------------------------------------------------|
 | `--upstream-url`             | Base URL of an upstream API, `http://` or `unix:<socket>[:<base path>]`, repeatable or comma-separated (`SOVD_UPSTREAM_URL`, comma-separated only) |
-| `--upstream-authorize-url`   | The `--upstream-url` that takes `/authorize` (`SOVD_UPSTREAM_AUTHORIZE_URL`)                     |
 | `--upstream-connect-timeout` | Seconds to wait for a connection to the upstream, default 5 (`SOVD_UPSTREAM_CONNECT_TIMEOUT`) |
 | `--upstream-discovery-timeout` | Seconds an upstream gets to answer `/`, `/components` and `/apps`, and the look for the owner of an entity, default 5 (`SOVD_UPSTREAM_DISCOVERY_TIMEOUT`). Other requests have no timeout |
 
