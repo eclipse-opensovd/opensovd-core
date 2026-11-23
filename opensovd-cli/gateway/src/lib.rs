@@ -111,7 +111,8 @@ pub async fn run_with_auth(cli: cli::Cli, topology: Topology, auth: Auth) -> any
 /// # Errors
 ///
 /// Returns an error if `--mock` or `--auth-jwks` is selected, as the supplied
-/// topology and `auth` replace them, or if configuration, startup or serving fails.
+/// topology and `auth` replace them, or if configuration, startup or serving
+/// fails.
 pub async fn run_with_auth_and_shutdown(
     cli: cli::Cli,
     topology: Topology,
@@ -358,6 +359,74 @@ mod tests {
         .await
         .unwrap_err();
         assert!(error.to_string().contains("--auth-jwks"));
+    }
+
+    /// Allows a call of `/v1/authorize` without a token, and the rest with one.
+    struct OpenAuthorize;
+
+    impl opensovd_server::Authorizer for OpenAuthorize {
+        fn authorize(&self, access: &opensovd_server::Access<'_>) -> bool {
+            access.principal.is_some() || access.route == Some("/v1/authorize")
+        }
+    }
+
+    fn issuing_auth() -> Auth {
+        Auth::new(OkToken, OpenAuthorize)
+            .with_authorize(opensovd_server::MethodRouter::new().post(|| async { "issued" }))
+    }
+
+    async fn post(address: SocketAddr, path: &str) -> String {
+        tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                if let Ok(mut stream) = tokio::net::TcpStream::connect(address).await {
+                    let request = format!(
+                        "POST {path} HTTP/1.1\r\nHost: localhost\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                    );
+                    stream.write_all(request.as_bytes()).await.unwrap();
+                    let mut response = Vec::new();
+                    stream.read_to_end(&mut response).await.unwrap();
+                    break String::from_utf8(response).unwrap();
+                }
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+        })
+        .await
+        .expect("gateway started")
+    }
+
+    #[tokio::test]
+    async fn supplied_authorize_is_served_before_the_upstreams_and_the_stub() {
+        // An upstream that does not answer: a forwarded request would be a 502.
+        let unused = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let upstream = format!("http://{}/vehicle/v15", unused.local_addr().unwrap());
+        drop(unused);
+        let reservation = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = reservation.local_addr().unwrap();
+        let url = format!("http://{address}/sovd");
+        let cli =
+            cli::try_parse_from(["gateway", "--url", &url, "--upstream-url", &upstream]).unwrap();
+        let (stop, stopped) = oneshot::channel();
+        drop(reservation);
+        let task = tokio::spawn(run_with_auth_and_shutdown(
+            cli,
+            Topology::default(),
+            issuing_auth(),
+            async {
+                let _ = stopped.await;
+            },
+        ));
+        let issued = post(address, "/sovd/v1/authorize").await;
+        assert!(issued.starts_with("HTTP/1.1 200"), "{issued}");
+        assert!(issued.ends_with("issued"), "{issued}");
+        // Only the route the authorizer names is open.
+        let token = post(address, "/sovd/v1/token").await;
+        assert!(token.starts_with("HTTP/1.1 401"), "{token}");
+        stop.send(()).unwrap();
+        tokio::time::timeout(Duration::from_secs(5), task)
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
     }
 
     #[cfg(feature = "mock")]
