@@ -23,7 +23,7 @@ pub struct App {
     tags: Vec<String>,
     translation_id: Option<String>,
     data_provider: Option<Box<dyn DataProvider>>,
-    fault_provider: Option<Box<dyn FaultProvider>>,
+    fault_provider: Option<Arc<dyn FaultProvider>>,
     bulkdata_provider: Option<Arc<dyn BulkDataProvider>>,
     log_provider: Option<Arc<dyn LogProvider>>,
     update_provider: Option<Updates>,
@@ -102,7 +102,7 @@ impl App {
 
     #[must_use]
     pub fn with_fault_provider(mut self, provider: impl FaultProvider) -> Self {
-        self.fault_provider = Some(Box::new(provider));
+        self.fault_provider = Some(Arc::new(provider));
         self
     }
 
@@ -191,8 +191,8 @@ impl App {
     }
 
     #[must_use]
-    pub fn fault_provider(&self) -> Option<&dyn FaultProvider> {
-        self.fault_provider.as_deref()
+    pub fn fault_provider(&self) -> Option<Arc<dyn FaultProvider>> {
+        self.fault_provider.clone()
     }
 
     #[must_use]

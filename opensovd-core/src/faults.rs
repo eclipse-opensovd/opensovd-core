@@ -37,16 +37,36 @@ pub struct FaultDetail {
     pub fault: Fault,
     /// Environment information, when the fault provides it.
     pub environment_data: Option<Value>,
+    /// Errors of `environment_data` when that value represents an error.
+    pub errors: Vec<FaultDataError>,
+    /// JSON Schema 2020-12 of `environment_data`, not of the detail response.
+    /// The server puts it in place of `environment_data` in the response
+    /// schema, so it must not use `$ref`.
+    pub schema: Option<Value>,
+}
+
+/// An error of one element of a fault's environment data.
+#[derive(Debug, Clone)]
+pub struct FaultDataError {
+    /// JSON pointer to the erroneous element within the environment data,
+    /// empty for the whole value.
+    pub path: String,
+    /// What went wrong.
+    pub message: String,
 }
 
 /// Filters accepted when listing faults.
 #[derive(Debug, Clone, Default)]
 pub struct FaultFilter {
-    /// Status predicates are OR-combined.
+    /// Status predicates are OR-combined. A string value must equal the
+    /// predicate. Any other JSON value matches its exact compact JSON
+    /// representation, so `1` matches and `1.0` does not.
     pub status: Vec<(String, String)>,
-    /// Include faults at this severity and all more severe levels.
+    /// Include faults at this severity and all more severe levels. Faults
+    /// without a severity are excluded.
     pub severity: Option<u32>,
-    /// Include faults with this scope.
+    /// Include faults whose scope exactly matches this value. Faults without
+    /// a scope are excluded.
     pub scope: Option<String>,
     /// Include faults with any of these tags.
     pub tags: Vec<String>,
@@ -58,6 +78,9 @@ pub enum FaultError {
     /// The requested fault does not exist.
     #[error("fault not found: {0}")]
     NotFound(String),
+    /// The provider does not support this operation.
+    #[error("fault provider does not support this operation: {0}")]
+    NotSupported(String),
     /// The provider failed while accessing a fault.
     #[error("internal error: {0}")]
     Internal(String),
@@ -72,6 +95,6 @@ pub trait FaultProvider: Send + Sync + 'static {
     /// Returns faults matching the supplied filter.
     async fn fault_list(&self, filter: FaultFilter) -> Result<Vec<Fault>>;
 
-    /// Returns one fault and its optional environment data.
-    async fn fault_read(&self, fault_code: &str) -> Result<FaultDetail>;
+    /// Returns one fault, its optional environment data, and its schema when requested.
+    async fn fault_read(&self, fault_code: &str, include_schema: bool) -> Result<FaultDetail>;
 }
