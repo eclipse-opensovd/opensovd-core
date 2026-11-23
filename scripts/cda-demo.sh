@@ -80,7 +80,7 @@ show() { # method path
 }
 
 login() {
-    TOKEN=$(curl -s -X POST "$GATEWAY/v1/authorize" \
+    TOKEN=$(curl -s -X POST "$CDA/vehicle/v15/authorize" \
         -H 'Content-Type: application/json' \
         -d '{"client_id": "test", "client_secret": "secret"}' | jq -r .access_token)
 }
@@ -93,7 +93,6 @@ requests() {
     show GET "/components/$ECU/faults"
     show GET "/functions"
     show GET "/locks"
-    show POST "/authorize"
 }
 
 # The self-discovery of a client: from the list to the ECU to its faults, by
@@ -130,10 +129,9 @@ fi
 
 echo
 echo "==> With the CDA: --upstream-url $CDA/vehicle/v15"
-start_gateway --upstream-url "$CDA/vehicle/v15" \
-    --upstream-authorize-url "$CDA/vehicle/v15"
+start_gateway --upstream-url "$CDA/vehicle/v15"
 
-# The token comes from the CDA, through the gateway.
+# The token comes from the CDA, which the gateway does not forward `/authorize` to.
 login
 requests
 echo
