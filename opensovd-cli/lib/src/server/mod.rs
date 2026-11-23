@@ -117,6 +117,12 @@ impl ServerArgs {
         self.0.auth.auth()
     }
 
+    /// Whether `--auth-jwks` asks for the auth that [`Self::auth`] builds.
+    #[must_use]
+    pub fn auth_enabled(&self) -> bool {
+        self.0.auth.enabled()
+    }
+
     /// See [`TlsArgs::config`].
     ///
     /// # Errors

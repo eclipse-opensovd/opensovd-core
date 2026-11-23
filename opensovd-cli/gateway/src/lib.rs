@@ -18,6 +18,10 @@
 //! The gateway's `SOVD_*` environment variables and command-line options apply
 //! equally to an embedded gateway. The caller owns tracing initialization.
 //! [`run_with_shutdown`] permits the host to control graceful shutdown.
+//!
+//! The gateway builds its authentication from `--auth-*`. An application with
+//! its own [`Auth`] passes it to [`run_with_auth`] or
+//! [`run_with_auth_and_shutdown`] instead, and may not combine it with `--auth-jwks`.
 
 pub mod cli;
 mod upstream;
@@ -26,7 +30,7 @@ use opensovd_core::Topology;
 use opensovd_extra::{Federation, FederationLayer};
 #[cfg(feature = "mock")]
 use opensovd_mocks::create_mock_topology;
-use opensovd_server::Server;
+use opensovd_server::{Auth, Server};
 use serde::Serialize;
 
 #[derive(Debug, Clone, Serialize)]
@@ -54,7 +58,7 @@ const VENDOR_INFO: OpenSovdInfo = OpenSovdInfo {
 /// Returns an error if configuration, startup or serving fails.
 pub async fn run_default(cli: cli::Cli) -> anyhow::Result<()> {
     let topology = configure_topology(&cli).await;
-    serve(cli, topology, libcli::shutdown_signal()).await
+    serve(cli, None, topology, libcli::shutdown_signal()).await
 }
 
 /// Runs the gateway with a caller-provided topology and signal handling.
@@ -84,11 +88,49 @@ pub async fn run_with_shutdown(
 ) -> anyhow::Result<()> {
     #[cfg(feature = "mock")]
     anyhow::ensure!(!cli.mock, "--mock cannot be used with a supplied topology");
-    serve(cli, topology, shutdown).await
+    serve(cli, None, topology, shutdown).await
 }
 
+/// Runs the gateway with a caller-provided topology and [`Auth`], and signal handling.
+///
+/// The `--auth-*` options do not build the authentication here; see
+/// [`run_with_auth_and_shutdown`].
+///
+/// # Errors
+///
+/// Returns an error if configuration, startup or serving fails.
+pub async fn run_with_auth(cli: cli::Cli, topology: Topology, auth: Auth) -> anyhow::Result<()> {
+    run_with_auth_and_shutdown(cli, topology, auth, libcli::shutdown_signal()).await
+}
+
+/// Runs the gateway with a caller-provided topology and [`Auth`] until `shutdown` resolves.
+///
+/// For an application that authenticates and authorizes requests itself. The
+/// caller initializes tracing if required.
+///
+/// # Errors
+///
+/// Returns an error if `--mock` or `--auth-jwks` is selected, as the supplied
+/// topology and `auth` replace them, or if configuration, startup or serving fails.
+pub async fn run_with_auth_and_shutdown(
+    cli: cli::Cli,
+    topology: Topology,
+    auth: Auth,
+    shutdown: impl Future<Output = ()> + Send + 'static,
+) -> anyhow::Result<()> {
+    #[cfg(feature = "mock")]
+    anyhow::ensure!(!cli.mock, "--mock cannot be used with a supplied topology");
+    anyhow::ensure!(
+        !cli.server.auth_enabled(),
+        "--auth-jwks cannot be used with supplied auth"
+    );
+    serve(cli, Some(auth), topology, shutdown).await
+}
+
+/// Serves the gateway, with `auth` if supplied, or else the auth of `--auth-*`.
 async fn serve(
     cli: cli::Cli,
+    auth: Option<Auth>,
     topology: Topology,
     shutdown: impl Future<Output = ()> + Send + 'static,
 ) -> anyhow::Result<()> {
@@ -102,7 +144,11 @@ async fn serve(
     let args = &cli.server;
 
     let mut builder = Server::builder();
-    if let Some(auth) = args.auth()? {
+    let auth = match auth {
+        Some(auth) => Some(auth),
+        None => args.auth()?,
+    };
+    if let Some(auth) = auth {
         builder = builder.auth(auth);
     }
     #[cfg(feature = "tls")]
@@ -203,16 +249,131 @@ fn create_federation(
 
 #[cfg(test)]
 mod tests {
+    use std::net::SocketAddr;
     use std::time::Duration;
 
     use opensovd_core::Component;
     use opensovd_models::data::DataCategory;
     use opensovd_providers::data::{Constant, DataProviderBuilder};
+    use opensovd_server::Authenticated;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpListener;
     use tokio::sync::oneshot;
 
     use super::*;
+
+    /// Authenticates the token `ok` only.
+    struct OkToken;
+
+    impl opensovd_server::Authenticator for OkToken {
+        fn authenticate(
+            &self,
+            parts: &http::request::Parts,
+        ) -> Result<Option<opensovd_server::Principal>, opensovd_server::AuthError> {
+            Ok(parts
+                .headers
+                .get(http::header::AUTHORIZATION)
+                .filter(|value| *value == "Bearer ok")
+                .map(|_| principal()))
+        }
+    }
+
+    fn principal() -> opensovd_server::Principal {
+        opensovd_server::Principal {
+            subject: "user".to_owned(),
+            roles: Vec::new(),
+            scopes: Vec::new(),
+            claims: serde_json::Map::new(),
+        }
+    }
+
+    async fn get(address: SocketAddr, authorization: Option<&str>) -> String {
+        let authorization = authorization
+            .map(|value| format!("Authorization: {value}\r\n"))
+            .unwrap_or_default();
+        tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                if let Ok(mut stream) = tokio::net::TcpStream::connect(address).await {
+                    let request = format!(
+                        "GET /sovd/version-info HTTP/1.1\r\nHost: localhost\r\n{authorization}Connection: close\r\n\r\n"
+                    );
+                    stream.write_all(request.as_bytes()).await.unwrap();
+                    let mut response = Vec::new();
+                    stream.read_to_end(&mut response).await.unwrap();
+                    break String::from_utf8(response).unwrap();
+                }
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+        })
+        .await
+        .expect("gateway started")
+    }
+
+    #[tokio::test]
+    async fn supplied_auth_is_enforced_and_shuts_down() {
+        let reservation = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = reservation.local_addr().unwrap();
+        let url = format!("http://{address}/sovd");
+        let cli = cli::try_parse_from(["gateway", "--url", &url]).unwrap();
+        let (stop, stopped) = oneshot::channel();
+        drop(reservation);
+        let task = tokio::spawn(run_with_auth_and_shutdown(
+            cli,
+            Topology::default(),
+            Auth::new(OkToken, Authenticated),
+            async {
+                let _ = stopped.await;
+            },
+        ));
+        let anonymous = get(address, None).await;
+        assert!(anonymous.starts_with("HTTP/1.1 401"), "{anonymous}");
+        let wrong = get(address, Some("Bearer no")).await;
+        assert!(wrong.starts_with("HTTP/1.1 401"), "{wrong}");
+        let valid = get(address, Some("Bearer ok")).await;
+        assert!(valid.starts_with("HTTP/1.1 200"), "{valid}");
+        stop.send(()).unwrap();
+        tokio::time::timeout(Duration::from_secs(5), task)
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn supplied_auth_cannot_be_combined_with_jwks() {
+        let cli = cli::try_parse_from([
+            "gateway",
+            "--auth-jwks",
+            "jwks.json",
+            "--auth-issuer",
+            "issuer",
+        ])
+        .unwrap();
+        let error = run_with_auth_and_shutdown(
+            cli,
+            Topology::default(),
+            Auth::new(OkToken, Authenticated),
+            std::future::pending(),
+        )
+        .await
+        .unwrap_err();
+        assert!(error.to_string().contains("--auth-jwks"));
+    }
+
+    #[cfg(feature = "mock")]
+    #[tokio::test]
+    async fn supplied_auth_cannot_be_combined_with_mock() {
+        let cli = cli::try_parse_from(["gateway", "--mock"]).unwrap();
+        let error = run_with_auth_and_shutdown(
+            cli,
+            Topology::default(),
+            Auth::new(OkToken, Authenticated),
+            std::future::pending(),
+        )
+        .await
+        .unwrap_err();
+        assert!(error.to_string().contains("--mock"));
+    }
 
     #[test]
     fn invalid_arguments_are_returned_to_the_caller() {

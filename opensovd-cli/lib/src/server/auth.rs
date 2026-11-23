@@ -78,6 +78,12 @@ pub struct AuthArgs {
 }
 
 impl AuthArgs {
+    /// Whether `--auth-jwks` is set.
+    #[must_use]
+    pub fn enabled(&self) -> bool {
+        self.jwks.is_some()
+    }
+
     /// Authentication and authorization, or `None` without `--auth-jwks`.
     ///
     /// # Errors
