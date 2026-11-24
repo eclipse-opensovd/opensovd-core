@@ -22,9 +22,9 @@ internal. There are no Bazel test targets. Tests run through Cargo, see the
 
 - Bazel 8.6.0, pinned through `.bazelversion`.
 - The S-CORE Bazel registry followed by the Bazel Central Registry.
-- `rules_rust` version 0.68.1-score.
-- Rust nightly 2026-05-07, edition 2024. Cargo builds use the stable
-  toolchain from `rust-toolchain.toml`.
+- `rules_rust` 0.70.0 as the declared dependency. Builds of this repository
+  use a later upstream commit through `git_override`.
+- The Rust version from `rust-toolchain.toml`, edition 2024.
 - Crates from the root Cargo.toml and Cargo.lock through an isolated
   `crate_universe` extension. There is no separate lockfile and no repin
   step.
@@ -65,6 +65,9 @@ change, update its BUILD.bazel.
 ## S-CORE Compatibility
 
 - Bazel compatibility declared as >=8.6.0.
-- `rules_rust` uses the S-CORE-compatible 0.68.1-score release.
 - `--experimental_isolated_extension_usages` is enabled.
-- Rust toolchains are registered through Bzlmod.
+- The Rust toolchain and the `rules_rust` override apply only to builds of
+  this repository; an integrating module brings its own.
+- `rules_rust` releases from 0.72.0 on require a crate_universe lockfile
+  from non-root modules, which this module does not ship. Integrate it with
+  an earlier release.

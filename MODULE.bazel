@@ -4,7 +4,12 @@ module(
     bazel_compatibility = [">=8.6.0"],
 )
 
-bazel_dep(name = "rules_rust", version = "0.68.1-score")
+bazel_dep(name = "rules_rust", version = "0.70.0")
+git_override(
+    module_name = "rules_rust",
+    commit = "00fcbe9395e55b8a15b083f5123806a7fca42f91",
+    remote = "https://github.com/bazelbuild/rules_rust.git",
+)
 
 rust = use_extension(
     "@rules_rust//rust:extensions.bzl",
@@ -13,7 +18,7 @@ rust = use_extension(
 )
 rust.toolchain(
     edition = "2024",
-    versions = ["nightly/2026-05-07"],
+    file = "//:rust-toolchain.toml",
 )
 use_repo(rust, "rust_toolchains")
 
