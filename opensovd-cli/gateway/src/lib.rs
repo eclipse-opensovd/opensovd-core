@@ -64,7 +64,7 @@ const VENDOR_INFO: OpenSovdInfo = OpenSovdInfo {
 /// Returns an error if configuration, startup or serving fails.
 pub async fn run_default(cli: cli::Cli) -> anyhow::Result<()> {
     let topology = configure_topology(&cli).await;
-    run_gateway(cli, topology, None, libcli::shutdown_signal()).await
+    run_gateway(cli, topology, libcli::shutdown_signal()).await
 }
 
 /// Runs the gateway with a caller-provided topology and signal handling.
@@ -94,7 +94,7 @@ pub async fn run_with_shutdown(
 ) -> anyhow::Result<()> {
     #[cfg(feature = "mock")]
     anyhow::ensure!(!cli.mock, "--mock cannot be used with a supplied topology");
-    run_gateway(cli, topology, None, shutdown).await
+    run_gateway(cli, topology, shutdown).await
 }
 
 /// Runs the gateway with a caller-provided topology and [`Auth`], and signal handling.
@@ -131,34 +131,12 @@ pub async fn run_with_auth_and_shutdown(
         cli.auth.jwks.is_none(),
         "--auth-jwks cannot be used with supplied auth"
     );
-    serve(cli, Some(auth), topology, None, shutdown).await
-}
-
-/// Runs the gateway using a TCP listener already bound by the caller.
-///
-/// The supplied listener replaces TCP binding, `--unix-socket`, and systemd
-/// socket activation. The URL still supplies the base URI and advertised address.
-/// Authentication is configured from the `--auth-*` options. On shutdown the
-/// server stops gracefully and any mDNS announcement is withdrawn.
-///
-/// # Errors
-///
-/// Returns an error if `--mock` is selected, or configuration, startup or serving fails.
-pub async fn run_with_listener(
-    cli: cli::Cli,
-    topology: Topology,
-    listener: tokio::net::TcpListener,
-    shutdown: impl Future<Output = ()> + Send + 'static,
-) -> anyhow::Result<()> {
-    #[cfg(feature = "mock")]
-    anyhow::ensure!(!cli.mock, "--mock cannot be used with a supplied topology");
-    run_gateway(cli, topology, Some(listener), shutdown).await
+    serve(cli, Some(auth), topology, shutdown).await
 }
 
 async fn run_gateway(
     mut cli: cli::Cli,
     topology: Topology,
-    listener: Option<tokio::net::TcpListener>,
     shutdown: impl Future<Output = ()> + Send + 'static,
 ) -> anyhow::Result<()> {
     tracing::info!(
@@ -169,7 +147,7 @@ async fn run_gateway(
         build_date = %VENDOR_INFO.build_date,
         "{}", cli::ABOUT);
     let auth = create_auth(&mut cli.auth)?;
-    serve(cli, auth, topology, listener, shutdown).await
+    serve(cli, auth, topology, shutdown).await
 }
 
 fn create_auth(args: &mut cli::AuthArgs) -> anyhow::Result<Option<Auth>> {
@@ -235,7 +213,6 @@ async fn serve(
     cli: cli::Cli,
     auth: Option<Auth>,
     topology: Topology,
-    listener: Option<tokio::net::TcpListener>,
     shutdown: impl Future<Output = ()> + Send + 'static,
 ) -> anyhow::Result<()> {
     let uri: http::Uri = cli
@@ -271,12 +248,7 @@ async fn serve(
     #[cfg(not(feature = "tls"))]
     let tls = false;
 
-    let (mut builder, local_addr) = if let Some(listener) = listener {
-        let bound = Bound::of(&listener, false)?;
-        (builder.listener(listener), Some(bound))
-    } else {
-        configure_listener(builder, &cli, authority).await?
-    };
+    let (mut builder, local_addr) = configure_listener(builder, &cli, authority).await?;
     builder = builder.topology(topology.clone());
     // after auth, so that forwarded requests are authorized like any other
     if let Some(federation) = create_federation(&cli.upstream, topology)? {
@@ -664,52 +636,6 @@ mod tests {
         })
         .await
         .expect("gateway started")
-    }
-
-    #[tokio::test]
-    async fn supplied_listener_serves_and_shuts_down() {
-        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let address = listener.local_addr().unwrap();
-        // The URL's port differs from the listener: the runner must use the latter.
-        let cli = cli::try_parse_from(["gateway", "--url", "http://127.0.0.1:0/sovd"]).unwrap();
-        let (stop, stopped) = oneshot::channel();
-        let task = tokio::spawn(run_with_listener(
-            cli,
-            Topology::default(),
-            listener,
-            async {
-                let _ = stopped.await;
-            },
-        ));
-        let response = get(address, None).await;
-        assert!(response.starts_with("HTTP/1.1 200"), "{response}");
-        stop.send(()).unwrap();
-        tokio::time::timeout(Duration::from_secs(5), task)
-            .await
-            .unwrap()
-            .unwrap()
-            .unwrap();
-    }
-
-    #[tokio::test]
-    async fn supplied_listener_reports_invalid_cors() {
-        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let cli = cli::try_parse_from([
-            "gateway",
-            "--url",
-            "http://127.0.0.1:0/sovd",
-            "--cors-origin",
-            "*",
-            "--cors-credentials",
-        ])
-        .unwrap();
-        let error = run_with_listener(cli, Topology::default(), listener, std::future::pending())
-            .await
-            .unwrap_err();
-        assert!(matches!(
-            error.downcast_ref::<clap::Error>(),
-            Some(error) if error.kind() == clap::error::ErrorKind::ValueValidation
-        ));
     }
 
     #[tokio::test]
