@@ -11,6 +11,7 @@ use hyper_util::{
     rt::TokioExecutor,
 };
 use opensovd_models::UriReference;
+use opensovd_models::auth::{AuthorizeRequest, AuthorizeResponse};
 use serde::{Serialize, de::DeserializeOwned};
 use thiserror::Error;
 use tokio::sync::OnceCell;
@@ -328,6 +329,35 @@ impl Client {
             .body(Full::new(Bytes::from(json)))?;
         self.request(req).await?;
         Ok(())
+    }
+
+    /// Request a token from `authorize` of the server (ISO 17978-3 §7.23.4).
+    ///
+    /// The `access_token` of the answer goes into `Authorization: Bearer <access_token>` of the
+    /// requests that need it, for example with a layer from [`ClientBuilder::layer`]. The
+    /// credentials are sent as the JSON body, so use a connection that protects them.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::ApiError`] if the server rejects the credentials, for example with 400 or
+    /// 401.
+    pub async fn authorize(
+        &self,
+        client_id: &str,
+        client_secret: &str,
+    ) -> Result<AuthorizeResponse> {
+        let body = serde_json::to_vec(&AuthorizeRequest {
+            client_id: client_id.to_owned(),
+            client_secret: client_secret.to_owned(),
+        })?;
+        let uri = build_uri_with_query(&self.base_uri, "/authorize", &[])?;
+        let req = http::Request::builder()
+            .method(http::Method::POST)
+            .uri(&uri)
+            .header("content-type", "application/json")
+            .body(Full::new(Bytes::from(body)))?;
+        let bytes = self.request(req).await?;
+        Ok(serde_json::from_slice(&bytes)?)
     }
 
     /// Send an HTTP request and return the response body bytes.
