@@ -14,7 +14,7 @@ use clap::{Args, CommandFactory, FromArgMatches, Parser};
 use http::Uri;
 
 pub const ABOUT: &str = "OpenSOVD Gateway Server";
-const DEFAULT_URL: &str = "http://localhost:7690/sovd";
+const DEFAULT_URL: &str = "http://127.0.0.1:7690/sovd";
 
 const VERSION_STRING: &str = concat!(
     env!("VERSION"),
@@ -619,6 +619,19 @@ pub struct AuthArgs {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn default_url_uses_ipv4_loopback() {
+        let command = Cli::command();
+        let url = command
+            .get_arguments()
+            .find(|arg| arg.get_id() == "url")
+            .unwrap();
+        assert_eq!(
+            url.get_default_values().first().and_then(|v| v.to_str()),
+            Some("http://127.0.0.1:7690/sovd")
+        );
+    }
 
     fn urls(urls: &[&str]) -> anyhow::Result<Vec<Endpoint>> {
         let urls: Vec<_> = urls.iter().map(ToString::to_string).collect();
