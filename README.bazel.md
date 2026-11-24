@@ -130,10 +130,8 @@ The root package also exposes `opensovd-client`, `opensovd-server`, and
 `jsonwebtoken`, as public aliases. Using the same targets preserves compatible
 Rust crate identities when exchanging types with the gateway.
 
-For race-free listener setup, `run_with_listener` takes a bound TCP listener
-and a shutdown future. It uses the supplied listener instead of binding from
-the URL, using a Unix socket, or using systemd socket activation. The default
-URL is `http://127.0.0.1:7690/sovd`; set `--url` or `SOVD_URL` to override it.
+The gateway's default URL is `http://127.0.0.1:7690/sovd`; set `--url` or
+`SOVD_URL` to override it.
 
 ## Reusable HTTP Upstream Proxy
 
