@@ -58,7 +58,7 @@ const VENDOR_INFO: OpenSovdInfo = OpenSovdInfo {
 /// Returns an error if configuration, startup or serving fails.
 pub async fn run_default(cli: cli::Cli) -> anyhow::Result<()> {
     let topology = configure_topology(&cli).await;
-    serve(cli, None, topology, libcli::shutdown_signal()).await
+    serve(cli, None, topology, None, libcli::shutdown_signal()).await
 }
 
 /// Runs the gateway with a caller-provided topology and signal handling.
@@ -88,7 +88,7 @@ pub async fn run_with_shutdown(
 ) -> anyhow::Result<()> {
     #[cfg(feature = "mock")]
     anyhow::ensure!(!cli.mock, "--mock cannot be used with a supplied topology");
-    serve(cli, None, topology, shutdown).await
+    serve(cli, None, topology, None, shutdown).await
 }
 
 /// Runs the gateway with a caller-provided topology and [`Auth`], and signal handling.
@@ -125,7 +125,28 @@ pub async fn run_with_auth_and_shutdown(
         !cli.server.auth_enabled(),
         "--auth-jwks cannot be used with supplied auth"
     );
-    serve(cli, Some(auth), topology, shutdown).await
+    serve(cli, Some(auth), topology, None, shutdown).await
+}
+
+/// Runs the gateway using a TCP listener already bound by the caller.
+///
+/// The supplied listener replaces TCP binding, `--unix-socket`, and systemd
+/// socket activation. The URL still supplies the base URI and advertised address.
+/// Authentication is configured from the `--auth-*` options. On shutdown the
+/// server stops gracefully and any mDNS announcement is withdrawn.
+///
+/// # Errors
+///
+/// Returns an error if `--mock` is selected, or configuration, startup or serving fails.
+pub async fn run_with_listener(
+    cli: cli::Cli,
+    topology: Topology,
+    listener: tokio::net::TcpListener,
+    shutdown: impl Future<Output = ()> + Send + 'static,
+) -> anyhow::Result<()> {
+    #[cfg(feature = "mock")]
+    anyhow::ensure!(!cli.mock, "--mock cannot be used with a supplied topology");
+    serve(cli, None, topology, Some(listener), shutdown).await
 }
 
 /// Serves the gateway, with `auth` if supplied, or else the auth of `--auth-*`.
@@ -133,6 +154,7 @@ async fn serve(
     cli: cli::Cli,
     auth: Option<Auth>,
     topology: Topology,
+    listener: Option<tokio::net::TcpListener>,
     shutdown: impl Future<Output = ()> + Send + 'static,
 ) -> anyhow::Result<()> {
     tracing::info!(
@@ -157,7 +179,10 @@ async fn serve(
         builder = builder.tls(tls);
     }
 
-    let listener = args.listen().await?;
+    let listener = match listener {
+        Some(listener) => listener.into(),
+        None => args.listen().await?,
+    };
     #[cfg(feature = "mdns")]
     let mdns = args.mdns(&listener)?;
     builder = builder.listener(listener);
@@ -392,6 +417,31 @@ mod tests {
         })
         .await
         .expect("gateway started")
+    }
+
+    #[tokio::test]
+    async fn supplied_listener_serves_and_shuts_down() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        // The URL's port differs from the listener: the runner must use the latter.
+        let cli = cli::try_parse_from(["gateway", "--url", "http://127.0.0.1:0/sovd"]).unwrap();
+        let (stop, stopped) = oneshot::channel();
+        let task = tokio::spawn(run_with_listener(
+            cli,
+            Topology::default(),
+            listener,
+            async {
+                let _ = stopped.await;
+            },
+        ));
+        let response = get(address, None).await;
+        assert!(response.starts_with("HTTP/1.1 200"), "{response}");
+        stop.send(()).unwrap();
+        tokio::time::timeout(Duration::from_secs(5), task)
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
     }
 
     #[tokio::test]

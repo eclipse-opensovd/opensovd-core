@@ -7,7 +7,7 @@ use http::Uri;
 use http::uri::Authority;
 use opensovd_server::Listener;
 
-const DEFAULT_URL: &str = "http://localhost:7690/sovd";
+const DEFAULT_URL: &str = "http://127.0.0.1:7690/sovd";
 
 /// The `--url` and `--unix-socket` options.
 #[derive(Args)]

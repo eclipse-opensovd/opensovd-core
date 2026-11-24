@@ -341,6 +341,21 @@ fn same_url(a: &Endpoint, b: &Endpoint) -> bool {
 mod tests {
     use super::*;
 
+    #[test]
+    fn default_url_uses_ipv4_loopback() {
+        use clap::CommandFactory;
+
+        let command = Cli::command();
+        let url = command
+            .get_arguments()
+            .find(|arg| arg.get_id() == "url")
+            .unwrap();
+        assert_eq!(
+            url.get_default_values().first().and_then(|v| v.to_str()),
+            Some("http://127.0.0.1:7690/sovd")
+        );
+    }
+
     fn urls(urls: &[&str]) -> anyhow::Result<Vec<Endpoint>> {
         let urls: Vec<_> = urls.iter().map(ToString::to_string).collect();
         upstream_urls(&urls)

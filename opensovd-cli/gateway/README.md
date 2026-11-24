@@ -19,7 +19,7 @@ Exposes [OpenSOVD](https://github.com/eclipse-opensovd/opensovd-core) diagnostic
 ## Usage
 
 ```bash
-# Listen on localhost:7690 (default)
+# Listen on 127.0.0.1:7690 (default)
 opensovd-gateway
 
 # Listen on all interfaces
@@ -50,7 +50,7 @@ Mock data comes from the shared `opensovd-mocks` crate used across examples and 
 
 | Option          | Description                                          |
 |-----------------|------------------------------------------------------|
-| `--url`         | Server URL with base URI path (default: `http://localhost:7690/sovd`) |
+| `--url`         | Server URL with base URI path (default: `http://127.0.0.1:7690/sovd`) |
 | `--unix-socket` | Unix socket path (`@` prefix for abstract sockets)   |
 | `--mock`        | Enable mock entities for testing                     |
 | `--serve-dir`   | Serve static files (`PATH:DIRECTORY`)                |
