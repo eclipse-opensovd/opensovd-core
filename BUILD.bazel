@@ -48,3 +48,78 @@ alias(
     name = "opensovd-mdns",
     actual = "//opensovd-extra:opensovd_extra_mdns",
 )
+
+alias(
+    name = "opensovd-server",
+    actual = "//opensovd-server:opensovd_server",
+)
+
+alias(
+    name = "opensovd-client",
+    actual = "//opensovd-client:opensovd_client",
+)
+
+alias(
+    name = "tokio",
+    actual = "@crate_index//:tokio",
+)
+
+alias(
+    name = "tracing",
+    actual = "@crate_index//:tracing",
+)
+
+alias(
+    name = "tracing-subscriber",
+    actual = "@crate_index//:tracing-subscriber",
+)
+
+alias(
+    name = "async-trait",
+    actual = "@crate_index//:async-trait",
+)
+
+alias(
+    name = "serde_json",
+    actual = "@crate_index//:serde_json",
+)
+
+alias(
+    name = "axum",
+    actual = "@crate_index//:axum",
+)
+
+alias(
+    name = "opensovd-extra",
+    actual = "//opensovd-extra:opensovd_extra",
+)
+
+alias(
+    name = "bytes",
+    actual = "@crate_index//:bytes",
+)
+
+alias(
+    name = "http",
+    actual = "@crate_index//:http",
+)
+
+alias(
+    name = "http-body-util",
+    actual = "@crate_index//:http-body-util",
+)
+
+alias(
+    name = "hyper-util",
+    actual = "@crate_index//:hyper-util",
+)
+
+alias(
+    name = "tower",
+    actual = "@crate_index//:tower",
+)
+
+alias(
+    name = "jsonwebtoken",
+    actual = "@crate_index//:jsonwebtoken",
+)
