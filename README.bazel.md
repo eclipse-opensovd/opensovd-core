@@ -125,6 +125,16 @@ can construct a topology using `@opensovd_core//:opensovd-core`,
 `@opensovd_core//:opensovd-models` and `@opensovd_core//:opensovd-providers`.
 They must provide compatible Rust and C/C++ toolchains.
 
+The root package also exposes `opensovd-client`, `opensovd-server`, and
+`opensovd-extra`, plus shared third-party crates such as `tokio`, `axum`, and
+`jsonwebtoken`, as public aliases. Using the same targets preserves compatible
+Rust crate identities when exchanging types with the gateway.
+
+For race-free listener setup, `run_with_listener` takes a bound TCP listener
+and a shutdown future. It uses the supplied listener instead of binding from
+the URL, using a Unix socket, or using systemd socket activation. The default
+URL is `http://127.0.0.1:7690/sovd`; set `--url` or `SOVD_URL` to override it.
+
 ## Reusable HTTP Upstream Proxy
 
 The gateway's HTTP proxy is exported as `opensovd_extra::UpstreamProxy`. Cargo
@@ -163,9 +173,9 @@ The equivalent package target is
 `@opensovd_core//opensovd-extra:opensovd_extra_http_proxy`. Its Rust crate name is
 `opensovd_extra`; it enables only `federation` and `http-proxy`, not authentication,
 TLS, or tracing middleware. No visibility patches are needed for this target;
-the workspace's full-featured extra target and unrelated internal targets remain
-private. Consumers still provide their own compatible Rust toolchain and any
-other libraries they use directly.
+the workspace's full-featured extra target is also available as
+`@opensovd_core//:opensovd-extra`. Consumers still provide their own compatible
+Rust toolchain and any other libraries they use directly.
 
 Proxy regression tests and a downstream-style federation usage test run with:
 
