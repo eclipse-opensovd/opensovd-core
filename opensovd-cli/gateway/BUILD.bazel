@@ -6,9 +6,31 @@ package(default_visibility = ["//:workspace_crates"])
 
 exports_files(["Cargo.toml"])
 
+# Downstream builds can replace this empty file with their own declared build
+# metadata without relying on Git being available inside the build sandbox.
+genrule(
+    name = "empty_build_stamp",
+    outs = ["empty_build_stamp.env"],
+    cmd = "touch $@",
+)
+
+label_flag(
+    name = "build_stamp",
+    build_setting_default = ":empty_build_stamp",
+    visibility = ["//visibility:public"],
+)
+
+# Fixture for tests/build_stamp_test.sh.
+genrule(
+    name = "test_build_stamp",
+    outs = ["test_build_stamp.env"],
+    cmd = "printf '%s\\n' 'OPENSOVD_COMMIT_SHA=0123456789abcdef0123456789abcdef01234567' 'SOURCE_DATE_EPOCH=1704067200' > $@",
+)
+
 workspace_cargo_build_script(
     name = "build_script_build",
     srcs = ["build.rs"],
+    build_script_env_files = [":build_stamp"],
     crate_name = "build_script_build",
     crate_root = "build.rs",
     pkg_name = "opensovd-gateway",
