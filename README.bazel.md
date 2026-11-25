@@ -111,6 +111,35 @@ The root `BUILD.bazel` exposes `//:opensovd-gateway` as the public executable.
 bazel build //:opensovd-gateway
 ```
 
+### Reproducible gateway build metadata
+
+The gateway build script normally falls back to Git for its revision and date.
+Git metadata is often unavailable in Bazel sandboxes, especially when this
+repository is an external dependency. To supply reproducible metadata, define a
+target that produces one environment file with `KEY=VALUE` lines, for example:
+
+```text
+OPENSOVD_COMMIT_SHA=f61eeeb4133e5c5a7c3541861489f12e306e4ee4
+SOURCE_DATE_EPOCH=1704067200
+```
+
+Then point the public build setting at that target (which must be visible to
+OpenSOVD):
+
+```bash
+bazel build //:my-gateway \
+  --@opensovd_core//opensovd-cli/gateway:build_stamp=//my-package:stamp_env
+```
+
+The file is a declared build input. Changing it causes the build script to run
+again. The default is an empty file, preserving the existing fallback behavior.
+`SOURCE_DATE_EPOCH` is a Unix timestamp in seconds; it determines the UTC build
+date. The caller is responsible for matching the revision and timestamp to the
+OpenSOVD source being built.
+
+Run the build-stamp regression check from the workspace root with
+`bash opensovd-cli/gateway/tests/build_stamp_test.sh`.
+
 For an application with its own in-process providers, the public Rust library
 `@opensovd_core//:opensovd-gateway-lib` exposes the same gateway runner as the
 binary. Construct a topology, parse gateway options with
