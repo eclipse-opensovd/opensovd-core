@@ -253,8 +253,7 @@ impl Backend {
                     let token = request
                         .headers()
                         .get("authorization")
-                        .map(|token| token.to_str().unwrap().to_owned())
-                        .unwrap_or_default();
+                        .map_or(String::new(), |token| token.to_str().unwrap().to_owned());
                     let length = request
                         .headers()
                         .get("content-length")
