@@ -314,8 +314,7 @@ mod tests {
             let message = fields
                 .into_iter()
                 .find(|(field, _)| *field == "message")
-                .map(|(_, value)| value)
-                .unwrap_or_default();
+                .map_or_default(|(_, value)| value);
             let metadata = event.metadata();
             let logged = (*metadata.level(), metadata.target(), message);
             self.events.lock().unwrap().push(logged);
