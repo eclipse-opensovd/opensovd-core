@@ -4,6 +4,9 @@ module(
     bazel_compatibility = [">=8.6.0"],
 )
 
+# The crate extension's generated repositories resolve these through this module.
+bazel_dep(name = "bazel_skylib", version = "1.8.2")
+bazel_dep(name = "rules_cc", version = "0.2.9")
 bazel_dep(name = "rules_rust", version = "0.70.0")
 git_override(
     module_name = "rules_rust",
@@ -28,9 +31,8 @@ register_toolchains(
 )
 
 opensovd_crate_universe = use_extension(
-    "@rules_rust//crate_universe:extensions.bzl",
+    "//bazel:crate_extension.bzl",
     "crate",
-    isolate = True,
 )
 opensovd_crate_universe.from_cargo(
     name = "crate_index",
