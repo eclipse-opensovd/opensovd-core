@@ -963,6 +963,6 @@ mod tests {
             .status()
             .ok()
             .and_then(|rx| rx.recv_timeout(Duration::from_millis(500)).ok());
-        assert_ne!(status, Some(mdns_sd::DaemonStatus::Running));
+        assert!(!matches!(status, Some(mdns_sd::DaemonStatus::Running(_))));
     }
 }
