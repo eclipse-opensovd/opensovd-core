@@ -35,3 +35,6 @@ jobs:
 
       - name: Query Bazel targets
         run: bazel query //...
+
+      - name: Check downstream crate universe
+        run: python3 tests/bazel_consumer_test.py
