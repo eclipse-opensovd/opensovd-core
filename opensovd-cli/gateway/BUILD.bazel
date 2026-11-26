@@ -30,10 +30,12 @@ genrule(
 workspace_cargo_build_script(
     name = "build_script_build",
     srcs = ["build.rs"],
+    build_script_env = {"OPENSOVD_BAZEL_BUILD": "1"},
     build_script_env_files = [":build_stamp"],
     crate_name = "build_script_build",
     crate_root = "build.rs",
     pkg_name = "opensovd-gateway",
+    use_default_shell_env = True,
     version = "0.1.1",
     deps = ["//opensovd-cli/build:libcli_build"],
 )

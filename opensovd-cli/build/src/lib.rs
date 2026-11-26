@@ -99,6 +99,11 @@ fn emit_build_date() {
 
 /// Runs git in the crate being built, returning trimmed stdout on success.
 fn git<const N: usize>(args: [&str; N]) -> Option<String> {
+    // A Bazel action has no trustworthy Git checkout: in an external
+    // repository, Git could even walk up to the consuming workspace instead.
+    if std::env::var_os("OPENSOVD_BAZEL_BUILD").is_some() {
+        return None;
+    }
     Command::new("git")
         .args(args)
         .output()
@@ -114,7 +119,8 @@ fn git<const N: usize>(args: [&str; N]) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::channel_suffix;
+    use super::{channel_suffix, git};
+    use std::process::Command;
 
     #[test]
     fn stable_is_the_only_unsuffixed_channel() {
@@ -127,5 +133,26 @@ mod tests {
     #[should_panic(expected = "unknown OPENSOVD_CHANNEL")]
     fn unknown_channel_fails_the_build() {
         let _ = channel_suffix("beta");
+    }
+
+    #[test]
+    fn bazel_build_never_uses_git() {
+        const CHILD: &str = "OPENSOVD_GIT_TEST_CHILD";
+        if std::env::var_os(CHILD).is_some() {
+            assert!(git(["--version"]).is_none());
+            return;
+        }
+
+        // A missing Git installation is supported by Cargo builds too.
+        if Command::new("git").arg("--version").output().is_err() {
+            return;
+        }
+        let status = Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", "tests::bazel_build_never_uses_git"])
+            .env(CHILD, "1")
+            .env("OPENSOVD_BAZEL_BUILD", "1")
+            .status()
+            .unwrap();
+        assert!(status.success());
     }
 }
