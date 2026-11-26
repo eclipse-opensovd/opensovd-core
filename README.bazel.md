@@ -18,6 +18,44 @@ bazel query //...
 and proxy tests are described below. For Cargo tests, see the
 [Testing guide](docs/testing.md).
 
+## Gateway version provenance
+
+Bazel does not supply the OpenSOVD source revision to build scripts. The
+gateway therefore reports `unknown` for the revision and date unless they are
+explicitly supplied as action inputs. It never searches for a Git checkout
+from a Bazel action: the enclosing checkout may belong to a downstream project.
+Each field is resolved independently. Cargo builds retain their Git fallback
+when the corresponding environment value is unavailable.
+
+For a clean standalone checkout, pass the full commit and its commit time:
+
+```bash
+test -z "$(git status --porcelain)" || { echo "dirty checkout" >&2; exit 1; }
+sha=$(git rev-parse HEAD)
+epoch=$(git show -s --format=%ct "$sha")
+bazel build //:opensovd-gateway \
+  --action_env="OPENSOVD_COMMIT_SHA=$sha" \
+  --action_env="SOURCE_DATE_EPOCH=$epoch"
+```
+
+For a downstream build, determine these values from the **resolved OpenSOVD
+source**, not the downstream checkout. For a `git_override` pinned by commit,
+`bazel mod show_repo opensovd_core --output=streamed_jsonproto` exposes the
+resolved repository rule and commit. Look up that commit's timestamp in a
+verified clone of the same upstream repository, then pass both values using
+the same explicit `--action_env=NAME=value` options to the build of
+`@opensovd_core//:opensovd-gateway`. Confirm the override has no patches or
+other source modifications before treating the commit as the exact source.
+
+Archive and local overrides do not necessarily contain Git provenance; their
+supplier must provide and verify it separately. The build cannot verify that
+caller-supplied values match the sources. Do not supply guessed values; leave
+them unset if provenance is unavailable. `SOURCE_DATE_EPOCH` is rendered as
+a UTC calendar date. Supplying values explicitly makes them part of Bazel's
+action configuration; changing them invalidates the relevant action cache.
+Alternatively, use the declared build-stamp file described under
+[Reproducible gateway build metadata](#reproducible-gateway-build-metadata).
+
 ## Build Configuration
 
 - Bazel 8.6.0, pinned through `.bazelversion`.
@@ -72,10 +110,9 @@ bazel build //:opensovd-gateway
 
 ### Reproducible gateway build metadata
 
-The gateway build script normally falls back to Git for its revision and date.
-Git metadata is often unavailable in Bazel sandboxes, especially when this
-repository is an external dependency. To supply reproducible metadata, define a
-target that produces one environment file with `KEY=VALUE` lines, for example:
+To supply reproducible metadata as a declared input instead of using
+`--action_env`, define a target that produces one environment file with
+`KEY=VALUE` lines, for example:
 
 ```text
 OPENSOVD_COMMIT_SHA=f61eeeb4133e5c5a7c3541861489f12e306e4ee4
@@ -91,7 +128,8 @@ bazel build //:my-gateway \
 ```
 
 The file is a declared build input. Changing it causes the build script to run
-again. The default is an empty file, preserving the existing fallback behavior.
+again. The default is an empty file; without action-environment values, both
+the revision and date are `unknown`, not derived from Git.
 `SOURCE_DATE_EPOCH` is a Unix timestamp in seconds; it determines the UTC build
 date. The caller is responsible for matching the revision and timestamp to the
 OpenSOVD source being built.
