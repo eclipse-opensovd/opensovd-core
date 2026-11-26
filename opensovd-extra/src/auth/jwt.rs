@@ -469,7 +469,7 @@ mod tests {
     fn hmac_token_naming_a_public_key_is_rejected() {
         let mut header = Header::new(Algorithm::HS256);
         header.kid = Some(RSA.kid.to_owned());
-        let secret = EncodingKey::from_secret(b"guessed");
+        let secret = EncodingKey::from_secret(b"guessed").unwrap();
         let token = encode(&header, &valid_claims(), &secret).unwrap();
         assert_invalid(&authenticator().authenticate(&bearer(&token)));
     }
@@ -495,7 +495,7 @@ mod tests {
 
     #[test]
     fn symmetric_key_is_refused() {
-        let secret = EncodingKey::from_secret(b"shared");
+        let secret = EncodingKey::from_secret(b"shared").unwrap();
         let mut jwk = Jwk::from_encoding_key(&secret, Algorithm::HS256).unwrap();
         jwk.common.key_id = Some("hmac".to_owned());
         assert!(load_error(&[RSA.jwk(), jwk.clone()]).contains("symmetric"));
