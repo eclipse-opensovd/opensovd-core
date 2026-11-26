@@ -119,8 +119,9 @@ fn git<const N: usize>(args: [&str; N]) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{channel_suffix, git};
     use std::process::Command;
+
+    use super::{channel_suffix, git};
 
     #[test]
     fn stable_is_the_only_unsuffixed_channel() {
