@@ -125,6 +125,9 @@ jobs:
         run: mise run build ${{ matrix.binary }}
 
       - if: ${{ !matrix.target.coverage && contains(matrix.target.tests, 'unit') }}
+        env:
+          # The macOS runners deliver no multicast, which the mDNS tests need.
+          OPENSOVD_SKIP_MULTICAST_TESTS: ${{ runner.os == 'macOS' && '1' || '' }}
         run: mise run test:unit ${{ matrix.binary }}
 
       - if: contains(matrix.target.tests, 'integration')

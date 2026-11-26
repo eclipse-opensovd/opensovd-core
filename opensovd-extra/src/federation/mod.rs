@@ -19,8 +19,8 @@
 //! answer. Functional locks stay with the upstream of the function.
 //!
 //! The upstream receives the request with its URI relative to the API version,
-//! such as `/components/ecu/faults?status=x`, and with the method, headers and
-//! body unchanged, and with the [`ServerUri`] extension. The response is what
+//! such as `/components/ecu/faults?status=x`, and with the method, end-to-end
+//! headers and body, and with the [`ServerUri`] extension. The response is what
 //! the upstream service answers, which is not verbatim what a remote server
 //! sent: a proxy such as the gateway's replaces the server's references to
 //! itself with the [`ServerUri`].
@@ -35,11 +35,20 @@
 //! are forwarded, and keeps what the server advertises itself. What is left of
 //! that answer describes the upstream. The combining stops at these links: a
 //! collection has one answer, not the items of both.
+//!
+//! Upstreams found at runtime, such as SOVD servers announced via mDNS, join
+//! with [`Federation::add_discovered`] and leave with
+//! [`Federation::remove_discovered`]. They serve their entities only. Requests
+//! to them carry the [`DISCOVERED_HOP`] header, and a request with it is not
+//! sent on to discovered upstreams, so that servers which discover each other
+//! do not forward a request in a loop. They get no `Authorization` header
+//! unless [`Federation::forward_authorization_to_discovered`] allows it.
 
 use std::collections::{BTreeSet, HashMap};
 use std::convert::Infallible;
 use std::error::Error as StdError;
 use std::mem;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::task::{Context, Poll};
 use std::time::Duration;
@@ -48,8 +57,9 @@ use axum::response::IntoResponse;
 use bytes::Bytes;
 use futures::future::{BoxFuture, join_all};
 use http::header::{
-    AUTHORIZATION, CONTENT_ENCODING, CONTENT_LENGTH, CONTENT_TYPE, HeaderMap, IF_MATCH,
-    IF_MODIFIED_SINCE, IF_NONE_MATCH, IF_RANGE, IF_UNMODIFIED_SINCE, RANGE, TRANSFER_ENCODING,
+    self, AUTHORIZATION, CONTENT_ENCODING, CONTENT_LENGTH, CONTENT_TYPE, HeaderMap, HeaderName,
+    IF_MATCH, IF_MODIFIED_SINCE, IF_NONE_MATCH, IF_RANGE, IF_UNMODIFIED_SINCE, RANGE,
+    TRANSFER_ENCODING,
 };
 use http::request::Parts;
 use http::{Extensions, Method, StatusCode, Uri};
@@ -123,6 +133,37 @@ const LOCKS: &str = "locks";
 
 /// The collection of updates.
 const UPDATES: &str = "updates";
+
+/// The header of a request that a server sends to an upstream it discovered.
+/// A server does not send a request with it on to the upstreams it
+/// discovered itself, as these may include the sender.
+pub const DISCOVERED_HOP: &str = "x-opensovd-discovered-hop";
+
+/// Headers that apply to a single connection, which must not be forwarded.
+const HOP_BY_HOP: [HeaderName; 8] = [
+    header::CONNECTION,
+    HeaderName::from_static("keep-alive"),
+    header::PROXY_AUTHENTICATE,
+    header::PROXY_AUTHORIZATION,
+    header::TE,
+    header::TRAILER,
+    TRANSFER_ENCODING,
+    header::UPGRADE,
+];
+
+/// Drops hop-by-hop headers and those named by the `Connection` header.
+pub(crate) fn strip_hop_by_hop_headers(headers: &mut HeaderMap) {
+    let named: Vec<HeaderName> = headers
+        .get_all(header::CONNECTION)
+        .iter()
+        .filter_map(|value| value.to_str().ok())
+        .flat_map(|value| value.split(','))
+        .filter_map(|name| HeaderName::try_from(name.trim()).ok())
+        .collect();
+    for name in HOP_BY_HOP.iter().chain(&named) {
+        headers.remove(name);
+    }
+}
 
 /// The resources of the `SOVDServer` that are not plain
 /// [`COLLECTIONS`], and how each is handled. This is the one place that names
@@ -226,6 +267,13 @@ pub struct Upstream {
     routes: Arc<[ForwardRoute]>,
     /// How long this upstream gets to answer a discovery request.
     discovery_timeout: Duration,
+    /// The name of an upstream found at runtime, see
+    /// [`Federation::add_discovered`].
+    discovered: Option<Arc<str>>,
+    /// Whether the requests to a discovered upstream carry the client's
+    /// `Authorization` header, see
+    /// [`Federation::forward_authorization_to_discovered`].
+    forwards_authorization: bool,
 }
 
 impl Upstream {
@@ -246,6 +294,8 @@ impl Upstream {
             service: BoxCloneSyncService::new(svc),
             routes: ForwardRoute::ALL.into(),
             discovery_timeout: DISCOVERY_TIMEOUT,
+            discovered: None,
+            forwards_authorization: true,
         }
     }
 
@@ -290,6 +340,24 @@ impl Upstream {
         if let Some(api) = server {
             parts.extensions.insert(ServerUri(api.server_uri));
         }
+        // A client may name the marker in Connection. Remove connection-scoped
+        // headers before restoring the marker or adding our own, so the proxy
+        // cannot strip it on the next hop.
+        let hop = parts.headers.get(DISCOVERED_HOP).cloned();
+        strip_hop_by_hop_headers(&mut parts.headers);
+        if let Some(hop) = hop {
+            parts.headers.insert(DISCOVERED_HOP, hop);
+        }
+        if self.discovered.is_some() {
+            parts
+                .headers
+                .insert(DISCOVERED_HOP, http::HeaderValue::from_static("1"));
+            // Any server on the network can announce itself, so it gets no
+            // token unless the federation allows it.
+            if !self.forwards_authorization {
+                parts.headers.remove(AUTHORIZATION);
+            }
+        }
         parts.uri = uri;
         let request = Request::from_parts(parts, body);
         match self.service.clone().oneshot(request).await {
@@ -307,6 +375,11 @@ impl Upstream {
         own.headers = HeaderMap::new();
         if let Some(token) = parts.headers.get(AUTHORIZATION) {
             own.headers.insert(AUTHORIZATION, token.clone());
+        }
+        // The look is part of the request that carries the marker, so it
+        // may not start discovery forwarding again.
+        if let Some(hop) = parts.headers.get(DISCOVERED_HOP) {
+            own.headers.insert(DISCOVERED_HOP, hop.clone());
         }
         self.send_to(own, empty_body(), uri).await
     }
@@ -380,6 +453,10 @@ impl Upstream {
     /// Whether a client that follows the upstream's link to the resource
     /// collection `name` of its `/` reaches the upstream.
     fn forwards_capability(&self, name: &str) -> bool {
+        // A discovered upstream serves components and apps only.
+        if self.discovered.is_some() && name == AREAS {
+            return false;
+        }
         let rule = RESOURCES.iter().find(|(resource, _)| *resource == name);
         match rule {
             Some((_, rule)) => rule.route().is_some_and(|route| self.includes(route)),
@@ -414,13 +491,20 @@ impl Upstream {
 /// an upstream before its owner refuses the client or fails, see
 /// [`Upstream::discovery_timeout`].
 pub struct Federation {
-    upstreams: Vec<Upstream>,
+    /// The configured upstreams, then those discovered at runtime. A change
+    /// replaces the list, so that a request takes it as it is without a copy.
+    upstreams: RwLock<Arc<[Upstream]>>,
     /// What the server holds, which stays with the server.
     topology: Topology,
     /// The upstream that answered for an entity, by its path, such as
     /// `components/ecu`. It saves asking again, and is no source of truth: an
     /// entry that turns out wrong is dropped.
     owners: RwLock<HashMap<String, Upstream>>,
+    /// Counts the changes of the discovered upstreams, so that a look that
+    /// began before a change does not remember its owner after it.
+    generation: AtomicU64,
+    /// Whether the requests to discovered upstreams carry the client's token.
+    forward_authorization: bool,
 }
 
 /// Where a request goes.
@@ -459,11 +543,23 @@ impl Federation {
         match contested {
             Some(route) => Err(SharedForwardRoute(route)),
             None => Ok(Self {
-                upstreams,
+                upstreams: RwLock::new(upstreams.into()),
                 topology,
                 owners: RwLock::default(),
+                generation: AtomicU64::new(0),
+                forward_authorization: false,
             }),
         }
+    }
+
+    /// Sends the client's `Authorization` header to the upstreams found at
+    /// runtime as well if `forward` is set. By default they do not get it, as
+    /// any server on the network can announce itself and would learn the
+    /// token. The configured upstreams always get it.
+    #[must_use]
+    pub fn forward_authorization_to_discovered(mut self, forward: bool) -> Self {
+        self.forward_authorization = forward;
+        self
     }
 
     /// The federation as a layer around the routes of the server.
@@ -472,29 +568,122 @@ impl Federation {
         FederationLayer(Arc::new(self))
     }
 
-    /// Whether the requests of `route` go upstream.
-    fn includes(&self, route: ForwardRoute) -> bool {
-        self.owner(route).is_some()
+    /// Adds `upstream`, found at runtime under `name`, such as the DNS-SD
+    /// instance name of a server announced via mDNS, after the upstreams
+    /// there are. It serves its entities only, as the other routes have one
+    /// upstream, which has to stay the same. An upstream of the same name is
+    /// replaced in its place, such as one that moved to another address.
+    ///
+    /// Its requests carry the [`DISCOVERED_HOP`] header, and the client's
+    /// token only as [`Self::forward_authorization_to_discovered`] allows.
+    pub fn add_discovered(&self, name: &str, upstream: Upstream) {
+        let upstream = Upstream {
+            routes: [ForwardRoute::Entities].into(),
+            discovered: Some(name.into()),
+            forwards_authorization: self.forward_authorization,
+            ..upstream
+        };
+        let mut upstreams = self.upstreams_mut();
+        let mut list = upstreams.to_vec();
+        match list
+            .iter_mut()
+            .find(|known| known.discovered.as_deref() == Some(name))
+        {
+            Some(known) => *known = upstream,
+            None => list.push(upstream),
+        }
+        *upstreams = list.into();
+        self.forget_owners_of(name);
+    }
+
+    /// Removes the upstream found at runtime under `name`, such as a server
+    /// that withdrew its mDNS announcement.
+    ///
+    /// Returns whether there was one.
+    pub fn remove_discovered(&self, name: &str) -> bool {
+        let mut upstreams = self.upstreams_mut();
+        let list: Vec<_> = upstreams
+            .iter()
+            .filter(|known| known.discovered.as_deref() != Some(name))
+            .cloned()
+            .collect();
+        let removed = list.len() != upstreams.len();
+        if removed {
+            *upstreams = list.into();
+        }
+        self.forget_owners_of(name);
+        removed
+    }
+
+    /// Forgets the entities that the discovered upstream `name` answered for.
+    /// The caller holds the upstreams write lock through this operation.
+    fn forget_owners_of(&self, name: &str) {
+        // Before the owners are locked, so that a look that holds the lock
+        // either still stores its owner, and loses it here, or sees the change.
+        self.generation.fetch_add(1, Ordering::SeqCst);
+        self.owners_mut()
+            .retain(|_, owner| owner.discovered.as_deref() != Some(name));
+    }
+
+    // A panic cannot leave the list in a state worse than a missing upstream,
+    // so what it left is used.
+    fn upstreams_mut(&self) -> RwLockWriteGuard<'_, Arc<[Upstream]>> {
+        self.upstreams
+            .write()
+            .unwrap_or_else(PoisonError::into_inner)
+    }
+
+    /// All upstreams as they are now, the configured ones first.
+    fn all_upstreams(&self) -> Arc<[Upstream]> {
+        let upstreams = self
+            .upstreams
+            .read()
+            .unwrap_or_else(PoisonError::into_inner);
+        Arc::clone(&upstreams)
     }
 
     /// The first upstream of `route`, the only one but for entities.
-    fn owner(&self, route: ForwardRoute) -> Option<&Upstream> {
-        self.upstreams.iter().find(|u| u.includes(route))
+    fn owner(&self, route: ForwardRoute) -> Option<Upstream> {
+        self.all_upstreams()
+            .iter()
+            .find(|u| u.includes(route))
+            .cloned()
     }
 
-    /// All upstreams, in the order that decides between equal entity ids.
-    fn upstreams(&self) -> impl Iterator<Item = &Upstream> {
-        self.upstreams.iter()
+    /// The first configured upstream of `route`: discovered ones serve
+    /// the components and apps of their entities only, not the areas.
+    fn configured_owner(&self, route: ForwardRoute) -> Option<Upstream> {
+        self.all_upstreams()
+            .iter()
+            .find(|upstream| upstream.discovered.is_none() && upstream.includes(route))
+            .cloned()
     }
 
-    fn entity_upstreams(&self) -> impl Iterator<Item = &Upstream> {
-        self.upstreams()
-            .filter(|upstream| upstream.includes(ForwardRoute::Entities))
+    /// Of `all`, the upstreams for the request of `parts`, in the order that
+    /// decides between equal entity ids. A request from a discovered
+    /// upstream's server does not go on to discovered upstreams, see
+    /// [`DISCOVERED_HOP`].
+    fn upstreams<'a>(all: &'a [Upstream], parts: &Parts) -> Vec<&'a Upstream> {
+        let hop = parts.headers.contains_key(DISCOVERED_HOP);
+        all.iter()
+            .filter(|upstream| !hop || upstream.discovered.is_none())
+            .collect()
     }
 
-    fn lock_upstreams(&self) -> impl Iterator<Item = &Upstream> {
-        self.upstreams()
+    /// Of `all`, the upstreams of entities for the request of `parts`.
+    fn entity_upstreams<'a>(all: &'a [Upstream], parts: &Parts) -> Vec<&'a Upstream> {
+        let mut upstreams = Self::upstreams(all, parts);
+        upstreams.retain(|upstream| upstream.includes(ForwardRoute::Entities));
+        upstreams
+    }
+
+    /// The upstreams of vehicle locks, which are all configured ones.
+    fn lock_upstreams(&self) -> Vec<Upstream> {
+        self.all_upstreams()
+            .iter()
             .filter(|upstream| upstream.includes(ForwardRoute::Locks))
+            .cloned()
+            .collect()
     }
 
     // A panic cannot leave the owners in a state a client depends on, as
@@ -510,7 +699,7 @@ impl Federation {
     /// Where a request goes that names an entity the server does not hold,
     /// `id` as it stands in the path, for the client of `parts`.
     ///
-    /// A single upstream takes it without asking. Of several, entities come
+    /// A single configured upstream takes it without asking. Otherwise, entities come
     /// and go at runtime, and only a look tells whose it is, one that is safe
     /// for any request. The first upstream in order that has the entity owns
     /// it, so a later one only does if every one before it answered that it
@@ -518,14 +707,35 @@ impl Federation {
     /// same entity for every client. An upstream before it that does not let
     /// the client look may have the entity, and answers for itself; one that
     /// failed, or did not answer in time, may have it as well, so its failure
-    /// is the answer. The owner is remembered for all clients.
+    /// is the answer. A discovered upstream is the exception: any server on
+    /// the network may announce itself, and get no token, so it owns only
+    /// what it answers with success for. Configured owners are remembered for
+    /// all clients; discovered owners are checked on each request.
     async fn find_owner(&self, parts: &Parts, collection: &str, id: &str) -> Destination {
-        let candidates: Vec<_> = self.entity_upstreams().cloned().collect();
-        if let [only] = candidates.as_slice() {
-            return Destination::Upstream(only.clone());
-        }
         let key = format!("{collection}/{id}");
-        if let Some(owner) = self.owners().get(&key).cloned() {
+        // Take the list and cached owner together with respect to registration
+        // changes, which update both while holding the upstreams write lock.
+        let (generation, all, remembered) = {
+            let upstreams = self
+                .upstreams
+                .read()
+                .unwrap_or_else(PoisonError::into_inner);
+            let generation = self.generation.load(Ordering::SeqCst);
+            // Discovered owners need a fresh ordered lookup for every request.
+            let remembered = self
+                .owners()
+                .get(&key)
+                .filter(|owner| owner.discovered.is_none())
+                .cloned();
+            (generation, Arc::clone(&upstreams), remembered)
+        };
+        let candidates = Self::entity_upstreams(&all, parts);
+        if let [only] = candidates.as_slice()
+            && only.discovered.is_none()
+        {
+            return Destination::Upstream((*only).clone());
+        }
+        if let Some(owner) = remembered {
             return Destination::Owner(owner, key);
         }
         let Ok(uri) = format!("/{key}").parse::<Uri>() else {
@@ -537,14 +747,28 @@ impl Federation {
         for (upstream, answer) in candidates.into_iter().zip(answers) {
             let status = answer.status();
             if status.is_success() {
-                self.owners_mut().insert(key, upstream.clone());
-                return Destination::Upstream(upstream);
+                let mut owners = self.owners_mut();
+                // Not if upstreams changed during the look: it may have
+                // asked one that is gone.
+                if upstream.discovered.is_none()
+                    && self.generation.load(Ordering::SeqCst) == generation
+                {
+                    owners.insert(key, upstream.clone());
+                }
+                drop(owners);
+                return Destination::Upstream(upstream.clone());
+            }
+            // A discovered upstream may be any server on the network, which
+            // may get no token, so only its success claims the entity: its
+            // refusal or failure does not keep the others from having it.
+            if upstream.discovered.is_some() {
+                continue;
             }
             if status.is_server_error() {
                 return Destination::Answer(answer);
             }
             if status != StatusCode::NOT_FOUND {
-                return Destination::Upstream(upstream);
+                return Destination::Upstream(upstream.clone());
             }
         }
         Destination::Routes
@@ -561,23 +785,25 @@ impl Federation {
             return Destination::Routes;
         };
         let topology = &self.topology;
-        let entities = self.entity_upstreams().next().is_some();
+        let all = self.all_upstreams();
+        let entities = !Self::entity_upstreams(&all, parts).is_empty();
         let to_owner = |route| {
             self.owner(route)
-                .map_or(Destination::Routes, |u| Destination::Upstream(u.clone()))
+                .map_or(Destination::Routes, Destination::Upstream)
         };
         match rule {
             Rule::Route(ForwardRoute::Locks) => {
-                if self.lock_upstreams().next().is_some() {
+                let locks = all.iter().any(|u| u.includes(ForwardRoute::Locks));
+                if locks {
                     Destination::Locks
                 } else {
                     Destination::Routes
                 }
             }
             Rule::Route(route) => to_owner(route),
-            Rule::Areas if entities && topology.read().await.areas().len() == 0 => {
-                to_owner(ForwardRoute::Entities)
-            }
+            Rule::Areas if topology.read().await.areas().len() == 0 => self
+                .configured_owner(ForwardRoute::Entities)
+                .map_or(Destination::Routes, Destination::Upstream),
             Rule::Updates if topology.read().await.get_updates().is_none() => {
                 to_owner(ForwardRoute::Collections)
             }
@@ -737,8 +963,10 @@ impl Federation {
     /// The entities the upstreams add to the list request of `parts`, in their
     /// order, which decides between equal ids.
     async fn upstream_entities(&self, parts: &Parts) -> Vec<EntityReference> {
-        let lists = self
-            .entity_upstreams()
+        let all = self.all_upstreams();
+        let upstreams = Self::entity_upstreams(&all, parts);
+        let lists = upstreams
+            .iter()
             .map(|upstream| upstream.discovery::<Collection<Value>>(parts));
         join_all(lists)
             .await
@@ -756,13 +984,18 @@ impl Federation {
     /// The entities of upstreams are only known by asking, so `/components`
     /// and `/apps` are always among them, and `/locks` is the federation's own.
     async fn upstream_capabilities(&self, parts: &Parts) -> Vec<String> {
-        let capabilities = self
-            .upstreams()
+        let all = self.all_upstreams();
+        let upstreams = Self::upstreams(&all, parts);
+        let capabilities = upstreams
+            .iter()
             .map(|upstream| upstream.capabilities(parts));
         let mut names: Vec<_> = join_all(capabilities).await.into_iter().flatten().collect();
         for (name, rule) in RESOURCES {
             let own = matches!(rule, Rule::Entities | Rule::Route(ForwardRoute::Locks));
-            if own && rule.route().is_some_and(|route| self.includes(route)) {
+            let routed = rule
+                .route()
+                .is_some_and(|route| upstreams.iter().any(|upstream| upstream.includes(route)));
+            if own && routed {
                 names.push(name.to_owned());
             }
         }
@@ -853,6 +1086,15 @@ fn has_dot_segment(path: &str) -> bool {
 /// [`Federation`] as a layer.
 #[derive(Clone)]
 pub struct FederationLayer(Arc<Federation>);
+
+impl FederationLayer {
+    /// The federation of the layer, to add and remove upstreams found at
+    /// runtime while the server runs.
+    #[must_use]
+    pub fn federation(&self) -> &Arc<Federation> {
+        &self.0
+    }
+}
 
 impl<S> Layer<S> for FederationLayer {
     type Service = FederationService<S>;

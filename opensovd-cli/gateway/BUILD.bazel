@@ -45,6 +45,7 @@ workspace_rust_library(
         "anyhow",
         "clap",
         "http",
+        "http-body-util",
         "schemars",
         "sd-notify",
         "serde",
@@ -120,4 +121,21 @@ rust_test(
         "//:opensovd-models",
         "//:opensovd-providers",
     ] + crate_deps(["tokio"]),
+)
+
+rust_test(
+    name = "mdns_discovery_test",
+    srcs = ["tests/mdns_discovery.rs"],
+    crate_features = ["mdns"],
+    crate_name = "mdns_discovery_test",
+    edition = "2024",
+    deps = [
+        ":opensovd_gateway_lib",
+        "//:opensovd-core",
+        "//opensovd-extra:opensovd_extra",
+        "//opensovd-server:opensovd_server",
+    ] + crate_deps([
+        "anyhow",
+        "tokio",
+    ]),
 )

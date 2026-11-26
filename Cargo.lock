@@ -1795,6 +1795,7 @@ dependencies = [
  "anyhow",
  "clap",
  "http",
+ "http-body-util",
  "libcli",
  "libcli-build",
  "opensovd-core",
