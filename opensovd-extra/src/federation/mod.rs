@@ -938,8 +938,7 @@ async fn lacks_entity(owner: &Upstream, parts: &Parts, path: &str, key: &str) ->
 fn server_uri(extensions: &Extensions) -> String {
     extensions
         .get::<ApiRequest>()
-        .map(|api| api.server_uri.clone())
-        .unwrap_or_default()
+        .map_or(String::new(), |api| api.server_uri.clone())
 }
 
 /// `parts` of a request without the `tags` query parameter, for the
@@ -973,9 +972,7 @@ fn without_tags(parts: &Parts) -> Parts {
 )]
 fn tags(uri: &Uri) -> Vec<String> {
     use axum_extra::extract::Query;
-    Query::<EntitiesQuery>::try_from_uri(uri)
-        .map(|Query(query)| query.tags)
-        .unwrap_or_default()
+    Query::<EntitiesQuery>::try_from_uri(uri).map_or(Vec::new(), |Query(query)| query.tags)
 }
 
 /// `answer` with its JSON body, a `T`, changed by `change`, or as it is if its
