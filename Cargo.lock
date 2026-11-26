@@ -1187,8 +1187,20 @@ version = "0.2.46"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "175dc66334db3b9ab9985bf8b61cfed50dc16d20964bb47f9e479adcae984a7f"
 dependencies = [
- "jiff-core",
- "jiff-static",
+ "jiff-core 0.1.8",
+ "jiff-static 0.2.46",
+ "portable-atomic",
+ "portable-atomic-util",
+]
+
+[[package]]
+name = "jiff"
+version = "1.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "107f2e89536b6818514025f6787b0d94d819e54fe3b40365275fc753de485b3f"
+dependencies = [
+ "jiff-core 1.0.2",
+ "jiff-static 1.0.3",
  "log",
  "portable-atomic",
  "portable-atomic-util",
@@ -1205,15 +1217,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "jiff-core"
+version = "1.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d44c923edf2bf456a982253f1a9ee1f6e89e421dffd0065d9b9a581da0def58f"
+dependencies = [
+ "log",
+]
+
+[[package]]
 name = "jiff-static"
 version = "0.2.46"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c7b1af7547d47354bc438d797e3854601bde8f8d185780c5ba4ab27afa54f1ba"
 dependencies = [
- "jiff-core",
+ "jiff-core 0.1.8",
  "proc-macro2",
  "quote",
  "syn 2.0.117",
+]
+
+[[package]]
+name = "jiff-static"
+version = "1.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4996f71e569e3a3e32b925c28ef8f0027dc30bb1d594b33eeda409eea185f5c8"
+dependencies = [
+ "jiff-core 1.0.2",
+ "proc-macro2",
+ "quote",
+ "syn 3.0.3",
 ]
 
 [[package]]
@@ -1330,7 +1363,7 @@ checksum = "65cd87c9a6d60536580b316ad985726104730a5151c99845f2490428ef91240a"
 name = "libcli"
 version = "0.1.1"
 dependencies = [
- "jiff",
+ "jiff 1.0.3",
  "libc",
  "tokio",
  "tracing",
@@ -1341,7 +1374,7 @@ dependencies = [
 name = "libcli-build"
 version = "0.1.1"
 dependencies = [
- "jiff",
+ "jiff 1.0.3",
 ]
 
 [[package]]
@@ -1676,7 +1709,7 @@ dependencies = [
  "bytes",
  "futures-core",
  "indexmap",
- "jiff",
+ "jiff 1.0.3",
  "serde_json",
  "thiserror 2.0.21",
  "tokio",
@@ -1799,7 +1832,7 @@ dependencies = [
  "async-trait",
  "bytes",
  "futures",
- "jiff",
+ "jiff 1.0.3",
  "opensovd-core",
  "opensovd-models",
  "opensovd-providers",
@@ -1810,7 +1843,7 @@ dependencies = [
 name = "opensovd-models"
 version = "0.1.1"
 dependencies = [
- "jiff",
+ "jiff 1.0.3",
  "schemars",
  "serde",
  "serde_json",
@@ -1848,7 +1881,7 @@ dependencies = [
  "http-body-util",
  "hyper",
  "hyper-util",
- "jiff",
+ "jiff 1.0.3",
  "jsonschema",
  "libc",
  "opensovd-core",
@@ -2318,7 +2351,7 @@ checksum = "ab508826f74a77ca9d5aba6ff19b522583ee3eaf28a19384ff3d0e5835fadf6e"
 dependencies = [
  "chrono",
  "dyn-clone",
- "jiff",
+ "jiff 0.2.46",
  "ref-cast",
  "schemars_derive",
  "serde",
