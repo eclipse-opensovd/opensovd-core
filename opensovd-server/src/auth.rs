@@ -260,12 +260,8 @@ mod tests {
     }
 
     fn app(auth: Auth) -> Router {
-        let router = Router::new().route(
-            "/items/{item_id}",
-            get(|principal: Option<Principal>| async move {
-                principal.map(|p| p.subject).unwrap_or_default()
-            }),
-        );
+        let subject = async |principal: Option<Principal>| principal.map_or_default(|p| p.subject);
+        let router = Router::new().route("/items/{item_id}", get(subject));
         auth.apply(router, None)
     }
 
