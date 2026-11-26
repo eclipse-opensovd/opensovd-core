@@ -40,7 +40,7 @@ futures-core = { version = "0.3", default-features = false }
 indexmap = { version = "2", default-features = false, features = ["std"] }
 jiff = { version = "0.2", default-features = false, features = ["std"] }
 jsonschema = { version = "0.61", default-features = false }
-jsonwebtoken = { version = "11", default-features = false, features = ["aws_lc_rs", "use_pem"] }
+jsonwebtoken = { version = "12", default-features = false, features = ["aws_lc_rs", "use_pem"] }
 http = { version = "1", default-features = false, features = ["std"] }
 http-body = { version = "1", default-features = false }
 http-body-util = { version = "0.1", default-features = false }
