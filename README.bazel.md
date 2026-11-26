@@ -24,6 +24,8 @@ Bazel does not supply the OpenSOVD source revision to build scripts. The
 gateway therefore reports `unknown` for the revision and date unless they are
 explicitly supplied as action inputs. It never searches for a Git checkout
 from a Bazel action: the enclosing checkout may belong to a downstream project.
+Each field is resolved independently. Cargo builds retain their Git fallback
+when the corresponding environment value is unavailable.
 
 For a clean standalone checkout, pass the full commit and its commit time:
 
@@ -51,6 +53,8 @@ caller-supplied values match the sources. Do not supply guessed values; leave
 them unset if provenance is unavailable. `SOURCE_DATE_EPOCH` is rendered as
 a UTC calendar date. Supplying values explicitly makes them part of Bazel's
 action configuration; changing them invalidates the relevant action cache.
+Alternatively, use the declared build-stamp file described under
+[Reproducible gateway build metadata](#reproducible-gateway-build-metadata).
 
 ## Build Configuration
 
@@ -106,10 +110,9 @@ bazel build //:opensovd-gateway
 
 ### Reproducible gateway build metadata
 
-The gateway build script normally falls back to Git for its revision and date.
-Git metadata is often unavailable in Bazel sandboxes, especially when this
-repository is an external dependency. To supply reproducible metadata, define a
-target that produces one environment file with `KEY=VALUE` lines, for example:
+To supply reproducible metadata as a declared input instead of using
+`--action_env`, define a target that produces one environment file with
+`KEY=VALUE` lines, for example:
 
 ```text
 OPENSOVD_COMMIT_SHA=f61eeeb4133e5c5a7c3541861489f12e306e4ee4
@@ -125,7 +128,8 @@ bazel build //:my-gateway \
 ```
 
 The file is a declared build input. Changing it causes the build script to run
-again. The default is an empty file, preserving the existing fallback behavior.
+again. The default is an empty file; without action-environment values, both
+the revision and date are `unknown`, not derived from Git.
 `SOURCE_DATE_EPOCH` is a Unix timestamp in seconds; it determines the UTC build
 date. The caller is responsible for matching the revision and timestamp to the
 OpenSOVD source being built.
