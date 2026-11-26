@@ -8,9 +8,10 @@ stamp=0123456789abcdef0123456789abcdef01234567
 setting=//opensovd-cli/gateway:build_stamp
 gateway=//:opensovd-gateway
 
-default_version=$(bazel run --"${setting}"=//opensovd-cli/gateway:empty_build_stamp "$gateway" -- --version)
-if [[ "$default_version" == *"$stamp"* ]]; then
-    echo "Default build unexpectedly contains the test stamp" >&2
+default_version=$(bazel run --"${setting}"=//opensovd-cli/gateway:empty_build_stamp \
+    --action_env=OPENSOVD_COMMIT_SHA= --action_env=SOURCE_DATE_EPOCH= "$gateway" -- --version)
+if [[ "$default_version" != *"(unknown unknown)"* ]]; then
+    echo "Default build does not report unknown revision and date: $default_version" >&2
     exit 1
 fi
 
