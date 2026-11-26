@@ -533,9 +533,8 @@ mod tests {
     }
 
     async fn get(address: SocketAddr, authorization: Option<&str>) -> String {
-        let authorization = authorization
-            .map(|value| format!("Authorization: {value}\r\n"))
-            .unwrap_or_default();
+        let authorization =
+            authorization.map_or(String::new(), |value| format!("Authorization: {value}\r\n"));
         tokio::time::timeout(Duration::from_secs(5), async {
             loop {
                 if let Ok(mut stream) = tokio::net::TcpStream::connect(address).await {

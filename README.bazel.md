@@ -25,9 +25,9 @@ and proxy tests are described below. For Cargo tests, see the
 - `rules_rust` 0.70.0 as the declared dependency. Builds of this repository
   use a later upstream commit through `git_override`.
 - The Rust version from `rust-toolchain.toml`, edition 2024.
-- Crates from the root Cargo.toml and Cargo.lock through an isolated
-  `crate_universe` extension. There is no separate lockfile and no repin
-  step.
+- Crates from the root Cargo.toml and Cargo.lock through an OpenSOVD-specific
+  `crate_universe` extension identity. There is no separate lockfile and no
+  repin step.
 
 ## Rust Target Wrappers
 
@@ -201,9 +201,13 @@ bazel test //opensovd-extra:mdns_test //opensovd-extra:mdns_http_proxy_usage_tes
 ## S-CORE Compatibility
 
 - Bazel compatibility declared as >=8.6.0.
-- `--experimental_isolated_extension_usages` is enabled.
+- The crate universe uses a separate extension identity, so it can coexist
+  with other modules' `crate_index` repositories without experimental flags.
 - The Rust toolchain and the `rules_rust` override apply only to builds of
   this repository; an integrating module brings its own.
 - `rules_rust` releases from 0.72.0 on require a crate_universe lockfile
   from non-root modules, which this module does not ship. Integrate it with
   an earlier release.
+
+Run `python3 tests/bazel_consumer_test.py` to check that a downstream module
+can use its own `crate_index` alongside OpenSOVD without experimental flags.

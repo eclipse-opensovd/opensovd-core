@@ -239,9 +239,7 @@ fn backend(json: Value) -> String {
     struct Answer {
         backend: String,
     }
-    serde_json::from_value::<Answer>(json)
-        .map(|answer| answer.backend)
-        .unwrap_or_default()
+    serde_json::from_value::<Answer>(json).map_or(String::new(), |answer| answer.backend)
 }
 
 fn entities(json: Value) -> Vec<EntityReference> {
