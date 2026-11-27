@@ -12,6 +12,15 @@ use tracing_subscriber::fmt::{
 };
 use tracing_subscriber::registry::LookupSpan;
 
+#[cfg(feature = "server")]
+mod server;
+#[cfg(feature = "mdns")]
+pub use server::MdnsArgs;
+#[cfg(feature = "tls")]
+pub use server::TlsArgs;
+#[cfg(feature = "server")]
+pub use server::{AuthArgs, CorsArgs, ListenArgs, ServerArgs, notify_ready};
+
 struct CompactFormat;
 
 impl<S, N> FormatEvent<S, N> for CompactFormat

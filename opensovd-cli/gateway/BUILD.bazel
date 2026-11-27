@@ -20,14 +20,10 @@ workspace_rust_binary(
     crate_deps = [
         "anyhow",
         "clap",
-        "http",
         "schemars",
-        "sd-notify",
         "serde",
-        "serde_json",
         "tokio",
         "tower",
-        "tower-http",
         "tracing",
     ],
     crate_features = [
