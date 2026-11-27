@@ -21,6 +21,7 @@ jiff = { workspace = true }
 opensovd-core = { workspace = true }
 opensovd-models = { workspace = true }
 opensovd-providers = { workspace = true }
+serde_json = { workspace = true, features = ["std"] }
 tokio = { workspace = true, features = ["macros", "rt", "sync"] }
 
 [lints]

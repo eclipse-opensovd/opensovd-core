@@ -5,12 +5,16 @@
 
 use std::collections::HashMap;
 
-use opensovd_core::{App, Area, Component, Topology};
+use opensovd_core::{App, Area, Component, Fault, Topology};
 use opensovd_models::{
     data::DataCategory,
     updates::{UpdateDetail, UpdateStatus},
 };
-use opensovd_providers::data::{Constant, DataProviderBuilder};
+use opensovd_providers::{
+    data::{Constant, DataProviderBuilder},
+    faults::{BuiltFaultProvider, FaultProviderBuilder},
+};
+use serde_json::{Map, Value, json};
 
 mod bulkdata;
 mod updates;
@@ -19,6 +23,49 @@ pub use bulkdata::InMemoryBulkDataProvider;
 mod log;
 pub use log::InMemoryLogProvider;
 pub use updates::{MockFeedback, MockUpdate, MockUpdateProvider};
+
+#[expect(clippy::unwrap_used)]
+fn mock_fault_provider() -> BuiltFaultProvider {
+    FaultProviderBuilder::new()
+        .fault(Fault {
+            code: "fuelPressureLow".into(),
+            scope: Some("powertrain".into()),
+            display_code: None,
+            fault_name: "Fuel rail pressure below limit".into(),
+            fault_translation_id: Some("fault.fuel-pressure-low".into()),
+            severity: Some(2),
+            status: Some(Map::from_iter([(
+                "aggregatedStatus".into(),
+                Value::from("active"),
+            )])),
+            symptom: Some("Rail pressure stays below the commanded value".into()),
+            symptom_translation_id: None,
+            tags: vec!["powertrain".into()],
+        })
+        .environment_data(json!({ "engineTemperature": 93 }))
+        .environment_data_schema(json!({
+            "type": "object",
+            "properties": { "engineTemperature": { "type": "integer" } },
+            "required": ["engineTemperature"]
+        }))
+        .fault(Fault {
+            code: "coolantSensorSignalLost".into(),
+            scope: Some("powertrain".into()),
+            display_code: None,
+            fault_name: "No signal from coolant temperature sensor".into(),
+            fault_translation_id: Some("fault.coolant-sensor-signal-lost".into()),
+            severity: Some(4),
+            status: Some(Map::from_iter([(
+                "aggregatedStatus".into(),
+                Value::from("passive"),
+            )])),
+            symptom: None,
+            symptom_translation_id: None,
+            tags: vec!["emissions".into()],
+        })
+        .build()
+        .unwrap()
+}
 
 /// Creates a mock topology with sample ECU, gateway, and app entities.
 ///
@@ -86,7 +133,8 @@ pub async fn create_mock_topology() -> Topology {
             ("manufacturer".to_string(), "ACME".to_string()),
         ]))
         .with_area_id("powertrain")
-        .with_data_provider(ecu_provider);
+        .with_data_provider(ecu_provider)
+        .with_fault_provider(mock_fault_provider());
 
     // Gateway entity with version data
     #[rustfmt::skip]
@@ -169,7 +217,8 @@ pub async fn create_mock_topology() -> Topology {
             ("priority".to_string(), "high".to_string()),
         ]))
         .with_area_id("powertrain")
-        .with_data_provider(engine_control_provider);
+        .with_data_provider(engine_control_provider)
+        .with_fault_provider(mock_fault_provider());
 
     // App 2: "diagnostics" - Network app with minimal metadata
     #[rustfmt::skip]

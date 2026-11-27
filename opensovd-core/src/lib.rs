@@ -6,6 +6,7 @@
 mod bulkdata;
 mod data;
 mod entity;
+mod faults;
 mod log;
 mod topology;
 mod updates;
@@ -22,6 +23,7 @@ pub use entity::{
     App, AppPath, Area, AreaPath, Component, ComponentPath, EntityKind, EntityPath, EntityRef,
     FunctionPath, InvalidPath,
 };
+pub use faults::{Fault, FaultDataError, FaultDetail, FaultError, FaultFilter, FaultProvider};
 pub use log::{
     LogConfiguration, LogContext, LogEntry, LogError, LogFilter, LogProvider, LogResult,
     LogSeverity, LogStream,

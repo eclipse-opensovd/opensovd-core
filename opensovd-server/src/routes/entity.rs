@@ -8,8 +8,8 @@ use std::sync::Arc;
 use axum::extract::{FromRequestParts, State};
 use axum::http::{Uri, request::Parts};
 use opensovd_core::{
-    App, Area, BulkDataProvider, Component, DataProvider, EntityKind, EntityPath, InvalidPath,
-    LogProvider, Topology, TopologyReadGuard, Updates,
+    App, Area, BulkDataProvider, Component, DataProvider, EntityKind, EntityPath, FaultProvider,
+    InvalidPath, LogProvider, Topology, TopologyReadGuard, Updates,
 };
 use serde::Deserialize;
 
@@ -151,6 +151,14 @@ impl Entity {
         topo: &'t TopologyReadGuard<'_>,
     ) -> Result<&'t dyn DataProvider> {
         self.provider(topo, Component::data_provider, App::data_provider)
+    }
+
+    /// The fault provider of a component or app, see [`Entity::provider`].
+    pub(crate) fn fault_provider(
+        &self,
+        topo: &TopologyReadGuard<'_>,
+    ) -> Result<Arc<dyn FaultProvider>> {
+        self.provider(topo, Component::fault_provider, App::fault_provider)
     }
 
     /// The bulk-data provider of a component or app, see

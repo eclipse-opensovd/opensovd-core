@@ -59,12 +59,6 @@ pub(super) fn data_lists() -> Router<Topology> {
         .route("/data-lists/{data_list_id}", get(stub).delete(stub))
 }
 
-pub(super) fn faults() -> Router<Topology> {
-    Router::new()
-        .route("/faults", get(stub).delete(stub))
-        .route("/faults/{fault_code}", get(stub).delete(stub))
-}
-
 pub(super) fn locks() -> Router<Topology> {
     Router::new()
         .route("/locks", get(stub).post(stub))
