@@ -46,7 +46,7 @@ http-body-util = { version = "0.1", default-features = false }
 hyper = { version = "1", default-features = false }
 hyper-util = { version = "0.1", default-features = false }
 libc = { version = "0.2", default-features = false }
-mdns-sd = { version = "0.21", default-features = false }
+mdns-sd = { version = "0.22", default-features = false }
 if-addrs = { version = "0.15", default-features = false }
 socket2 = { version = "0.6", default-features = false }
 rstest = { version = "0.28", default-features = false }
