@@ -4,3 +4,6 @@
 [default.extend-identifiers]
 flate2 = "flate2"
 WriteableDataResource = "WriteableDataResource"
+
+[default.extend-words]
+nto = "nto"
