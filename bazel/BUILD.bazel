@@ -1,6 +1,31 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 Contributors to the Eclipse Foundation
 # SPDX-License-Identifier: Apache-2.0
 
+load("@rules_rust//rust/platform:triple_mappings.bzl", "triple_to_constraint_set")
+
 exports_files([
+    "opensovd_crate_extension.bzl",
     "rust_crate.bzl",
 ])
+
+# Stock rules_rust maps x86_64-pc-nto-qnx710 but declares no setting for it.
+# Reuse the selected rules_rust mappings, including consumer-specific QNX ABIs.
+[
+    config_setting(
+        name = triple,
+        constraint_values = triple_to_constraint_set(triple),
+        visibility = ["//visibility:public"],
+    )
+    # Keep aligned with opensovd_crate_universe.from_cargo in MODULE.bazel.
+    for triple in [
+        "aarch64-apple-darwin",
+        "aarch64-unknown-linux-gnu",
+        "aarch64-unknown-nto-qnx710",
+        "wasm32-unknown-unknown",
+        "wasm32-wasip1",
+        "x86_64-pc-nto-qnx710",
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu",
+        "x86_64-unknown-nixos-gnu",
+    ]
+]
