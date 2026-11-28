@@ -77,29 +77,31 @@ impl BulkDataProvider for InMemoryBulkDataProvider {
         filter: CategoryFilter,
     ) -> Result<Vec<BulkDataMetadata>, BulkDataError> {
         let store = self.store.read().unwrap();
-        let items = store.get(category_id).map_or_default(|entries| {
-            let mut v: Vec<BulkDataMetadata> = entries
-                .iter()
-                .filter(|_| {
-                    // Tags filtering: skip item if filter requests non-empty tags
-                    filter.tags.as_ref().is_none_or(Vec::is_empty)
-                })
-                .map(|(id, data)| BulkDataMetadata {
-                    id: id.clone(),
-                    mimetype: "application/octet-stream".into(),
-                    name: Some(id.clone()),
-                    translation_id: None,
-                    size: Some(data.len() as u64),
-                    creation_date: None,
-                    last_modified: None,
-                    hash: None,
-                    hash_algorithm: None,
-                    tags: None,
-                })
-                .collect();
-            v.sort_by(|a, b| a.id.cmp(&b.id));
-            v
-        });
+        let items = store
+            .get(category_id)
+            .map_or_else(Default::default, |entries| {
+                let mut v: Vec<BulkDataMetadata> = entries
+                    .iter()
+                    .filter(|_| {
+                        // Tags filtering: skip item if filter requests non-empty tags
+                        filter.tags.as_ref().is_none_or(Vec::is_empty)
+                    })
+                    .map(|(id, data)| BulkDataMetadata {
+                        id: id.clone(),
+                        mimetype: "application/octet-stream".into(),
+                        name: Some(id.clone()),
+                        translation_id: None,
+                        size: Some(data.len() as u64),
+                        creation_date: None,
+                        last_modified: None,
+                        hash: None,
+                        hash_algorithm: None,
+                        tags: None,
+                    })
+                    .collect();
+                v.sort_by(|a, b| a.id.cmp(&b.id));
+                v
+            });
         Ok(items)
     }
 
