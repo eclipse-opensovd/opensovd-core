@@ -3,6 +3,7 @@
 
 //! Command-line interface definitions.
 
+#[cfg(unix)]
 use std::path::PathBuf;
 use std::time::Duration;
 
