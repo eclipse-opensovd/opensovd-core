@@ -158,7 +158,9 @@ impl Header for ContentDisposition {
                     .to_str()
                     .map_err(|_| axum_extra::headers::Error::invalid())?;
                 let parts: Vec<&str> = s.split(';').collect();
-                let disposition_type = parts.first().map_or_default(|s| s.trim().to_string());
+                let disposition_type = parts
+                    .first()
+                    .map_or_else(Default::default, |s| s.trim().to_string());
                 let mut filename = None;
                 let mut name = None;
                 for part in parts.get(1..).unwrap_or(&[]) {
