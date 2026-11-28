@@ -4,7 +4,9 @@ module(
     bazel_compatibility = [">=8.6.0"],
 )
 
+bazel_dep(name = "bazel_skylib", version = "1.8.2")
 bazel_dep(name = "platforms", version = "1.1.0")
+bazel_dep(name = "rules_cc", version = "0.2.9")
 bazel_dep(name = "rules_rust", version = "0.70.0")
 git_override(
     module_name = "rules_rust",
@@ -29,14 +31,28 @@ register_toolchains(
 )
 
 opensovd_crate_universe = use_extension(
-    "@rules_rust//crate_universe:extensions.bzl",
+    "//bazel:opensovd_crate_extension.bzl",
     "crate",
     isolate = True,
+)
+opensovd_crate_universe.render_config(
+    platforms_template = "@opensovd_core//bazel:{triple}",
 )
 opensovd_crate_universe.from_cargo(
     name = "crate_index",
     cargo_lockfile = "//:Cargo.lock",
     manifests = ["//:Cargo.toml"],
     skip_cargo_lockfile_overwrite = True,
+    supported_platform_triples = [
+        "aarch64-apple-darwin",
+        "aarch64-unknown-linux-gnu",
+        "aarch64-unknown-nto-qnx710",
+        "wasm32-unknown-unknown",
+        "wasm32-wasip1",
+        "x86_64-pc-nto-qnx710",
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu",
+        "x86_64-unknown-nixos-gnu",
+    ],
 )
 use_repo(opensovd_crate_universe, "crate_index")
